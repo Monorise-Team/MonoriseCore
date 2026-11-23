@@ -201,6 +201,10 @@ export type AuthUserWhereInput = {
   sessions?: Prisma.AuthSessionListRelationFilter
   credentials?: Prisma.AuthCredentialListRelationFilter
   account?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
+  oauthClients?: Prisma.AuthOAuthClientListRelationFilter
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenListRelationFilter
+  oauthAccess?: Prisma.AuthOAuthAccessTokenListRelationFilter
+  oauthConsents?: Prisma.AuthOAuthConsentListRelationFilter
 }
 
 export type AuthUserOrderByWithRelationInput = {
@@ -214,6 +218,10 @@ export type AuthUserOrderByWithRelationInput = {
   sessions?: Prisma.AuthSessionOrderByRelationAggregateInput
   credentials?: Prisma.AuthCredentialOrderByRelationAggregateInput
   account?: Prisma.AccountOrderByWithRelationInput
+  oauthClients?: Prisma.AuthOAuthClientOrderByRelationAggregateInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenOrderByRelationAggregateInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenOrderByRelationAggregateInput
+  oauthConsents?: Prisma.AuthOAuthConsentOrderByRelationAggregateInput
 }
 
 export type AuthUserWhereUniqueInput = Prisma.AtLeast<{
@@ -230,6 +238,10 @@ export type AuthUserWhereUniqueInput = Prisma.AtLeast<{
   sessions?: Prisma.AuthSessionListRelationFilter
   credentials?: Prisma.AuthCredentialListRelationFilter
   account?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
+  oauthClients?: Prisma.AuthOAuthClientListRelationFilter
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenListRelationFilter
+  oauthAccess?: Prisma.AuthOAuthAccessTokenListRelationFilter
+  oauthConsents?: Prisma.AuthOAuthConsentListRelationFilter
 }, "id" | "email">
 
 export type AuthUserOrderByWithAggregationInput = {
@@ -269,6 +281,10 @@ export type AuthUserCreateInput = {
   sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
   account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserUncheckedCreateInput = {
@@ -282,6 +298,10 @@ export type AuthUserUncheckedCreateInput = {
   sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
   account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserUpdateInput = {
@@ -295,6 +315,10 @@ export type AuthUserUpdateInput = {
   sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserUncheckedUpdateInput = {
@@ -308,6 +332,10 @@ export type AuthUserUncheckedUpdateInput = {
   sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserCreateManyInput = {
@@ -375,6 +403,11 @@ export type AuthUserScalarRelationFilter = {
   isNot?: Prisma.AuthUserWhereInput
 }
 
+export type AuthUserNullableScalarRelationFilter = {
+  is?: Prisma.AuthUserWhereInput | null
+  isNot?: Prisma.AuthUserWhereInput | null
+}
+
 export type StringFieldUpdateOperationsInput = {
   set?: string
 }
@@ -419,6 +452,68 @@ export type AuthUserUpdateOneRequiredWithoutCredentialsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AuthUserUpdateToOneWithWhereWithoutCredentialsInput, Prisma.AuthUserUpdateWithoutCredentialsInput>, Prisma.AuthUserUncheckedUpdateWithoutCredentialsInput>
 }
 
+export type AuthUserCreateNestedOneWithoutOauthClientsInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthClientsInput, Prisma.AuthUserUncheckedCreateWithoutOauthClientsInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthClientsInput
+  connect?: Prisma.AuthUserWhereUniqueInput
+}
+
+export type AuthUserUpdateOneWithoutOauthClientsNestedInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthClientsInput, Prisma.AuthUserUncheckedCreateWithoutOauthClientsInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthClientsInput
+  upsert?: Prisma.AuthUserUpsertWithoutOauthClientsInput
+  disconnect?: Prisma.AuthUserWhereInput | boolean
+  delete?: Prisma.AuthUserWhereInput | boolean
+  connect?: Prisma.AuthUserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AuthUserUpdateToOneWithWhereWithoutOauthClientsInput, Prisma.AuthUserUpdateWithoutOauthClientsInput>, Prisma.AuthUserUncheckedUpdateWithoutOauthClientsInput>
+}
+
+export type AuthUserCreateNestedOneWithoutOauthRefreshInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedCreateWithoutOauthRefreshInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthRefreshInput
+  connect?: Prisma.AuthUserWhereUniqueInput
+}
+
+export type AuthUserUpdateOneRequiredWithoutOauthRefreshNestedInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedCreateWithoutOauthRefreshInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthRefreshInput
+  upsert?: Prisma.AuthUserUpsertWithoutOauthRefreshInput
+  connect?: Prisma.AuthUserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AuthUserUpdateToOneWithWhereWithoutOauthRefreshInput, Prisma.AuthUserUpdateWithoutOauthRefreshInput>, Prisma.AuthUserUncheckedUpdateWithoutOauthRefreshInput>
+}
+
+export type AuthUserCreateNestedOneWithoutOauthAccessInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthAccessInput, Prisma.AuthUserUncheckedCreateWithoutOauthAccessInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthAccessInput
+  connect?: Prisma.AuthUserWhereUniqueInput
+}
+
+export type AuthUserUpdateOneWithoutOauthAccessNestedInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthAccessInput, Prisma.AuthUserUncheckedCreateWithoutOauthAccessInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthAccessInput
+  upsert?: Prisma.AuthUserUpsertWithoutOauthAccessInput
+  disconnect?: Prisma.AuthUserWhereInput | boolean
+  delete?: Prisma.AuthUserWhereInput | boolean
+  connect?: Prisma.AuthUserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AuthUserUpdateToOneWithWhereWithoutOauthAccessInput, Prisma.AuthUserUpdateWithoutOauthAccessInput>, Prisma.AuthUserUncheckedUpdateWithoutOauthAccessInput>
+}
+
+export type AuthUserCreateNestedOneWithoutOauthConsentsInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedCreateWithoutOauthConsentsInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthConsentsInput
+  connect?: Prisma.AuthUserWhereUniqueInput
+}
+
+export type AuthUserUpdateOneWithoutOauthConsentsNestedInput = {
+  create?: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedCreateWithoutOauthConsentsInput>
+  connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutOauthConsentsInput
+  upsert?: Prisma.AuthUserUpsertWithoutOauthConsentsInput
+  disconnect?: Prisma.AuthUserWhereInput | boolean
+  delete?: Prisma.AuthUserWhereInput | boolean
+  connect?: Prisma.AuthUserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AuthUserUpdateToOneWithWhereWithoutOauthConsentsInput, Prisma.AuthUserUpdateWithoutOauthConsentsInput>, Prisma.AuthUserUncheckedUpdateWithoutOauthConsentsInput>
+}
+
 export type AuthUserCreateNestedOneWithoutAccountInput = {
   create?: Prisma.XOR<Prisma.AuthUserCreateWithoutAccountInput, Prisma.AuthUserUncheckedCreateWithoutAccountInput>
   connectOrCreate?: Prisma.AuthUserCreateOrConnectWithoutAccountInput
@@ -443,6 +538,10 @@ export type AuthUserCreateWithoutSessionsInput = {
   updatedAt?: Date | string
   credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
   account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserUncheckedCreateWithoutSessionsInput = {
@@ -455,6 +554,10 @@ export type AuthUserUncheckedCreateWithoutSessionsInput = {
   updatedAt?: Date | string
   credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
   account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserCreateOrConnectWithoutSessionsInput = {
@@ -483,6 +586,10 @@ export type AuthUserUpdateWithoutSessionsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserUncheckedUpdateWithoutSessionsInput = {
@@ -495,6 +602,10 @@ export type AuthUserUncheckedUpdateWithoutSessionsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserCreateWithoutCredentialsInput = {
@@ -507,6 +618,10 @@ export type AuthUserCreateWithoutCredentialsInput = {
   updatedAt?: Date | string
   sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserUncheckedCreateWithoutCredentialsInput = {
@@ -519,6 +634,10 @@ export type AuthUserUncheckedCreateWithoutCredentialsInput = {
   updatedAt?: Date | string
   sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserCreateOrConnectWithoutCredentialsInput = {
@@ -547,6 +666,10 @@ export type AuthUserUpdateWithoutCredentialsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserUncheckedUpdateWithoutCredentialsInput = {
@@ -559,6 +682,330 @@ export type AuthUserUncheckedUpdateWithoutCredentialsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserCreateWithoutOauthClientsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserUncheckedCreateWithoutOauthClientsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserCreateOrConnectWithoutOauthClientsInput = {
+  where: Prisma.AuthUserWhereUniqueInput
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthClientsInput, Prisma.AuthUserUncheckedCreateWithoutOauthClientsInput>
+}
+
+export type AuthUserUpsertWithoutOauthClientsInput = {
+  update: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthClientsInput, Prisma.AuthUserUncheckedUpdateWithoutOauthClientsInput>
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthClientsInput, Prisma.AuthUserUncheckedCreateWithoutOauthClientsInput>
+  where?: Prisma.AuthUserWhereInput
+}
+
+export type AuthUserUpdateToOneWithWhereWithoutOauthClientsInput = {
+  where?: Prisma.AuthUserWhereInput
+  data: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthClientsInput, Prisma.AuthUserUncheckedUpdateWithoutOauthClientsInput>
+}
+
+export type AuthUserUpdateWithoutOauthClientsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserUncheckedUpdateWithoutOauthClientsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserCreateWithoutOauthRefreshInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserUncheckedCreateWithoutOauthRefreshInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserCreateOrConnectWithoutOauthRefreshInput = {
+  where: Prisma.AuthUserWhereUniqueInput
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedCreateWithoutOauthRefreshInput>
+}
+
+export type AuthUserUpsertWithoutOauthRefreshInput = {
+  update: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedUpdateWithoutOauthRefreshInput>
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedCreateWithoutOauthRefreshInput>
+  where?: Prisma.AuthUserWhereInput
+}
+
+export type AuthUserUpdateToOneWithWhereWithoutOauthRefreshInput = {
+  where?: Prisma.AuthUserWhereInput
+  data: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthRefreshInput, Prisma.AuthUserUncheckedUpdateWithoutOauthRefreshInput>
+}
+
+export type AuthUserUpdateWithoutOauthRefreshInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserUncheckedUpdateWithoutOauthRefreshInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserCreateWithoutOauthAccessInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserUncheckedCreateWithoutOauthAccessInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserCreateOrConnectWithoutOauthAccessInput = {
+  where: Prisma.AuthUserWhereUniqueInput
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthAccessInput, Prisma.AuthUserUncheckedCreateWithoutOauthAccessInput>
+}
+
+export type AuthUserUpsertWithoutOauthAccessInput = {
+  update: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthAccessInput, Prisma.AuthUserUncheckedUpdateWithoutOauthAccessInput>
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthAccessInput, Prisma.AuthUserUncheckedCreateWithoutOauthAccessInput>
+  where?: Prisma.AuthUserWhereInput
+}
+
+export type AuthUserUpdateToOneWithWhereWithoutOauthAccessInput = {
+  where?: Prisma.AuthUserWhereInput
+  data: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthAccessInput, Prisma.AuthUserUncheckedUpdateWithoutOauthAccessInput>
+}
+
+export type AuthUserUpdateWithoutOauthAccessInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserUncheckedUpdateWithoutOauthAccessInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserCreateWithoutOauthConsentsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserUncheckedCreateWithoutOauthConsentsInput = {
+  id: string
+  name: string
+  email: string
+  emailVerified?: boolean
+  image?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
+  credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
+  account?: Prisma.AccountUncheckedCreateNestedOneWithoutAuthUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type AuthUserCreateOrConnectWithoutOauthConsentsInput = {
+  where: Prisma.AuthUserWhereUniqueInput
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedCreateWithoutOauthConsentsInput>
+}
+
+export type AuthUserUpsertWithoutOauthConsentsInput = {
+  update: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedUpdateWithoutOauthConsentsInput>
+  create: Prisma.XOR<Prisma.AuthUserCreateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedCreateWithoutOauthConsentsInput>
+  where?: Prisma.AuthUserWhereInput
+}
+
+export type AuthUserUpdateToOneWithWhereWithoutOauthConsentsInput = {
+  where?: Prisma.AuthUserWhereInput
+  data: Prisma.XOR<Prisma.AuthUserUpdateWithoutOauthConsentsInput, Prisma.AuthUserUncheckedUpdateWithoutOauthConsentsInput>
+}
+
+export type AuthUserUpdateWithoutOauthConsentsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+}
+
+export type AuthUserUncheckedUpdateWithoutOauthConsentsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  image?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
+  credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
+  account?: Prisma.AccountUncheckedUpdateOneWithoutAuthUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserCreateWithoutAccountInput = {
@@ -571,6 +1018,10 @@ export type AuthUserCreateWithoutAccountInput = {
   updatedAt?: Date | string
   sessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
   credentials?: Prisma.AuthCredentialCreateNestedManyWithoutUserInput
+  oauthClients?: Prisma.AuthOAuthClientCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserUncheckedCreateWithoutAccountInput = {
@@ -583,6 +1034,10 @@ export type AuthUserUncheckedCreateWithoutAccountInput = {
   updatedAt?: Date | string
   sessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
   credentials?: Prisma.AuthCredentialUncheckedCreateNestedManyWithoutUserInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedCreateNestedManyWithoutUserInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedCreateNestedManyWithoutUserInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type AuthUserCreateOrConnectWithoutAccountInput = {
@@ -611,6 +1066,10 @@ export type AuthUserUpdateWithoutAccountInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
   credentials?: Prisma.AuthCredentialUpdateManyWithoutUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUpdateManyWithoutUserNestedInput
 }
 
 export type AuthUserUncheckedUpdateWithoutAccountInput = {
@@ -623,6 +1082,10 @@ export type AuthUserUncheckedUpdateWithoutAccountInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
   credentials?: Prisma.AuthCredentialUncheckedUpdateManyWithoutUserNestedInput
+  oauthClients?: Prisma.AuthOAuthClientUncheckedUpdateManyWithoutUserNestedInput
+  oauthRefresh?: Prisma.AuthOAuthRefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthAccess?: Prisma.AuthOAuthAccessTokenUncheckedUpdateManyWithoutUserNestedInput
+  oauthConsents?: Prisma.AuthOAuthConsentUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -633,11 +1096,19 @@ export type AuthUserUncheckedUpdateWithoutAccountInput = {
 export type AuthUserCountOutputType = {
   sessions: number
   credentials: number
+  oauthClients: number
+  oauthRefresh: number
+  oauthAccess: number
+  oauthConsents: number
 }
 
 export type AuthUserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   sessions?: boolean | AuthUserCountOutputTypeCountSessionsArgs
   credentials?: boolean | AuthUserCountOutputTypeCountCredentialsArgs
+  oauthClients?: boolean | AuthUserCountOutputTypeCountOauthClientsArgs
+  oauthRefresh?: boolean | AuthUserCountOutputTypeCountOauthRefreshArgs
+  oauthAccess?: boolean | AuthUserCountOutputTypeCountOauthAccessArgs
+  oauthConsents?: boolean | AuthUserCountOutputTypeCountOauthConsentsArgs
 }
 
 /**
@@ -664,6 +1135,34 @@ export type AuthUserCountOutputTypeCountCredentialsArgs<ExtArgs extends runtime.
   where?: Prisma.AuthCredentialWhereInput
 }
 
+/**
+ * AuthUserCountOutputType without action
+ */
+export type AuthUserCountOutputTypeCountOauthClientsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthOAuthClientWhereInput
+}
+
+/**
+ * AuthUserCountOutputType without action
+ */
+export type AuthUserCountOutputTypeCountOauthRefreshArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthOAuthRefreshTokenWhereInput
+}
+
+/**
+ * AuthUserCountOutputType without action
+ */
+export type AuthUserCountOutputTypeCountOauthAccessArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthOAuthAccessTokenWhereInput
+}
+
+/**
+ * AuthUserCountOutputType without action
+ */
+export type AuthUserCountOutputTypeCountOauthConsentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthOAuthConsentWhereInput
+}
+
 
 export type AuthUserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -676,6 +1175,10 @@ export type AuthUserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   sessions?: boolean | Prisma.AuthUser$sessionsArgs<ExtArgs>
   credentials?: boolean | Prisma.AuthUser$credentialsArgs<ExtArgs>
   account?: boolean | Prisma.AuthUser$accountArgs<ExtArgs>
+  oauthClients?: boolean | Prisma.AuthUser$oauthClientsArgs<ExtArgs>
+  oauthRefresh?: boolean | Prisma.AuthUser$oauthRefreshArgs<ExtArgs>
+  oauthAccess?: boolean | Prisma.AuthUser$oauthAccessArgs<ExtArgs>
+  oauthConsents?: boolean | Prisma.AuthUser$oauthConsentsArgs<ExtArgs>
   _count?: boolean | Prisma.AuthUserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["authUser"]>
 
@@ -714,6 +1217,10 @@ export type AuthUserInclude<ExtArgs extends runtime.Types.Extensions.InternalArg
   sessions?: boolean | Prisma.AuthUser$sessionsArgs<ExtArgs>
   credentials?: boolean | Prisma.AuthUser$credentialsArgs<ExtArgs>
   account?: boolean | Prisma.AuthUser$accountArgs<ExtArgs>
+  oauthClients?: boolean | Prisma.AuthUser$oauthClientsArgs<ExtArgs>
+  oauthRefresh?: boolean | Prisma.AuthUser$oauthRefreshArgs<ExtArgs>
+  oauthAccess?: boolean | Prisma.AuthUser$oauthAccessArgs<ExtArgs>
+  oauthConsents?: boolean | Prisma.AuthUser$oauthConsentsArgs<ExtArgs>
   _count?: boolean | Prisma.AuthUserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AuthUserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -725,6 +1232,10 @@ export type $AuthUserPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     sessions: Prisma.$AuthSessionPayload<ExtArgs>[]
     credentials: Prisma.$AuthCredentialPayload<ExtArgs>[]
     account: Prisma.$AccountPayload<ExtArgs> | null
+    oauthClients: Prisma.$AuthOAuthClientPayload<ExtArgs>[]
+    oauthRefresh: Prisma.$AuthOAuthRefreshTokenPayload<ExtArgs>[]
+    oauthAccess: Prisma.$AuthOAuthAccessTokenPayload<ExtArgs>[]
+    oauthConsents: Prisma.$AuthOAuthConsentPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1131,6 +1642,10 @@ export interface Prisma__AuthUserClient<T, Null = never, ExtArgs extends runtime
   sessions<T extends Prisma.AuthUser$sessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   credentials<T extends Prisma.AuthUser$credentialsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$credentialsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthCredentialPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   account<T extends Prisma.AuthUser$accountArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$accountArgs<ExtArgs>>): Prisma.Prisma__AccountClient<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  oauthClients<T extends Prisma.AuthUser$oauthClientsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$oauthClientsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthOAuthClientPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  oauthRefresh<T extends Prisma.AuthUser$oauthRefreshArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$oauthRefreshArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthOAuthRefreshTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  oauthAccess<T extends Prisma.AuthUser$oauthAccessArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$oauthAccessArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthOAuthAccessTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  oauthConsents<T extends Prisma.AuthUser$oauthConsentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AuthUser$oauthConsentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthOAuthConsentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1624,6 +2139,102 @@ export type AuthUser$accountArgs<ExtArgs extends runtime.Types.Extensions.Intern
    */
   include?: Prisma.AccountInclude<ExtArgs> | null
   where?: Prisma.AccountWhereInput
+}
+
+/**
+ * AuthUser.oauthClients
+ */
+export type AuthUser$oauthClientsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthOAuthClient
+   */
+  select?: Prisma.AuthOAuthClientSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthOAuthClient
+   */
+  omit?: Prisma.AuthOAuthClientOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthOAuthClientInclude<ExtArgs> | null
+  where?: Prisma.AuthOAuthClientWhereInput
+  orderBy?: Prisma.AuthOAuthClientOrderByWithRelationInput | Prisma.AuthOAuthClientOrderByWithRelationInput[]
+  cursor?: Prisma.AuthOAuthClientWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthOAuthClientScalarFieldEnum | Prisma.AuthOAuthClientScalarFieldEnum[]
+}
+
+/**
+ * AuthUser.oauthRefresh
+ */
+export type AuthUser$oauthRefreshArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthOAuthRefreshToken
+   */
+  select?: Prisma.AuthOAuthRefreshTokenSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthOAuthRefreshToken
+   */
+  omit?: Prisma.AuthOAuthRefreshTokenOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthOAuthRefreshTokenInclude<ExtArgs> | null
+  where?: Prisma.AuthOAuthRefreshTokenWhereInput
+  orderBy?: Prisma.AuthOAuthRefreshTokenOrderByWithRelationInput | Prisma.AuthOAuthRefreshTokenOrderByWithRelationInput[]
+  cursor?: Prisma.AuthOAuthRefreshTokenWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthOAuthRefreshTokenScalarFieldEnum | Prisma.AuthOAuthRefreshTokenScalarFieldEnum[]
+}
+
+/**
+ * AuthUser.oauthAccess
+ */
+export type AuthUser$oauthAccessArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthOAuthAccessToken
+   */
+  select?: Prisma.AuthOAuthAccessTokenSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthOAuthAccessToken
+   */
+  omit?: Prisma.AuthOAuthAccessTokenOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthOAuthAccessTokenInclude<ExtArgs> | null
+  where?: Prisma.AuthOAuthAccessTokenWhereInput
+  orderBy?: Prisma.AuthOAuthAccessTokenOrderByWithRelationInput | Prisma.AuthOAuthAccessTokenOrderByWithRelationInput[]
+  cursor?: Prisma.AuthOAuthAccessTokenWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthOAuthAccessTokenScalarFieldEnum | Prisma.AuthOAuthAccessTokenScalarFieldEnum[]
+}
+
+/**
+ * AuthUser.oauthConsents
+ */
+export type AuthUser$oauthConsentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthOAuthConsent
+   */
+  select?: Prisma.AuthOAuthConsentSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthOAuthConsent
+   */
+  omit?: Prisma.AuthOAuthConsentOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthOAuthConsentInclude<ExtArgs> | null
+  where?: Prisma.AuthOAuthConsentWhereInput
+  orderBy?: Prisma.AuthOAuthConsentOrderByWithRelationInput | Prisma.AuthOAuthConsentOrderByWithRelationInput[]
+  cursor?: Prisma.AuthOAuthConsentWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthOAuthConsentScalarFieldEnum | Prisma.AuthOAuthConsentScalarFieldEnum[]
 }
 
 /**

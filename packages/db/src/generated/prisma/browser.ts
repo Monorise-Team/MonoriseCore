@@ -43,6 +43,41 @@ export type AuthVerification = Prisma.AuthVerificationModel
  */
 export type AuthJwks = Prisma.AuthJwksModel
 /**
+ * Model AuthOAuthClient
+ * Aplikacja, która loguje użytkowników przez Core (np. AvenMail w przeglądarce, na telefonie).
+ */
+export type AuthOAuthClient = Prisma.AuthOAuthClientModel
+/**
+ * Model AuthOAuthResource
+ * API, dla którego wydawany jest token (odbiorca, aud), np. https://aven.monorise.studio.
+ */
+export type AuthOAuthResource = Prisma.AuthOAuthResourceModel
+/**
+ * Model AuthOAuthClientResource
+ * 
+ */
+export type AuthOAuthClientResource = Prisma.AuthOAuthClientResourceModel
+/**
+ * Model AuthOAuthRefreshToken
+ * 
+ */
+export type AuthOAuthRefreshToken = Prisma.AuthOAuthRefreshTokenModel
+/**
+ * Model AuthOAuthAccessToken
+ * 
+ */
+export type AuthOAuthAccessToken = Prisma.AuthOAuthAccessTokenModel
+/**
+ * Model AuthOAuthConsent
+ * 
+ */
+export type AuthOAuthConsent = Prisma.AuthOAuthConsentModel
+/**
+ * Model AuthOAuthClientAssertion
+ * 
+ */
+export type AuthOAuthClientAssertion = Prisma.AuthOAuthClientAssertionModel
+/**
  * Model Organization
  * 
  */

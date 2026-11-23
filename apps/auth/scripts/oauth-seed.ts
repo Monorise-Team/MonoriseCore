@@ -1,0 +1,77 @@
+/**
+ * Rejestruje aplikacje Monorise jako klientów OAuth Core, a ich API jako zasoby (odbiorców tokenów).
+ * Działa wielokrotnie; sekrety nowych klientów poufnych zapisuje w apps/auth/.data/oauth-clients.json
+ * (tylko lokalnie, plik poza repozytorium), bo w bazie zostaje wyłącznie ich skrót.
+ *
+ *   pnpm oauth:seed
+ *
+ * Adresy produktów można zmienić zmiennymi środowiskowymi (domyślnie lokalne *.localhost).
+ */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { db } from "../src/server/db";
+import { ensureFirstPartyClients } from "../src/server/oauth-clients";
+
+const env = (name: string, fallback: string) => process.env[name] ?? fallback;
+const AVEN_API = env("CORE_AVENMAIL_API_URL", "http://aven.localhost:3000");
+const AVEN_WEB = env("CORE_AVENMAIL_WEB_URL", "http://aven-mail.localhost:3000");
+const TIME_API = env("CORE_TIMOTIME_API_URL", "http://time.localhost:3300");
+const TIME_WEB = env("CORE_TIMOTIME_WEB_URL", "http://timo-time.localhost:3300");
+const CORE_API = env("CORE_API_URL", "http://localhost:3200");
+
+const secrets = await ensureFirstPartyClients({
+  resources: [
+    { identifier: AVEN_API, name: "AvenMail API" },
+    { identifier: TIME_API, name: "TimoTime API" },
+    { identifier: CORE_API, name: "Core API" },
+  ],
+  clients: [
+    {
+      clientId: "avenmail-web",
+      name: "AvenMail",
+      redirectUris: [`${AVEN_WEB}/api/auth/callback`],
+      confidential: true,
+      resources: [AVEN_API, CORE_API],
+    },
+    {
+      clientId: "avenmail-desktop",
+      name: "AvenMail na komputer",
+      redirectUris: ["studio.monorise.avenmail://oauth/callback"],
+      confidential: false,
+      resources: [AVEN_API, CORE_API],
+    },
+    {
+      clientId: "avenmail-mobile",
+      name: "AvenMail na telefon",
+      redirectUris: ["avenmail://oauth/callback"],
+      confidential: false,
+      resources: [AVEN_API, CORE_API],
+    },
+    {
+      clientId: "timotime-web",
+      name: "TimoTime",
+      redirectUris: [`${TIME_WEB}/api/auth/callback`],
+      confidential: true,
+      resources: [TIME_API, CORE_API],
+    },
+    {
+      clientId: "timotime-mobile",
+      name: "TimoTime na telefon",
+      redirectUris: ["timotime://oauth/callback"],
+      confidential: false,
+      resources: [TIME_API, CORE_API],
+    },
+  ],
+});
+
+const dir = new URL("../.data/", import.meta.url);
+const file = new URL("oauth-clients.json", dir);
+mkdirSync(dir, { recursive: true });
+const previous = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, string>) : {};
+writeFileSync(file, `${JSON.stringify({ ...previous, ...secrets }, null, 2)}\n`, { mode: 0o600 });
+const created = Object.keys(secrets);
+console.log(
+  created.length
+    ? `Nowi klienci z sekretami: ${created.join(", ")} (zapisane w apps/auth/.data/oauth-clients.json).`
+    : "Klienci OAuth są aktualni.",
+);
+await db.$disconnect();

@@ -25,6 +25,8 @@ export const config = {
   /** smtp://… albo „memory” (testy: wiadomości zostają w pamięci). */
   smtpUrl: process.env.CORE_SMTP_URL ?? "memory",
   mailFrom: process.env.CORE_MAIL_FROM ?? "Monorise <no-reply@monorise.studio>",
+  /** Tylko lokalnie: adresy powrotu produktów po HTTP (localhost i *.localhost), np. aven-mail.localhost:3000. */
+  allowLocalHttpRedirects: process.env.NODE_ENV !== "production",
   /** Tylko lokalnie: potwierdzenie domeny bez rekordu DNS TXT. */
   devTrustDomains: process.env.CORE_DEV_TRUST_DOMAINS === "1" && process.env.NODE_ENV !== "production",
 };
