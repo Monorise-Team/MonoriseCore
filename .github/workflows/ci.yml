@@ -1,0 +1,53 @@
+name: CI
+
+# Pełne kontrole na każdym pull requeście i wypchnięciu na dev i prod (repozytorium publiczne, ADR-0086):
+# formatowanie, zgodność wersji części, lint, typy, testy na prawdziwym PostgreSQL (z RLS i rolą aplikacji
+# bez uprawnień właściciela tabel) i build.
+
+on:
+  pull_request:
+  push:
+    branches: [dev, prod]
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Format, lint, types, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      HUSKY: 0
+      GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CORE_TEST_DATABASE_URL: postgresql://core_owner:core_owner@localhost:5433/monorise_core
+      CORE_TEST_APP_DATABASE_URL: postgresql://core_app:core_app@localhost:5433/monorise_core
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Database roles
+        run: psql "postgresql://postgres:postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 -f docker/postgres-init.sql
+      - run: pnpm install --frozen-lockfile
+      - name: Migrations
+        run: pnpm --filter @core/db exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://core_owner:core_owner@localhost:5433/monorise_core
+      - run: pnpm check

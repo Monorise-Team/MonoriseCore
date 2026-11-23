@@ -1,0 +1,38 @@
+{
+  "name": "monorise-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MonoriseCore: logowanie, firmy, pracownicy, role i uprawnienia platformy Monorise",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@core/auth --filter=@core/api",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:versions": "node scripts/check-versions.mjs",
+    "check": "pnpm format:check && pnpm check:versions && turbo run lint typecheck test build",
+    "db:up": "docker compose up -d",
+    "db:migrate": "pnpm --filter @core/db migrate:deploy && pnpm --filter @core/db migrate:deploy:test",
+    "setup:env": "node scripts/setup-env.mjs",
+    "shared:update": "node scripts/shared.mjs update",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@monorise-team/config": "0.0.1-dev.1",
+    "eslint": "^10.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.1",
+    "prettier": "^3.10.1",
+    "turbo": "^2.11.13",
+    "typescript": "^6.0.3"
+  }
+}

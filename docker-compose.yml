@@ -1,0 +1,24 @@
+# Lokalna baza i poczta do pracy nad Core: pnpm db:up, potem pnpm db:migrate.
+# Porty inne niż domyślne, żeby nie zderzyć się z innymi projektami na komputerze.
+# Kontenery i wolumen mają przedrostek monorise-core (małe litery, wyrazy z myślnikiem).
+name: monorise-core
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - core-postgres:/var/lib/postgresql/data
+  mailpit:
+    # Podgląd maili z logowania (potwierdzenie adresu, zaproszenia): http://localhost:8125
+    image: axllent/mailpit:v1.29
+    ports:
+      - "1125:1025"
+      - "8125:8025"
+
+volumes:
+  core-postgres:
