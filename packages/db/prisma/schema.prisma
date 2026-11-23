@@ -29,6 +29,10 @@ model AuthUser {
   sessions      AuthSession[]
   credentials   AuthCredential[]
   account       Account?
+  oauthClients  AuthOAuthClient[]
+  oauthRefresh  AuthOAuthRefreshToken[]
+  oauthAccess   AuthOAuthAccessToken[]
+  oauthConsents AuthOAuthConsent[]
 
   @@map("users")
   @@schema("auth")
@@ -44,6 +48,8 @@ model AuthSession {
   userAgent String?
   userId    String   @db.Uuid
   user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthRefresh AuthOAuthRefreshToken[]
+  oauthAccess  AuthOAuthAccessToken[]
 
   @@index([userId])
   @@map("sessions")
@@ -96,6 +102,179 @@ model AuthJwks {
   crv        String?
 
   @@map("jwks")
+  @@schema("auth")
+}
+
+// ── Logowanie produktów: serwer OAuth 2.1 (Better Auth, wtyczka oauth-provider) ────────────────
+// Listy to tablice PostgreSQL; pola JSON biblioteka zapisuje jako tekst.
+
+/// Aplikacja, która loguje użytkowników przez Core (np. AvenMail w przeglądarce, na telefonie).
+model AuthOAuthClient {
+  id                               String    @id @db.Uuid
+  clientId                         String    @unique
+  clientSecret                     String?
+  clientDiscoveryId                String?
+  disabled                         Boolean?  @default(false)
+  skipConsent                      Boolean?
+  enableEndSession                 Boolean?
+  subjectType                      String?
+  scopes                           String[]  @default([])
+  clientCredentialsScopes          String[]  @default([])
+  userId                           String?   @db.Uuid
+  user                             AuthUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                        DateTime? @default(now()) @db.Timestamptz(3)
+  updatedAt                        DateTime? @updatedAt @db.Timestamptz(3)
+  name                             String?
+  uri                              String?
+  icon                             String?
+  contacts                         String[]  @default([])
+  tos                              String?
+  policy                           String?
+  softwareId                       String?
+  softwareVersion                  String?
+  softwareStatement                String?
+  redirectUris                     String[]
+  postLogoutRedirectUris           String[]  @default([])
+  backchannelLogoutUri             String?
+  backchannelLogoutSessionRequired Boolean?
+  tokenEndpointAuthMethod          String?
+  applicationType                  String?
+  jwks                             String?
+  jwksUri                          String?
+  grantTypes                       String[]  @default([])
+  responseTypes                    String[]  @default([])
+  requirePKCE                      Boolean?
+  dpopBoundAccessTokens            Boolean?  @default(false)
+  referenceId                      String?
+  metadata                         String?
+  resources                        AuthOAuthClientResource[]
+  refreshTokens                    AuthOAuthRefreshToken[]
+  accessTokens                     AuthOAuthAccessToken[]
+  consents                         AuthOAuthConsent[]
+
+  @@map("oauth_clients")
+  @@schema("auth")
+}
+
+/// API, dla którego wydawany jest token (odbiorca, aud), np. https://aven.monorise.studio.
+model AuthOAuthResource {
+  id                            String    @id @db.Uuid
+  identifier                    String    @unique
+  name                          String
+  accessTokenTtl                Int?
+  refreshTokenTtl               Int?
+  signingAlgorithm              String?
+  signingKeyId                  String?
+  allowedScopes                 String[]  @default([])
+  customClaims                  String?
+  dpopBoundAccessTokensRequired Boolean?  @default(false)
+  disabled                      Boolean?  @default(false)
+  createdAt                     DateTime? @default(now()) @db.Timestamptz(3)
+  updatedAt                     DateTime? @updatedAt @db.Timestamptz(3)
+  policyVersion                 Int?      @default(1)
+  metadata                      String?
+  clients                       AuthOAuthClientResource[]
+
+  @@map("oauth_resources")
+  @@schema("auth")
+}
+
+model AuthOAuthClientResource {
+  id         String            @id @db.Uuid
+  clientId   String
+  client     AuthOAuthClient   @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  resourceId String
+  resource   AuthOAuthResource @relation(fields: [resourceId], references: [identifier], onDelete: Cascade)
+  metadata   String?
+  createdAt  DateTime?         @default(now()) @db.Timestamptz(3)
+
+  @@index([clientId])
+  @@index([resourceId])
+  @@map("oauth_client_resources")
+  @@schema("auth")
+}
+
+model AuthOAuthRefreshToken {
+  id                      String       @id @db.Uuid
+  token                   String       @unique
+  clientId                String
+  client                  AuthOAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId               String?      @db.Uuid
+  session                 AuthSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId                  String       @db.Uuid
+  user                    AuthUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  authorizationCodeId     String?
+  resources               String[]     @default([])
+  requestedUserInfoClaims String[]     @default([])
+  expiresAt               DateTime     @db.Timestamptz(3)
+  createdAt               DateTime     @default(now()) @db.Timestamptz(3)
+  revoked                 DateTime?    @db.Timestamptz(3)
+  rotatedAt               DateTime?    @db.Timestamptz(3)
+  rotationReplayResponse  String?
+  rotationReplayExpiresAt DateTime?    @db.Timestamptz(3)
+  authTime                DateTime?    @db.Timestamptz(3)
+  confirmation            String?
+  scopes                  String[]
+  accessTokens            AuthOAuthAccessToken[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_refresh_tokens")
+  @@schema("auth")
+}
+
+model AuthOAuthAccessToken {
+  id                      String                 @id @db.Uuid
+  token                   String                 @unique
+  clientId                String
+  client                  AuthOAuthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId               String?                @db.Uuid
+  session                 AuthSession?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId                  String?                @db.Uuid
+  user                    AuthUser?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  authorizationCodeId     String?
+  resources               String[]               @default([])
+  requestedUserInfoClaims String[]               @default([])
+  refreshId               String?                @db.Uuid
+  refresh                 AuthOAuthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
+  expiresAt               DateTime               @db.Timestamptz(3)
+  createdAt               DateTime               @default(now()) @db.Timestamptz(3)
+  revoked                 DateTime?              @db.Timestamptz(3)
+  confirmation            String?
+  scopes                  String[]
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_access_tokens")
+  @@schema("auth")
+}
+
+model AuthOAuthConsent {
+  id                      String          @id @db.Uuid
+  clientId                String
+  client                  AuthOAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId                  String?         @db.Uuid
+  user                    AuthUser?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId             String?
+  resources               String[]        @default([])
+  requestedUserInfoClaims String[]        @default([])
+  scopes                  String[]
+  createdAt               DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_consents")
+  @@schema("auth")
+}
+
+model AuthOAuthClientAssertion {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(3)
+
+  @@map("oauth_client_assertions")
   @@schema("auth")
 }
 

@@ -17,10 +17,13 @@ export function SignInForm() {
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const { error: failure } = await authClient.signIn.email({ email, password });
+    const { data, error: failure } = await authClient.signIn.email({ email, password });
     setBusy(false);
     if (!failure) {
-      router.push("/account");
+      // Logowanie z produktu (OAuth): powrót do produktu z kodem; zwykłe logowanie: konto firmy
+      const url = (data as { url?: string } | null)?.url;
+      if (url) window.location.href = url;
+      else router.push("/account");
       return;
     }
     // Komunikaty bez zdradzania, czy konto istnieje (ADR-0019)

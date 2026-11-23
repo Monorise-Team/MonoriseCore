@@ -23,7 +23,8 @@
     "db:migrate": "pnpm --filter @core/db migrate:deploy && pnpm --filter @core/db migrate:deploy:test",
     "setup:env": "node scripts/setup-env.mjs",
     "shared:update": "node scripts/shared.mjs update",
-    "prepare": "husky"
+    "prepare": "husky",
+    "oauth:seed": "pnpm --filter @core/auth oauth:seed"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

@@ -1,4 +1,5 @@
 import "server-only";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { accountClaims, uuidv7, withOrganization } from "@core/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -7,6 +8,7 @@ import { jwt } from "better-auth/plugins";
 import { config } from "./config";
 import { db } from "./db";
 import { linkMail, sendMail } from "./mail";
+import { hashClientSecret } from "./oauth-clients";
 
 /** Firmy w tych stanach nie logują się (wstrzymanie, usunięcie). */
 const BLOCKED_ORGANIZATIONS = new Set(["SUSPENDED", "DELETED"]);
@@ -92,6 +94,40 @@ export const auth = betterAuth({
         },
       },
       schema: { jwks: { modelName: "authJwks" } },
+    }),
+    // Logowanie produktów (OAuth 2.1 z PKCE): produkt dostaje token dla swojego API (aud = zasób, RFC 8707)
+    oauthProvider({
+      loginPage: "/sign-in",
+      consentPage: "/consent",
+      scopes: ["openid", "profile", "email", "offline_access"],
+      // Token dostępu ważny 5 minut (ADR-0023), odświeżanie do 30 dni
+      accessTokenExpiresIn: 300,
+      refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+      // Aplikacje rejestruje tylko Core (skrypt oauth:seed). Żadne działanie na klientach i zasobach przez
+      // HTTP nie jest dozwolone, także dla zalogowanych (domyślnie wtyczka pozwala na nie każdej sesji).
+      allowDynamicClientRegistration: false,
+      clientPrivileges: async () => false,
+      resourcePrivileges: async () => false,
+      storeClientSecret: { hash: async (secret: string) => hashClientSecret(secret) },
+      // Na produkcji tylko HTTPS; lokalnie także http://localhost i http://*.localhost
+      allowInsecureRedirectUri: (url: URL) =>
+        config.allowLocalHttpRedirects && (url.hostname === "localhost" || url.hostname.endsWith(".localhost")),
+      customAccessTokenClaims: async ({ user }) => {
+        if (!user) return {};
+        const claims = await accountClaims(db, user.id);
+        if (!claims || claims.accountStatus === "DEACTIVATED") throw new Error("Konto nie może się logować");
+        // amr i acr ustala sam serwer OAuth (pola zastrzeżone), dlatego ich tu nie ma
+        return { org_id: claims.organizationId, employee_id: claims.employeeId, authz_rev: claims.authzRevision };
+      },
+      schema: {
+        oauthClient: { modelName: "authOAuthClient" },
+        oauthResource: { modelName: "authOAuthResource" },
+        oauthClientResource: { modelName: "authOAuthClientResource" },
+        oauthRefreshToken: { modelName: "authOAuthRefreshToken" },
+        oauthAccessToken: { modelName: "authOAuthAccessToken" },
+        oauthConsent: { modelName: "authOAuthConsent" },
+        oauthClientAssertion: { modelName: "authOAuthClientAssertion" },
+      },
     }),
     // Ciasteczka sesji z akcji serwera Next.js
     nextCookies(),
