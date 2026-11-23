@@ -1,0 +1,39 @@
+{
+  "name": "@core/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Baza monorise_core: schemat Prisma, migracje z RLS i pomocniki separacji firm",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:deploy:test": "DATABASE_URL=${CORE_TEST_DATABASE_URL:-postgresql://core_owner:core_owner@localhost:5433/monorise_core_test} prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@monorise-team/config": "0.0.1-dev.1",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.0",
+    "eslint": "^10.15.0",
+    "prisma": "7.10.1",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "@monorise-team/config/tsconfig/library.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "test"]
+}

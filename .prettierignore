@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+pnpm-lock.yaml
+CHANGELOG.md
+LICENSE
+packages/db/src/generated/
+packages/db/prisma/migrations/
+.github/ISSUE_TEMPLATE/
+.github/pull_request_template.md

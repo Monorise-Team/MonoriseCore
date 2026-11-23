@@ -1,0 +1,229 @@
+// Baza monorise_core (04-data/data-models-core.md, ADR-0096).
+// Schemat "auth": tabele biblioteki logowania (Better Auth) — konta logowania, sesje, hasła, klucze JWT.
+// Schemat "public": dane firm. Każda tabela z danymi firmy ma RLS (migracja), a aplikacja łączy się
+// rolą core_app bez uprawnień właściciela tabel (ADR-0037).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "auth"]
+}
+
+// ── Logowanie (Better Auth) ───────────────────────────────────────────────────────────────────────
+
+/// Konto logowania. Identyfikator jest taki sam jak Account.id (sub w tokenie).
+model AuthUser {
+  id            String       @id @db.Uuid
+  name          String
+  email         String       @unique @db.Citext
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+  sessions      AuthSession[]
+  credentials   AuthCredential[]
+  account       Account?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model AuthSession {
+  id        String   @id @db.Uuid
+  expiresAt DateTime @db.Timestamptz(3)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress String?
+  userAgent String?
+  userId    String   @db.Uuid
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+  @@schema("auth")
+}
+
+/// Sposób logowania konta (w Better Auth: "account"), np. hasło.
+model AuthCredential {
+  id                    String    @id @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("credentials")
+  @@schema("auth")
+}
+
+model AuthVerification {
+  id         String   @id @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+  @@schema("auth")
+}
+
+/// Klucze podpisujące tokeny JWT, publikowane jako JWKS (ADR-0023).
+model AuthJwks {
+  id         String    @id @db.Uuid
+  publicKey  String
+  privateKey String
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime? @db.Timestamptz(3)
+  alg        String?
+  crv        String?
+
+  @@map("jwks")
+  @@schema("auth")
+}
+
+// ── Firmy ─────────────────────────────────────────────────────────────────────────────────────────
+
+enum OrganizationStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  OFFBOARDING
+  DELETED
+
+  @@schema("public")
+}
+
+enum OrganizationCreatedVia {
+  OPERATOR
+  SELF_SIGNUP
+
+  @@schema("public")
+}
+
+model Organization {
+  id                   String                 @id @db.Uuid
+  name                 String
+  status               OrganizationStatus     @default(PENDING_VERIFICATION)
+  createdVia           OrganizationCreatedVia
+  mfaRequiredForAll    Boolean                @default(false)
+  suspendedAt          DateTime?              @db.Timestamptz(3)
+  offboardingStartedAt DateTime?              @db.Timestamptz(3)
+  createdAt            DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @db.Timestamptz(3)
+  domains              OrganizationDomain[]
+  employees            Employee[]
+  accounts             Account[]
+
+  @@map("organizations")
+  @@schema("public")
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  REVOKED
+
+  @@schema("public")
+}
+
+enum DomainVerificationMethod {
+  DNS_TXT
+  OPERATOR
+
+  @@schema("public")
+}
+
+model OrganizationDomain {
+  id                    String                   @id @db.Uuid
+  organizationId        String                   @db.Uuid
+  organization          Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  domain                String                   @unique @db.Citext
+  status                DomainStatus             @default(PENDING)
+  verificationMethod    DomainVerificationMethod
+  verificationTokenHash String?
+  verifiedAt            DateTime?                @db.Timestamptz(3)
+  lastCheckedAt         DateTime?                @db.Timestamptz(3)
+  isPrimary             Boolean                  @default(false)
+  createdAt             DateTime                 @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@map("organization_domains")
+  @@schema("public")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  FORMER
+  ANONYMIZED
+
+  @@schema("public")
+}
+
+/// Pracownik firmy, niezależny od konta (ADR-0031). Produkty odwołują się do employeeId.
+model Employee {
+  id             String         @id @db.Uuid
+  organizationId String         @db.Uuid
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  firstName      String
+  lastName       String
+  workEmail      String?        @db.Citext
+  jobTitle       String?
+  status         EmployeeStatus @default(ACTIVE)
+  anonymizedAt   DateTime?      @db.Timestamptz(3)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+  account        Account?
+
+  @@index([organizationId])
+  @@map("employees")
+  @@schema("public")
+}
+
+enum AccountStatus {
+  INVITED
+  ACTIVE
+  DEACTIVATED
+
+  @@schema("public")
+}
+
+/// Konto pracownika w firmie. Jeden adres e-mail to jedno konto w jednej firmie (ADR-0018).
+model Account {
+  id              String        @id @db.Uuid
+  authUser        AuthUser      @relation(fields: [id], references: [id], onDelete: Cascade)
+  organizationId  String        @db.Uuid
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId      String        @unique @db.Uuid
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  email           String        @db.Citext
+  normalizedEmail String        @unique @db.Citext
+  status          AccountStatus @default(INVITED)
+  authzRevision   Int           @default(0)
+  lastLoginAt     DateTime?     @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(3)
+  deactivatedAt   DateTime?     @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@map("accounts")
+  @@schema("public")
+}

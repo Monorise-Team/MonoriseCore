@@ -1,0 +1,4 @@
+# Zmienione pliki: ESLint i Prettier; potem typy całego repozytorium i zgodność wersji części.
+pnpm exec lint-staged
+pnpm typecheck
+pnpm check:versions
