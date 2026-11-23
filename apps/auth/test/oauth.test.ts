@@ -148,9 +148,37 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       },
     });
     expect(refresh.status).toBe(200);
-    const refreshed = (await refresh.json()) as { access_token: string };
+    const refreshed = (await refresh.json()) as { access_token: string; refresh_token: string };
     const again = await jwtVerify(refreshed.access_token, jwks, { audience: RESOURCE });
     expect(again.payload.org_id).toBe(organizationId);
+
+    // 5. Token odświeżania jest jednorazowy: dostajemy nowy, a stary już nie działa
+    expect(refreshed.refresh_token).toBeTruthy();
+    expect(refreshed.refresh_token).not.toBe(tokens.refresh_token);
+    const reuse = await call("/api/auth/oauth2/token", {
+      method: "POST",
+      form: {
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+        resource: RESOURCE,
+      },
+    });
+    expect(reuse.status).toBe(400);
+
+    // 6. Ponowne użycie starego tokenu wygląda na kradzież, więc unieważnia też nowy (RFC 9700)
+    const afterReuse = await call("/api/auth/oauth2/token", {
+      method: "POST",
+      form: {
+        grant_type: "refresh_token",
+        refresh_token: refreshed.refresh_token,
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+        resource: RESOURCE,
+      },
+    });
+    expect(afterReuse.status).toBe(400);
   });
 
   it("nie pozwala zalogowanej osobie zarejestrować własnej aplikacji", async () => {
