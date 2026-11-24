@@ -69,12 +69,12 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (Owner), domeny, JWT/JWKS, OAuth 2.1 (`authorization_code` + PKCE, `client_credentials` dla M2M)    |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; `/me`, `/organization`, `/employees`, `/units`, `/permissions`, `/products/{productKey}/permissions`   |
-| `packages/db`        | Prisma (`OrganizationUnit`, `UnitMembership`, `Product`, `Permission`, `AuditLog`), migracje (RLS, wyzwalacze), `withOrganization`, lookup ponad firm. |
-| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, lista darmowych domen pocztowych                                   |
+| Gdzie                | Co                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (Owner), domeny, JWT/JWKS, OAuth 2.1 (`authorization_code` + PKCE, `client_credentials` dla M2M) |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; `/me`, `/organization`, `/employees`, `/units`, `/permissions`, `/roles`, `/role-assignments`       |
+| `packages/db`        | Prisma (`OrganizationUnit`, `UnitMembership`, `Product`, `Permission`, `Role`, `RoleAssignment`, `AuditLog`), migracje (RLS), `withOrganization`.   |
+| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, lista darmowych domen pocztowych                                |
 
 ## Zasady kodu
 
@@ -105,5 +105,5 @@ Nowa migracja: zmień `packages/db/prisma/schema.prisma`, potem w `packages/db` 
 
 - `pnpm check` wymaga uruchomionej bazy danych (`pnpm db:up`).
 - Zmiany w logowaniu, uprawnieniach i strukturze bazy scalane są dopiero po zgodzie właściciela projektu.
-- Zapisy w Core API (`/employees`, `/units`, `/units/{unitId}/members`) są tylko dla Ownera (`ownerAccountId`) do czasu wdrożenia ról (etap 2).
+- Zapisy w Core API wymagają odpowiednich uprawnień `core.*` w zakresie (`@monorise-team/permissions`) albo Ownera; `PUT /organization/owner` tylko dla Ownera.
 - Sekrety z `.env` i `apps/auth/.data/` nigdy nie trafiają do zlecanych zadań.

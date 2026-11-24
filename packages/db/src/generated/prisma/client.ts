@@ -143,6 +143,22 @@ export type Product = Prisma.ProductModel
  */
 export type Permission = Prisma.PermissionModel
 /**
+ * Model Role
+ * Rola: zestaw uprawnień platformy lub jednego produktu (ADR-0035).
+ * Brak organizationId oznacza gotową rolę (szablon) współdzieloną przez firmy; brak productId — rolę platformową (core.*).
+ */
+export type Role = Prisma.RoleModel
+/**
+ * Model RolePermission
+ * Powiązanie roli z uprawnieniem. Pole organizationId kopiuje wyzwalacz z roli, aby egzekwować RLS.
+ */
+export type RolePermission = Prisma.RolePermissionModel
+/**
+ * Model RoleAssignment
+ * Przypisanie roli kontu w firmie z zakresem i opcjonalnym okresem ważności (ADR-0033, ADR-0035).
+ */
+export type RoleAssignment = Prisma.RoleAssignmentModel
+/**
  * Model AuditLog
  * Centralny, niezmienny dziennik zdarzeń (ADR-0039). Tylko dopisywanie; wpisy firm chronione przez RLS
  * i usuwane kaskadowo razem z firmą (ADR-0041). Brak organizationId oznacza zdarzenie platformy.

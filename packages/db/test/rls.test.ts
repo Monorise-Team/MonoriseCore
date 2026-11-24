@@ -613,3 +613,384 @@ describe("dziennik zdarzeń i rejestr uprawnień", () => {
     }
   });
 });
+
+describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
+  it("izoluje role i przypisania firm, udostępnia szablony do odczytu i blokuje modyfikację szablonów przez firmę", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `roleprod${suffix}`;
+    const productId = uuidv7();
+    const prodPermId = uuidv7();
+    const prodPerm2Id = uuidv7();
+    const corePermId = uuidv7();
+    const templateRoleId = uuidv7();
+    const acmeRoleId = uuidv7();
+    const globexRoleId = uuidv7();
+    const acmeAssignmentId = uuidv7();
+    const globexAssignmentId = uuidv7();
+
+    await db.product.create({ data: { id: productId, key: productKey, name: "Produkt testowy ról" } });
+    await db.permission.create({
+      data: { id: prodPermId, key: `${productKey}.entries.read`, productId, description: "Odczyt wpisów" },
+    });
+    await db.permission.create({
+      data: { id: prodPerm2Id, key: `${productKey}.entries.write`, productId, description: "Zapis wpisów" },
+    });
+    await db.permission.create({
+      data: { id: corePermId, key: `core.role_rls_${suffix}.manage`, productId: null, description: "Uprawnienie Core" },
+    });
+
+    // Szablon roli tworzony bez kontekstu firmy (przez Core)
+    await db.role.create({
+      data: {
+        id: templateRoleId,
+        organizationId: null,
+        productId,
+        key: `${productKey}.viewer`,
+        name: "Podgląd",
+        description: "Gotowa rola produktu",
+      },
+    });
+    await db.rolePermission.create({ data: { roleId: templateRoleId, permissionId: prodPermId } });
+
+    try {
+      // Role firmowe tworzone w kontekście firmy
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.role.create({
+          data: { id: acmeRoleId, organizationId: acme.id, productId, name: "Kierownik Acme" },
+        });
+        await tx.rolePermission.create({ data: { roleId: acmeRoleId, permissionId: prodPermId } });
+        await tx.roleAssignment.create({
+          data: {
+            id: acmeAssignmentId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            roleId: acmeRoleId,
+            scopeType: "UNIT",
+            scopeId: acmeKrakowId,
+            grantedByAccountId: acme.accountId,
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.role.create({
+          data: { id: globexRoleId, organizationId: globex.id, productId, name: "Kierownik Globex" },
+        });
+        await tx.rolePermission.create({ data: { roleId: globexRoleId, permissionId: prodPermId } });
+        await tx.roleAssignment.create({
+          data: {
+            id: globexAssignmentId,
+            organizationId: globex.id,
+            accountId: globex.accountId,
+            roleId: globexRoleId,
+            scopeType: "ORGANIZATION",
+            grantedByAccountId: globex.accountId,
+          },
+        });
+      });
+
+      // Firma A widzi swoje role i szablony, ale nie widzi ról firmy B
+      const acmeRoles = await withOrganization(db, acme.id, (tx) => tx.role.findMany());
+      expect(acmeRoles.map((r) => r.id)).toContain(acmeRoleId);
+      expect(acmeRoles.map((r) => r.id)).toContain(templateRoleId);
+      expect(acmeRoles.map((r) => r.id)).not.toContain(globexRoleId);
+
+      // Firma A widzi uprawnienia swoich ról i szablonów (wyzwalacz skopiował organizationId), ale nie firmy B
+      const acmeRolePerms = await withOrganization(db, acme.id, (tx) => tx.rolePermission.findMany());
+      expect(acmeRolePerms.some((rp) => rp.roleId === acmeRoleId && rp.organizationId === acme.id)).toBe(true);
+      expect(acmeRolePerms.some((rp) => rp.roleId === templateRoleId && rp.organizationId === null)).toBe(true);
+      expect(acmeRolePerms.some((rp) => rp.roleId === globexRoleId)).toBe(false);
+
+      // Firma A widzi wyłącznie swoje przypisania
+      const acmeAssignments = await withOrganization(db, acme.id, (tx) => tx.roleAssignment.findMany());
+      expect(acmeAssignments.map((a) => a.id)).toEqual([acmeAssignmentId]);
+
+      // Bez kontekstu firmy nie widać ról firmowych ani przypisań (tylko szablony)
+      const noContextRoles = await db.role.findMany();
+      expect(noContextRoles.map((r) => r.id)).toContain(templateRoleId);
+      expect(noContextRoles.map((r) => r.id)).not.toContain(acmeRoleId);
+      expect(await db.roleAssignment.findMany()).toEqual([]);
+
+      // Firma nie może utworzyć szablonu ani zmienić istniejącego szablonu ani jego uprawnień
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.role.create({
+            data: {
+              id: uuidv7(),
+              organizationId: null,
+              productId,
+              key: `${productKey}.forged`,
+              name: "Fałszywy szablon",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      const updatedTemplate = await withOrganization(db, acme.id, (tx) =>
+        tx.role.updateMany({ where: { id: templateRoleId }, data: { name: "Przejęty szablon" } }),
+      );
+      expect(updatedTemplate.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.rolePermission.create({
+            data: { roleId: templateRoleId, permissionId: prodPerm2Id, organizationId: acme.id },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      const deletedTemplatePerm = await withOrganization(db, acme.id, (tx) =>
+        tx.rolePermission.deleteMany({ where: { roleId: templateRoleId } }),
+      );
+      expect(deletedTemplatePerm.count).toBe(0);
+
+      // core_app nie może usuwać ról (tylko archiwizacja)
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.role.delete({ where: { id: acmeRoleId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // Rola firmowa musi mieć NULL w key, a szablon musi mieć niepusty key
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.role.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              productId,
+              key: `${productKey}.forbidden`,
+              name: "Firmowa z kluczem",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/roles_template_key_consistency|check constraint|violates/i);
+
+      // Unikalność nazw aktywnych ról firmy bez względu na wielkość liter
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.role.create({
+            data: { id: uuidv7(), organizationId: acme.id, productId, name: "kierownik acme" },
+          }),
+        ),
+      ).rejects.toThrow(/roles_organizationId_lower_name_active_key|unique|duplicate/i);
+    } finally {
+      await withOrganization(db, acme.id, (tx) => tx.roleAssignment.deleteMany({ where: { id: acmeAssignmentId } }));
+      await withOrganization(db, globex.id, (tx) =>
+        tx.roleAssignment.deleteMany({ where: { id: globexAssignmentId } }),
+      );
+      await withOrganization(ownerDb, acme.id, (tx) => tx.role.deleteMany({ where: { id: acmeRoleId } }));
+      await withOrganization(ownerDb, globex.id, (tx) => tx.role.deleteMany({ where: { id: globexRoleId } }));
+      await ownerDb.role.deleteMany({ where: { id: templateRoleId } });
+      await ownerDb.permission.deleteMany({ where: { id: { in: [prodPermId, prodPerm2Id, corePermId] } } });
+      await ownerDb.product.deleteMany({ where: { id: productId } });
+    }
+  });
+
+  it("egzekwuje spójność produktu w role_permissions, archiwizację roli, granice firm oraz CHECKi w role_assignments", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `chkprod${suffix}`;
+    const productId = uuidv7();
+    const prodPermId = uuidv7();
+    const corePermId = uuidv7();
+    const platformRoleId = uuidv7();
+    const archivedRoleId = uuidv7();
+    const globexRoleId = uuidv7();
+
+    await db.product.create({ data: { id: productId, key: productKey, name: "Produkt walidacji" } });
+    await db.permission.create({
+      data: { id: prodPermId, key: `${productKey}.entries.read`, productId, description: "Odczyt wpisów" },
+    });
+    await db.permission.create({
+      data: { id: corePermId, key: `core.chk_rls_${suffix}.read`, productId: null, description: "Odczyt Core" },
+    });
+
+    try {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.role.create({
+          data: { id: platformRoleId, organizationId: acme.id, productId: null, name: "Rola platformowa" },
+        });
+        await tx.role.create({
+          data: {
+            id: archivedRoleId,
+            organizationId: acme.id,
+            productId: null,
+            name: "Zarchiwizowana",
+            archivedAt: new Date(),
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, (tx) =>
+        tx.role.create({
+          data: { id: globexRoleId, organizationId: globex.id, productId: null, name: "Rola Globex" },
+        }),
+      );
+
+      // Rola platformowa nie może przyjąć uprawnienia produktu
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.rolePermission.create({ data: { roleId: platformRoleId, permissionId: prodPermId } }),
+        ),
+      ).rejects.toThrow(/role_permissions_product_match|does not match/i);
+
+      // Uprawnienie platformowe do roli platformowej przechodzi
+      await withOrganization(db, acme.id, (tx) =>
+        tx.rolePermission.create({ data: { roleId: platformRoleId, permissionId: corePermId } }),
+      );
+
+      // Przypisanie zarchiwizowanej roli odrzucone
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: archivedRoleId,
+              scopeType: "ORGANIZATION",
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_role_not_archived|archived/i);
+
+      // Rola z innej firmy odrzucona
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: globexRoleId,
+              scopeType: "ORGANIZATION",
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_role_org_check|does not exist|different organization/i);
+
+      // Konto z innej firmy odrzucone kluczem złożonym
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: globex.accountId,
+              roleId: platformRoleId,
+              scopeType: "ORGANIZATION",
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/foreign key|violates/i);
+
+      // Jednostka z innej firmy odrzucona wyzwalaczem
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: platformRoleId,
+              scopeType: "UNIT",
+              scopeId: globexGdanskId,
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_unit_scope_check|does not belong/i);
+
+      // CHECKi zakresu i zakresu dat
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: platformRoleId,
+              scopeType: "ORGANIZATION",
+              scopeId: acmeKrakowId,
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_scope_consistency|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: platformRoleId,
+              scopeType: "UNIT",
+              scopeId: null,
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_scope_consistency|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              roleId: platformRoleId,
+              scopeType: "ORGANIZATION",
+              validFrom: new Date("2026-12-10T00:00:00.000Z"),
+              validUntil: new Date("2026-12-01T00:00:00.000Z"),
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/role_assignments_validity_range|check constraint|violates/i);
+
+      // Duplikat przypisania (ORGANIZATION z scopeId = NULL) odrzucony indeksem unikalnym
+      const firstId = uuidv7();
+      await withOrganization(db, acme.id, (tx) =>
+        tx.roleAssignment.create({
+          data: {
+            id: firstId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            roleId: platformRoleId,
+            scopeType: "ORGANIZATION",
+            grantedByAccountId: acme.accountId,
+          },
+        }),
+      );
+      try {
+        await expect(
+          withOrganization(db, acme.id, (tx) =>
+            tx.roleAssignment.create({
+              data: {
+                id: uuidv7(),
+                organizationId: acme.id,
+                accountId: acme.accountId,
+                roleId: platformRoleId,
+                scopeType: "ORGANIZATION",
+                grantedByAccountId: acme.accountId,
+              },
+            }),
+          ),
+        ).rejects.toThrow(/role_assignments_accountId_roleId_scope_key|unique|duplicate/i);
+      } finally {
+        await withOrganization(db, acme.id, (tx) => tx.roleAssignment.deleteMany({ where: { id: firstId } }));
+      }
+    } finally {
+      await withOrganization(ownerDb, acme.id, (tx) =>
+        tx.role.deleteMany({ where: { id: { in: [platformRoleId, archivedRoleId] } } }),
+      );
+      await withOrganization(ownerDb, globex.id, (tx) => tx.role.deleteMany({ where: { id: globexRoleId } }));
+      await ownerDb.permission.deleteMany({ where: { id: { in: [prodPermId, corePermId] } } });
+      await ownerDb.product.deleteMany({ where: { id: productId } });
+    }
+  });
+});

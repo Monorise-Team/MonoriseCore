@@ -1,5 +1,6 @@
 import { createDb } from "@core/db";
 import { registerCorePermissions } from "./permissions-registry.js";
+import { registerCoreRoleTemplates } from "./role-templates-registry.js";
 import { buildServer } from "./server.js";
 import { createMachineTokenVerifier, createTokenVerifier, remoteKeys } from "./tokens.js";
 
@@ -25,5 +26,8 @@ const app = buildServer({
 
 const summary = await registerCorePermissions(db);
 app.log.info({ summary }, "zarejestrowano uprawnienia platformy Core");
+
+const templatesSummary = await registerCoreRoleTemplates(db);
+app.log.info({ summary: templatesSummary }, "zarejestrowano gotowe role platformy Core");
 
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 3200) });

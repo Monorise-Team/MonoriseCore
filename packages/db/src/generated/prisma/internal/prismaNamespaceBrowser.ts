@@ -71,6 +71,9 @@ export const ModelName = {
   UnitMembership: 'UnitMembership',
   Product: 'Product',
   Permission: 'Permission',
+  Role: 'Role',
+  RolePermission: 'RolePermission',
+  RoleAssignment: 'RoleAssignment',
   AuditLog: 'AuditLog'
 } as const
 
@@ -418,6 +421,47 @@ export const PermissionScalarFieldEnum = {
 } as const
 
 export type PermissionScalarFieldEnum = (typeof PermissionScalarFieldEnum)[keyof typeof PermissionScalarFieldEnum]
+
+
+export const RoleScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  productId: 'productId',
+  key: 'key',
+  name: 'name',
+  description: 'description',
+  copiedFromRoleId: 'copiedFromRoleId',
+  archivedAt: 'archivedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RoleScalarFieldEnum = (typeof RoleScalarFieldEnum)[keyof typeof RoleScalarFieldEnum]
+
+
+export const RolePermissionScalarFieldEnum = {
+  roleId: 'roleId',
+  permissionId: 'permissionId',
+  organizationId: 'organizationId'
+} as const
+
+export type RolePermissionScalarFieldEnum = (typeof RolePermissionScalarFieldEnum)[keyof typeof RolePermissionScalarFieldEnum]
+
+
+export const RoleAssignmentScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  roleId: 'roleId',
+  scopeType: 'scopeType',
+  scopeId: 'scopeId',
+  validFrom: 'validFrom',
+  validUntil: 'validUntil',
+  grantedByAccountId: 'grantedByAccountId',
+  createdAt: 'createdAt'
+} as const
+
+export type RoleAssignmentScalarFieldEnum = (typeof RoleAssignmentScalarFieldEnum)[keyof typeof RoleAssignmentScalarFieldEnum]
 
 
 export const AuditLogScalarFieldEnum = {

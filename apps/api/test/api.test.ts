@@ -1,8 +1,9 @@
-import { CORE_PERMISSIONS, PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
+import { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
 import { createDb, uuidv7, withOrganization } from "@core/db";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { registerCorePermissions } from "../src/permissions-registry.js";
+import { registerCoreRoleTemplates } from "../src/role-templates-registry.js";
 import { buildServer } from "../src/server.js";
 import { createMachineTokenVerifier, createTokenVerifier } from "../src/tokens.js";
 
@@ -167,7 +168,7 @@ describe("Core API", () => {
     expect(ownerResponse.statusCode).toBe(200);
     expect(ownerResponse.json().data).toMatchObject({
       account: { id: acme.accountId, status: "ACTIVE", isOwner: true },
-      employee: { id: acme.employeeId, firstName: "Anna", lastName: "acme" },
+      employee: { id: acme.employeeId, accountId: acme.accountId, firstName: "Anna", lastName: "acme" },
       organization: { id: acme.id, name: "acme", status: "ACTIVE" },
     });
 
@@ -214,6 +215,7 @@ describe("Core API", () => {
     expect(createdEmployee.statusCode).toBe(201);
     const marek = createdEmployee.json().data;
     expect(marek).toMatchObject({
+      accountId: null,
       firstName: "Marek",
       lastName: "Nowak",
       workEmail: `marek@${acme.domain}`,
@@ -777,6 +779,805 @@ describe("Core API", () => {
       await ownerDb.auditLog.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
       await ownerDb.permission.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
       await ownerDb.product.deleteMany({ where: { id: { in: [productId, otherProductId] } } });
+    }
+  });
+
+  it("rejestruje gotową rolę platformy core.company_admin przy starcie i działa idempotentnie", async () => {
+    await registerCorePermissions(db);
+    const first = await registerCoreRoleTemplates(db);
+    expect(first.added.length + first.updated.length + first.restored.length + first.unchanged).toBe(
+      CORE_ROLE_TEMPLATES.length,
+    );
+
+    const beforeCount = await ownerDb.auditLog.count({
+      where: { action: "role_templates.registered", resourceId: "core" },
+    });
+
+    const second = await registerCoreRoleTemplates(db);
+    expect(second).toEqual({
+      added: [],
+      updated: [],
+      archived: [],
+      restored: [],
+      unchanged: CORE_ROLE_TEMPLATES.length,
+    });
+
+    const afterCount = await ownerDb.auditLog.count({
+      where: { action: "role_templates.registered", resourceId: "core" },
+    });
+    expect(afterCount).toBe(beforeCount);
+
+    const rolesRes = await get("/core/v1/roles?product=core", await token(acme));
+    expect(rolesRes.statusCode).toBe(200);
+    const companyAdmin = rolesRes.json().data.find((r: { key: string | null }) => r.key === "core.company_admin");
+    expect(companyAdmin).toMatchObject({
+      key: "core.company_admin",
+      name: "Administrator firmy",
+      product: null,
+      isTemplate: true,
+      archivedAt: null,
+    });
+    expect(companyAdmin.permissions).toEqual(CORE_PERMISSIONS.manifest.map((p) => p.key).sort());
+  });
+
+  it("rejestruje gotowe role produktu tokenem maszynowym z walidacją prefiksu i uprawnień oraz archiwizacją", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `tpl${suffix}`;
+    const otherProductKey = `otpl${suffix}`;
+    const productClientId = `${productKey}-web`;
+    const otherClientId = `${otherProductKey}-web`;
+    const productId = uuidv7();
+    const otherProductId = uuidv7();
+
+    await db.product.create({
+      data: { id: productId, key: productKey, name: "Produkt szablonów", registrationClientId: productClientId },
+    });
+    await db.product.create({
+      data: { id: otherProductId, key: otherProductKey, name: "Inny produkt", registrationClientId: otherClientId },
+    });
+
+    try {
+      const ownerToken = await token(acme);
+      const prodToken = await machineToken(productClientId);
+      const otherProdToken = await machineToken(otherClientId);
+      const noScopeToken = await machineToken(productClientId, "other:scope");
+
+      // Rejestrujemy 3 uprawnienia produktu, potem jedno wycofamy
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/permissions`, prodToken, [
+            { key: `${productKey}.entries.read`, description: "Odczyt wpisów" },
+            { key: `${productKey}.entries.approve`, description: "Zatwierdzanie wpisów" },
+            { key: `${productKey}.legacy.run`, description: "Stare uprawnienie" },
+          ])
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/permissions`, prodToken, [
+            { key: `${productKey}.entries.read`, description: "Odczyt wpisów" },
+            { key: `${productKey}.entries.approve`, description: "Zatwierdzanie wpisów" },
+          ])
+        ).statusCode,
+      ).toBe(200);
+
+      // Ochrona tokenu i klienta
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/role-templates`, ownerToken, [
+            { key: `${productKey}.worker`, name: "Pracownik", permissions: [`${productKey}.entries.read`] },
+          ])
+        ).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/role-templates`, noScopeToken, [
+            { key: `${productKey}.worker`, name: "Pracownik", permissions: [`${productKey}.entries.read`] },
+          ])
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/role-templates`, otherProdToken, [
+            { key: `${productKey}.worker`, name: "Pracownik", permissions: [`${productKey}.entries.read`] },
+          ])
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("PUT", `/core/v1/products/unknown${suffix}/role-templates`, prodToken, [
+            { key: `unknown${suffix}.worker`, name: "Pracownik", permissions: [`${productKey}.entries.read`] },
+          ])
+        ).statusCode,
+      ).toBe(404);
+
+      // Zły prefiks, nieznane uprawnienie, wycofane uprawnienie -> 422 ze szczegółami
+      for (const badBody of [
+        [{ key: `${otherProductKey}.worker`, name: "Zły prefiks", permissions: [`${productKey}.entries.read`] }],
+        [{ key: `${productKey}.worker`, name: "Nieznane", permissions: [`${productKey}.missing.read`] }],
+        [{ key: `${productKey}.worker`, name: "Wycofane", permissions: [`${productKey}.legacy.run`] }],
+      ]) {
+        const res = await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, badBody);
+        expect(res.statusCode).toBe(422);
+        expect(res.json().error.code).toBe("VALIDATION_FAILED");
+        expect(res.json().error.details.length).toBeGreaterThan(0);
+      }
+
+      // 1. Dodanie szablonów
+      const initial = [
+        {
+          key: `${productKey}.worker`,
+          name: "Pracownik",
+          description: "Podgląd wpisów",
+          permissions: [`${productKey}.entries.read`],
+        },
+        {
+          key: `${productKey}.manager`,
+          name: "Kierownik",
+          permissions: [`${productKey}.entries.read`, `${productKey}.entries.approve`],
+        },
+      ];
+      const addedRes = await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, initial);
+      expect(addedRes.statusCode).toBe(200);
+      expect(addedRes.json().data).toEqual({
+        added: [`${productKey}.manager`, `${productKey}.worker`],
+        updated: [],
+        archived: [],
+        restored: [],
+        unchanged: 0,
+      });
+      expect(
+        await ownerDb.auditLog.count({
+          where: { action: "product.role_templates.registered", productId, actorType: "PRODUCT" },
+        }),
+      ).toBe(1);
+
+      // 2. Idempotentność (bez nowego wpisu audytu)
+      const repeatRes = await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, initial);
+      expect(repeatRes.statusCode).toBe(200);
+      expect(repeatRes.json().data).toEqual({
+        added: [],
+        updated: [],
+        archived: [],
+        restored: [],
+        unchanged: 2,
+      });
+      expect(
+        await ownerDb.auditLog.count({
+          where: { action: "product.role_templates.registered", productId, actorType: "PRODUCT" },
+        }),
+      ).toBe(1);
+
+      // 3. Aktualizacja + archiwizacja brakującego szablonu
+      const updateRes = await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, [
+        {
+          key: `${productKey}.worker`,
+          name: "Pracownik (nowa nazwa)",
+          description: "Podgląd wpisów",
+          permissions: [`${productKey}.entries.read`],
+        },
+      ]);
+      expect(updateRes.statusCode).toBe(200);
+      expect(updateRes.json().data).toEqual({
+        added: [],
+        updated: [`${productKey}.worker`],
+        archived: [`${productKey}.manager`],
+        restored: [],
+        unchanged: 0,
+      });
+
+      const activeTemplates = await get(`/core/v1/roles?product=${productKey}`, ownerToken);
+      expect(activeTemplates.statusCode).toBe(200);
+      expect(activeTemplates.json().data).toHaveLength(1);
+      expect(activeTemplates.json().data[0].key).toBe(`${productKey}.worker`);
+
+      const withArchived = await get(`/core/v1/roles?product=${productKey}&includeArchived=true`, ownerToken);
+      expect(withArchived.statusCode).toBe(200);
+      expect(withArchived.json().data).toHaveLength(2);
+
+      // 4. Przywrócenie zarchiwizowanego szablonu
+      const restoreRes = await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, [
+        {
+          key: `${productKey}.worker`,
+          name: "Pracownik (nowa nazwa)",
+          description: "Podgląd wpisów",
+          permissions: [`${productKey}.entries.read`],
+        },
+        {
+          key: `${productKey}.manager`,
+          name: "Kierownik",
+          permissions: [`${productKey}.entries.read`, `${productKey}.entries.approve`],
+        },
+      ]);
+      expect(restoreRes.statusCode).toBe(200);
+      expect(restoreRes.json().data).toEqual({
+        added: [],
+        updated: [],
+        archived: [],
+        restored: [`${productKey}.manager`],
+        unchanged: 1,
+      });
+    } finally {
+      await ownerDb.role.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
+      await ownerDb.auditLog.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
+      await ownerDb.permission.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
+      await ownerDb.product.deleteMany({ where: { id: { in: [productId, otherProductId] } } });
+    }
+  });
+
+  it("obsługuje role, kopiowanie szablonu, delegowanie z zakresem, role czasowe, strukturę, authzRevision, archiwizację i audyt", async () => {
+    await registerCorePermissions(db);
+    await registerCoreRoleTemplates(db);
+
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `tt${suffix}`;
+    const productClientId = `${productKey}-web`;
+    const productId = uuidv7();
+    await db.product.create({
+      data: { id: productId, key: productKey, name: "TimoTime test", registrationClientId: productClientId },
+    });
+
+    const company = await createCompany(`roles-${suffix}`);
+    const otherCompany = await createCompany(`other-${suffix}`);
+    const jan = await createMember(company, "Jan", "Kierownik");
+    const piotr = await createMember(company, "Piotr", "Pracownik");
+    const ewa = await createMember(company, "Ewa", "Wygasla");
+    const deactivated = await createMember(company, "Tomasz", "Wylaczony");
+
+    await withOrganization(db, company.id, (tx) =>
+      tx.account.update({ where: { id: deactivated.accountId }, data: { status: "DEACTIVATED" } }),
+    );
+
+    const getAuthzRev = async (accountId: string) =>
+      (
+        await withOrganization(db, company.id, (tx) =>
+          tx.account.findUniqueOrThrow({ where: { id: accountId }, select: { authzRevision: true } }),
+        )
+      ).authzRevision;
+
+    try {
+      const prodToken = await machineToken(productClientId);
+      const ownerToken = await token(company);
+      const janToken = await token(jan);
+      const piotrToken = await token(piotr);
+      const ewaToken = await token(ewa);
+      const otherOwnerToken = await token(otherCompany);
+
+      // Rejestrujemy uprawnienia i szablon produktu
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/permissions`, prodToken, [
+            { key: `${productKey}.entries.read`, description: "Odczyt godzin" },
+            { key: `${productKey}.entries.approve`, description: "Zatwierdzanie godzin" },
+            { key: `${productKey}.reports.export`, description: "Eksport raportów" },
+          ])
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PUT", `/core/v1/products/${productKey}/role-templates`, prodToken, [
+            {
+              key: `${productKey}.manager`,
+              name: "Kierownik szablon",
+              description: "Zatwierdza godziny zespołu",
+              permissions: [`${productKey}.entries.read`, `${productKey}.entries.approve`],
+            },
+          ])
+        ).statusCode,
+      ).toBe(200);
+
+      // Jednostki: Kraków -> Magazyn oraz Warszawa
+      const krakow = (
+        await request("POST", "/core/v1/units", ownerToken, { name: "Oddział Kraków", type: "BRANCH" })
+      ).json().data;
+      const magazyn = (
+        await request("POST", "/core/v1/units", ownerToken, {
+          name: "Magazyn Kraków",
+          type: "TEAM",
+          parentId: krakow.id,
+        })
+      ).json().data;
+      const warszawa = (
+        await request("POST", "/core/v1/units", ownerToken, { name: "Oddział Warszawa", type: "BRANCH" })
+      ).json().data;
+
+      // Lista pracowników zawiera accountId (niepuste dla pracownika z kontem)
+      const employeesRes = await get("/core/v1/employees", ownerToken);
+      const janEmp = employeesRes.json().data.find((e: { id: string }) => e.id === jan.employeeId);
+      expect(janEmp.accountId).toBe(jan.accountId);
+
+      // Pobranie szablonu i próba jego edycji/archiwizacji -> 403
+      const templateList = await get(`/core/v1/roles?product=${productKey}`, ownerToken);
+      const templateRole = templateList
+        .json()
+        .data.find((r: { key: string | null }) => r.key === `${productKey}.manager`);
+      expect(templateRole).toBeDefined();
+      expect(
+        (await request("PATCH", `/core/v1/roles/${templateRole.id}`, ownerToken, { name: "Zmiana" })).statusCode,
+      ).toBe(403);
+      expect((await request("DELETE", `/core/v1/roles/${templateRole.id}`, ownerToken)).statusCode).toBe(403);
+
+      // Owner kopiuje szablon i tworzy własne role
+      const copiedRes = await request("POST", "/core/v1/roles", ownerToken, {
+        copyFromRoleId: templateRole.id,
+        name: "Kierownik TimoTime",
+      });
+      expect(copiedRes.statusCode).toBe(201);
+      const copiedRole = copiedRes.json().data;
+      expect(copiedRole).toMatchObject({
+        name: "Kierownik TimoTime",
+        product: productKey,
+        isTemplate: false,
+        copiedFromRoleId: templateRole.id,
+        permissions: [`${productKey}.entries.approve`, `${productKey}.entries.read`],
+      });
+
+      const exportRoleRes = await request("POST", "/core/v1/roles", ownerToken, {
+        name: "Analityk raportów",
+        product: productKey,
+        permissions: [`${productKey}.entries.read`, `${productKey}.reports.export`],
+      });
+      expect(exportRoleRes.statusCode).toBe(201);
+      const exportRole = exportRoleRes.json().data;
+
+      const krakowAdminRoleRes = await request("POST", "/core/v1/roles", ownerToken, {
+        name: "Administrator oddziału",
+        product: null,
+        permissions: [CORE_PERMISSIONS.keys["roles.assign"], CORE_PERMISSIONS.keys["structure.manage"]],
+      });
+      expect(krakowAdminRoleRes.statusCode).toBe(201);
+      const krakowAdminRole = krakowAdminRoleRes.json().data;
+
+      // GET /roles?includeTemplates=false nie zwraca szablonów; GET /roles/{id} zwraca szczegóły
+      const companyOnlyRoles = await get("/core/v1/roles?includeTemplates=false", piotrToken);
+      expect(companyOnlyRoles.statusCode).toBe(200);
+      expect(companyOnlyRoles.json().data.every((r: { isTemplate: boolean }) => !r.isTemplate)).toBe(true);
+      expect((await get(`/core/v1/roles/${copiedRole.id}`, piotrToken)).json().data.permissions).toEqual([
+        `${productKey}.entries.approve`,
+        `${productKey}.entries.read`,
+      ]);
+      // Inna firma nie widzi roli company
+      expect((await get(`/core/v1/roles/${copiedRole.id}`, otherOwnerToken)).statusCode).toBe(404);
+
+      // Konto bez uprawnień dostaje 403 na wszystkie zapisy
+      for (const denied of [
+        await request("POST", "/core/v1/employees", piotrToken, { firstName: "X", lastName: "Y" }),
+        await request("POST", "/core/v1/units", piotrToken, { name: "X", type: "TEAM", parentId: krakow.id }),
+        await request("PATCH", `/core/v1/units/${krakow.id}`, piotrToken, { name: "X" }),
+        await request("PUT", `/core/v1/units/${krakow.id}/members/${piotr.employeeId}`, piotrToken, { role: "MEMBER" }),
+        await request("DELETE", `/core/v1/units/${krakow.id}/members/${piotr.employeeId}`, piotrToken),
+        await request("POST", "/core/v1/roles", piotrToken, {
+          name: "Nielegalna",
+          product: null,
+          permissions: [CORE_PERMISSIONS.keys["audit.read"]],
+        }),
+        await request("PATCH", `/core/v1/roles/${copiedRole.id}`, piotrToken, { name: "Zmiana" }),
+        await request("DELETE", `/core/v1/roles/${copiedRole.id}`, piotrToken),
+        await request("POST", "/core/v1/role-assignments", piotrToken, {
+          accountId: piotr.accountId,
+          roleId: copiedRole.id,
+          scopeType: "UNIT",
+          scopeId: krakow.id,
+        }),
+        await request("PUT", "/core/v1/organization/owner", piotrToken, { accountId: piotr.accountId }),
+      ]) {
+        expect(denied.statusCode).toBe(403);
+        expect(denied.json().error.code).toBe("PERMISSION_DENIED");
+      }
+
+      // Nadanie wyłączonemu kontu -> 409 CONFLICT
+      const assignDeactivated = await request("POST", "/core/v1/role-assignments", ownerToken, {
+        accountId: deactivated.accountId,
+        roleId: copiedRole.id,
+        scopeType: "ORGANIZATION",
+      });
+      expect(assignDeactivated.statusCode).toBe(409);
+
+      // Owner nadaje Janowi obie role (Administrator oddziału + Kierownik TimoTime) na Kraków; sprawdzamy authzRevision
+      const janRev0 = await getAuthzRev(jan.accountId);
+      const janCoreAssignRes = await request("POST", "/core/v1/role-assignments", ownerToken, {
+        accountId: jan.accountId,
+        roleId: krakowAdminRole.id,
+        scopeType: "UNIT",
+        scopeId: krakow.id,
+      });
+      expect(janCoreAssignRes.statusCode).toBe(201);
+      expect(await getAuthzRev(jan.accountId)).toBe(janRev0 + 1);
+
+      const janProductAssignRes = await request("POST", "/core/v1/role-assignments", ownerToken, {
+        accountId: jan.accountId,
+        roleId: copiedRole.id,
+        scopeType: "UNIT",
+        scopeId: krakow.id,
+      });
+      expect(janProductAssignRes.statusCode).toBe(201);
+      expect(await getAuthzRev(jan.accountId)).toBe(janRev0 + 2);
+
+      // Jan z core.structure.manage w Krakowie tworzy zespół pod Krakowem, ale dostaje 403 dla Warszawy i root
+      const krakowSubTeamRes = await request("POST", "/core/v1/units", janToken, {
+        name: "Zmiana nocna",
+        type: "TEAM",
+        parentId: krakow.id,
+      });
+      expect(krakowSubTeamRes.statusCode).toBe(201);
+      const krakowSubTeam = krakowSubTeamRes.json().data;
+
+      expect(
+        (
+          await request("POST", "/core/v1/units", janToken, {
+            name: "Zespół Wawa",
+            type: "TEAM",
+            parentId: warszawa.id,
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (await request("POST", "/core/v1/units", janToken, { name: "Nowy oddział", type: "BRANCH" })).statusCode,
+      ).toBe(403);
+      expect(
+        (await request("PATCH", `/core/v1/units/${krakowSubTeam.id}`, janToken, { parentId: warszawa.id })).statusCode,
+      ).toBe(403);
+
+      // Jan z core.roles.assign w Krakowie nadaje Piotrowi Kierownika w Krakowie i podjednostce Magazyn
+      const piotrRev0 = await getAuthzRev(piotr.accountId);
+      const piotrKrakowAssign = await request("POST", "/core/v1/role-assignments", janToken, {
+        accountId: piotr.accountId,
+        roleId: copiedRole.id,
+        scopeType: "UNIT",
+        scopeId: krakow.id,
+      });
+      expect(piotrKrakowAssign.statusCode).toBe(201);
+      expect(await getAuthzRev(piotr.accountId)).toBe(piotrRev0 + 1);
+
+      const piotrMagazynAssign = await request("POST", "/core/v1/role-assignments", janToken, {
+        accountId: piotr.accountId,
+        roleId: copiedRole.id,
+        scopeType: "UNIT",
+        scopeId: magazyn.id,
+      });
+      expect(piotrMagazynAssign.statusCode).toBe(201);
+
+      // Jan dostaje 403 przy delegowaniu: Warszawa, ORGANIZATION, RESOURCE, oraz rola z brakującym uprawnieniem
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", janToken, {
+            accountId: piotr.accountId,
+            roleId: copiedRole.id,
+            scopeType: "UNIT",
+            scopeId: warszawa.id,
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", janToken, {
+            accountId: piotr.accountId,
+            roleId: copiedRole.id,
+            scopeType: "ORGANIZATION",
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", janToken, {
+            accountId: piotr.accountId,
+            roleId: copiedRole.id,
+            scopeType: "RESOURCE",
+            scopeId: "proj_1",
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", janToken, {
+            accountId: piotr.accountId,
+            roleId: exportRole.id,
+            scopeType: "UNIT",
+            scopeId: krakow.id,
+          })
+        ).statusCode,
+      ).toBe(403);
+
+      // Widoczność listy przypisań: Owner i Jan widzą wszystkie; Piotr widzi tylko swoje
+      const ownerAssignments = await get("/core/v1/role-assignments", ownerToken);
+      expect(ownerAssignments.statusCode).toBe(200);
+      expect(ownerAssignments.json().data.length).toBe(4);
+
+      const janAssignments = await get("/core/v1/role-assignments", janToken);
+      expect(janAssignments.statusCode).toBe(200);
+      expect(janAssignments.json().data.length).toBe(4);
+
+      const piotrAssignments = await get("/core/v1/role-assignments", piotrToken);
+      expect(piotrAssignments.statusCode).toBe(200);
+      expect(piotrAssignments.json().data).toHaveLength(2);
+      expect(piotrAssignments.json().data.every((a: { accountId: string }) => a.accountId === piotr.accountId)).toBe(
+        true,
+      );
+      // Piotr filtrujący po cudzym accountId dostaje pustą listę
+      const piotrForJan = await get(`/core/v1/role-assignments?accountId=${jan.accountId}`, piotrToken);
+      expect(piotrForJan.statusCode).toBe(200);
+      expect(piotrForJan.json().data).toEqual([]);
+
+      // Role czasowe (jeszcze nieważna i wygasła) nie dają żadnych uprawnień
+      const pastStart = new Date(Date.now() - 120_000).toISOString();
+      const pastEnd = new Date(Date.now() - 60_000).toISOString();
+      const futureStart = new Date(Date.now() + 60_000).toISOString();
+      const futureEnd = new Date(Date.now() + 120_000).toISOString();
+
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", ownerToken, {
+            accountId: ewa.accountId,
+            roleId: krakowAdminRole.id,
+            scopeType: "UNIT",
+            scopeId: krakow.id,
+            validFrom: pastStart,
+            validUntil: pastEnd,
+          })
+        ).statusCode,
+      ).toBe(201);
+      const ewaWarszawaAssign = await request("POST", "/core/v1/role-assignments", ownerToken, {
+        accountId: ewa.accountId,
+        roleId: krakowAdminRole.id,
+        scopeType: "UNIT",
+        scopeId: warszawa.id,
+        validFrom: futureStart,
+        validUntil: futureEnd,
+      });
+      expect(ewaWarszawaAssign.statusCode).toBe(201);
+
+      expect(
+        (await request("POST", "/core/v1/units", ewaToken, { name: "Próba Ewy", type: "TEAM", parentId: krakow.id }))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await request("POST", "/core/v1/units", ewaToken, {
+            name: "Próba Ewy 2",
+            type: "TEAM",
+            parentId: warszawa.id,
+          })
+        ).statusCode,
+      ).toBe(403);
+      // Wygasłe/przyszłe core.roles.assign nie daje też wglądu w cudze przypisania
+      const ewaAssignments = await get("/core/v1/role-assignments", ewaToken);
+      expect(ewaAssignments.json().data.every((a: { accountId: string }) => a.accountId === ewa.accountId)).toBe(true);
+
+      // Aktualizacja uprawnień roli podbija authzRevision wszystkich przypisanych kont
+      const janRevBeforePatch = await getAuthzRev(jan.accountId);
+      const piotrRevBeforePatch = await getAuthzRev(piotr.accountId);
+      const patchedRole = await request("PATCH", `/core/v1/roles/${copiedRole.id}`, ownerToken, {
+        permissions: [`${productKey}.entries.read`],
+      });
+      expect(patchedRole.statusCode).toBe(200);
+      expect(patchedRole.json().data.permissions).toEqual([`${productKey}.entries.read`]);
+      expect(await getAuthzRev(jan.accountId)).toBe(janRevBeforePatch + 1);
+      expect(await getAuthzRev(piotr.accountId)).toBe(piotrRevBeforePatch + 1);
+
+      // Archiwizacja roli z przypisaniami -> 409 CONFLICT
+      expect((await request("DELETE", `/core/v1/roles/${copiedRole.id}`, ownerToken)).statusCode).toBe(409);
+
+      // Odbieranie przypisań: Jan nie może odebrać przypisania spoza Krakowa (403), ale odbiera w Krakowie/Magazynie
+      expect(
+        (await request("DELETE", `/core/v1/role-assignments/${ewaWarszawaAssign.json().data.id}`, janToken)).statusCode,
+      ).toBe(403);
+      const piotrRevBeforeRevoke = await getAuthzRev(piotr.accountId);
+      expect(
+        (await request("DELETE", `/core/v1/role-assignments/${piotrKrakowAssign.json().data.id}`, janToken)).statusCode,
+      ).toBe(204);
+      expect(await getAuthzRev(piotr.accountId)).toBe(piotrRevBeforeRevoke + 1);
+      expect(
+        (await request("DELETE", `/core/v1/role-assignments/${piotrMagazynAssign.json().data.id}`, janToken))
+          .statusCode,
+      ).toBe(204);
+
+      // Owner odbiera Janowi rolę Kierownika, po czym archiwizuje rolę -> 204
+      expect(
+        (await request("DELETE", `/core/v1/role-assignments/${janProductAssignRes.json().data.id}`, ownerToken))
+          .statusCode,
+      ).toBe(204);
+      expect((await request("DELETE", `/core/v1/roles/${copiedRole.id}`, ownerToken)).statusCode).toBe(204);
+
+      // Zarchiwizowanej roli nie można edytować ani przypisać
+      expect(
+        (await request("PATCH", `/core/v1/roles/${copiedRole.id}`, ownerToken, { name: "Po archiwizacji" })).statusCode,
+      ).toBe(409);
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", ownerToken, {
+            accountId: piotr.accountId,
+            roleId: copiedRole.id,
+            scopeType: "ORGANIZATION",
+          })
+        ).statusCode,
+      ).toBe(409);
+
+      // Dziennik zdarzeń ma wpisy wszystkich operacji i jest widoczny wyłącznie dla tej firmy
+      const companyAudit = await withOrganization(db, company.id, (tx) => tx.auditLog.findMany());
+      const actions = companyAudit.map((entry) => entry.action);
+      expect(actions).toEqual(
+        expect.arrayContaining(["role.created", "role.updated", "role.archived", "role.assigned", "role.revoked"]),
+      );
+      const otherAudit = await withOrganization(db, otherCompany.id, (tx) => tx.auditLog.findMany());
+      const companyAuditIds = new Set(companyAudit.map((entry) => entry.id));
+      expect(otherAudit.every((entry) => !companyAuditIds.has(entry.id))).toBe(true);
+    } finally {
+      for (const c of [company, otherCompany]) {
+        await withOrganization(db, c.id, (tx) => tx.organization.delete({ where: { id: c.id } }));
+        for (const accountId of [c.accountId, ...c.extraAccountIds]) {
+          await db.authUser.deleteMany({ where: { id: accountId } });
+        }
+      }
+      await ownerDb.role.deleteMany({ where: { productId } });
+      await ownerDb.auditLog.deleteMany({ where: { productId } });
+      await ownerDb.permission.deleteMany({ where: { productId } });
+      await ownerDb.product.deleteMany({ where: { id: productId } });
+    }
+  });
+
+  it("przekazuje rolę Ownera: poprzedni Owner traci prawa Ownera, nowy zyskuje, authzRevision rośnie i trafia wpis do audytu", async () => {
+    await registerCorePermissions(db);
+    await registerCoreRoleTemplates(db);
+
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const company = await createCompany(`owner-${suffix}`);
+    const jan = await createMember(company, "Jan", "NowyOwner");
+    const deactivated = await createMember(company, "Adam", "Wylaczony");
+
+    await withOrganization(db, company.id, (tx) =>
+      tx.account.update({ where: { id: deactivated.accountId }, data: { status: "DEACTIVATED" } }),
+    );
+
+    const getAuthzRev = async (accountId: string) =>
+      (
+        await withOrganization(db, company.id, (tx) =>
+          tx.account.findUniqueOrThrow({ where: { id: accountId }, select: { authzRevision: true } }),
+        )
+      ).authzRevision;
+
+    try {
+      const annaToken = await token(company);
+      const janToken = await token(jan);
+
+      // Nawet Administrator firmy (szablon core.company_admin) nie może przekazać roli Ownera
+      const rolesRes = await get("/core/v1/roles?product=core", annaToken);
+      const companyAdminTemplate = rolesRes
+        .json()
+        .data.find((r: { key: string | null }) => r.key === "core.company_admin");
+      const assignAdmin = await request("POST", "/core/v1/role-assignments", annaToken, {
+        accountId: jan.accountId,
+        roleId: companyAdminTemplate.id,
+        scopeType: "ORGANIZATION",
+      });
+      expect(assignAdmin.statusCode).toBe(201);
+
+      expect(
+        (await request("PUT", "/core/v1/organization/owner", janToken, { accountId: jan.accountId })).statusCode,
+      ).toBe(403);
+
+      // Odbieramy rolę Janowi, żeby sprawdzić czyste przejście praw Ownera
+      expect(
+        (await request("DELETE", `/core/v1/role-assignments/${assignAdmin.json().data.id}`, annaToken)).statusCode,
+      ).toBe(204);
+
+      // Błędy walidacji / konfliktu / 404
+      expect(
+        (await request("PUT", "/core/v1/organization/owner", annaToken, { accountId: company.accountId })).statusCode,
+      ).toBe(409);
+      expect(
+        (await request("PUT", "/core/v1/organization/owner", annaToken, { accountId: deactivated.accountId }))
+          .statusCode,
+      ).toBe(409);
+      expect(
+        (await request("PUT", "/core/v1/organization/owner", annaToken, { accountId: acme.accountId })).statusCode,
+      ).toBe(404);
+
+      const annaRevBefore = await getAuthzRev(company.accountId);
+      const janRevBefore = await getAuthzRev(jan.accountId);
+
+      // Przekazanie Ownera Annie -> Janowi
+      const transferRes = await request("PUT", "/core/v1/organization/owner", annaToken, {
+        accountId: jan.accountId,
+      });
+      expect(transferRes.statusCode).toBe(200);
+      expect(transferRes.json().data).toEqual({ ownerAccountId: jan.accountId });
+
+      // authzRevision podbite u obu kont
+      expect(await getAuthzRev(company.accountId)).toBe(annaRevBefore + 1);
+      expect(await getAuthzRev(jan.accountId)).toBe(janRevBefore + 1);
+
+      // GET /me odzwierciedla zmianę isOwner
+      expect((await get("/core/v1/me", annaToken)).json().data.account.isOwner).toBe(false);
+      expect((await get("/core/v1/me", janToken)).json().data.account.isOwner).toBe(true);
+
+      // Anna straciła prawa Ownera (nie ma żadnych ról -> 403)
+      expect(
+        (await request("POST", "/core/v1/employees", annaToken, { firstName: "X", lastName: "Y" })).statusCode,
+      ).toBe(403);
+      expect(
+        (await request("PUT", "/core/v1/organization/owner", annaToken, { accountId: company.accountId })).statusCode,
+      ).toBe(403);
+
+      // Jan zyskał pełne prawa Ownera
+      expect(
+        (await request("POST", "/core/v1/employees", janToken, { firstName: "Nowy", lastName: "Pracownik" }))
+          .statusCode,
+      ).toBe(201);
+
+      // Wpis w dzienniku zdarzeń z { from, to }
+      const auditEntries = await withOrganization(db, company.id, (tx) =>
+        tx.auditLog.findMany({ where: { action: "organization.owner.transferred" } }),
+      );
+      expect(auditEntries).toHaveLength(1);
+      expect(auditEntries[0]?.metadata).toEqual({ from: company.accountId, to: jan.accountId });
+    } finally {
+      await withOrganization(db, company.id, (tx) => tx.organization.delete({ where: { id: company.id } }));
+      for (const accountId of [company.accountId, ...company.extraAccountIds]) {
+        await db.authUser.deleteMany({ where: { id: accountId } });
+      }
+    }
+  });
+
+  it("nieistniejąca jednostka daje 404 przed sprawdzeniem uprawnień, a zarchiwizowana gotowa rola nie daje uprawnień", async () => {
+    await registerCorePermissions(db);
+    await registerCoreRoleTemplates(db);
+
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const company = await createCompany(`archived-${suffix}`);
+    const jan = await createMember(company, "Jan", "Administrator");
+    const missingUnitId = uuidv7();
+    const companyAdmin = await db.role.findFirstOrThrow({ where: { key: "core.company_admin" } });
+
+    try {
+      const ownerToken = await token(company);
+      const janToken = await token(jan);
+
+      // Jan bez żadnej roli: nieistniejąca jednostka to 404, a nie 403
+      expect(
+        (await request("POST", "/core/v1/units", janToken, { name: "X", type: "TEAM", parentId: missingUnitId }))
+          .statusCode,
+      ).toBe(404);
+      expect((await request("PATCH", `/core/v1/units/${missingUnitId}`, janToken, { name: "Y" })).statusCode).toBe(404);
+      expect(
+        (
+          await request("PUT", `/core/v1/units/${missingUnitId}/members/${jan.employeeId}`, janToken, {
+            role: "MEMBER",
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (await request("DELETE", `/core/v1/units/${missingUnitId}/members/${jan.employeeId}`, janToken)).statusCode,
+      ).toBe(404);
+      // Istniejąca jednostka bez uprawnień: 403
+      const unit = (await request("POST", "/core/v1/units", ownerToken, { name: "Oddział", type: "BRANCH" })).json()
+        .data;
+      expect((await request("PATCH", `/core/v1/units/${unit.id}`, janToken, { name: "Z" })).statusCode).toBe(403);
+
+      // Gotowa rola „Administrator firmy” w całej firmie pozwala Janowi tworzyć jednostki
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", ownerToken, {
+            accountId: jan.accountId,
+            roleId: companyAdmin.id,
+            scopeType: "ORGANIZATION",
+          })
+        ).statusCode,
+      ).toBe(201);
+      expect((await request("POST", "/core/v1/units", janToken, { name: "Zespół A", type: "TEAM" })).statusCode).toBe(
+        201,
+      );
+
+      // Po archiwizacji gotowej roli (np. wycofanej przez produkt) przypisanie przestaje działać
+      await db.role.update({ where: { id: companyAdmin.id }, data: { archivedAt: new Date() } });
+      expect((await request("POST", "/core/v1/units", janToken, { name: "Zespół B", type: "TEAM" })).statusCode).toBe(
+        403,
+      );
+    } finally {
+      await db.role.update({ where: { id: companyAdmin.id }, data: { archivedAt: null } });
+      await withOrganization(db, company.id, (tx) => tx.organization.delete({ where: { id: company.id } }));
+      for (const accountId of [company.accountId, ...company.extraAccountIds]) {
+        await db.authUser.deleteMany({ where: { id: accountId } });
+      }
     }
   });
 });

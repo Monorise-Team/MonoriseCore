@@ -9,7 +9,11 @@ import {
   apiListSuccessSchema,
   ApiMeta,
   apiSuccessSchema,
+  CopyRole,
   CreateEmployee,
+  CreateRole,
+  CreateRoleAssignment,
+  CreateRoleFromScratch,
   CreateUnit,
   DomainStatus,
   Employee,
@@ -19,6 +23,7 @@ import {
   Me,
   Organization,
   OrganizationDomain,
+  OrganizationOwner,
   OrganizationStatus,
   Permission,
   PermissionManifestEntry,
@@ -26,11 +31,19 @@ import {
   ProductKey,
   PutUnitMember,
   RegisterPermissionsResult,
+  RegisterRoleTemplatesResult,
+  Role,
+  RoleAssignment,
+  RoleTemplateKey,
+  RoleTemplateManifestEntry,
+  ScopeType,
+  TransferOrganizationOwner,
   Unit,
   UnitMember,
   UnitMembershipRole,
   UnitStatus,
   UnitType,
+  UpdateRole,
   UpdateUnit,
 } from "@core/contracts";
 import { z } from "zod";
@@ -174,6 +187,8 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("DomainStatus", DomainStatus);
   register("OrganizationDomain", OrganizationDomain);
   register("Organization", Organization);
+  register("OrganizationOwner", OrganizationOwner);
+  register("TransferOrganizationOwner", TransferOrganizationOwner);
   register("EmployeeStatus", EmployeeStatus);
   register("Employee", Employee);
   register("CreateEmployee", CreateEmployee);
@@ -191,6 +206,17 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("PermissionManifestEntry", PermissionManifestEntry);
   register("RegisterPermissionsResult", RegisterPermissionsResult);
   register("Permission", Permission);
+  register("RoleTemplateKey", RoleTemplateKey);
+  register("RoleTemplateManifestEntry", RoleTemplateManifestEntry);
+  register("RegisterRoleTemplatesResult", RegisterRoleTemplatesResult);
+  register("Role", Role);
+  register("CreateRoleFromScratch", CreateRoleFromScratch);
+  register("CopyRole", CopyRole);
+  register("CreateRole", CreateRole);
+  register("UpdateRole", UpdateRole);
+  register("ScopeType", ScopeType);
+  register("RoleAssignment", RoleAssignment);
+  register("CreateRoleAssignment", CreateRoleAssignment);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -363,7 +389,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
     info: {
       title: "Monorise Core API",
       version: readRootVersion(),
-      summary: "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura, uprawnienia i stan usługi.",
+      summary: "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura, role, uprawnienia i stan usługi.",
       description:
         "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy " +
         "dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` " +
@@ -400,7 +426,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
             clientCredentials: {
               tokenUrl: "https://auth.monorise.studio/api/auth/oauth2/token",
               scopes: {
-                [PERMISSIONS_REGISTER_SCOPE]: "Rejestracja manifestu uprawnień produktu w Core.",
+                [PERMISSIONS_REGISTER_SCOPE]: "Rejestracja manifestu uprawnień i gotowych ról produktu w Core.",
               },
             },
           },

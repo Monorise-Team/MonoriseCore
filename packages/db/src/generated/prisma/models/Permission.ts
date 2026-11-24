@@ -200,6 +200,7 @@ export type PermissionWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"Permission"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Permission"> | Date | string
   product?: Prisma.XOR<Prisma.ProductNullableScalarRelationFilter, Prisma.ProductWhereInput> | null
+  rolePermissions?: Prisma.RolePermissionListRelationFilter
 }
 
 export type PermissionOrderByWithRelationInput = {
@@ -211,6 +212,7 @@ export type PermissionOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   product?: Prisma.ProductOrderByWithRelationInput
+  rolePermissions?: Prisma.RolePermissionOrderByRelationAggregateInput
 }
 
 export type PermissionWhereUniqueInput = Prisma.AtLeast<{
@@ -225,6 +227,7 @@ export type PermissionWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"Permission"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Permission"> | Date | string
   product?: Prisma.XOR<Prisma.ProductNullableScalarRelationFilter, Prisma.ProductWhereInput> | null
+  rolePermissions?: Prisma.RolePermissionListRelationFilter
 }, "id" | "key">
 
 export type PermissionOrderByWithAggregationInput = {
@@ -261,6 +264,7 @@ export type PermissionCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   product?: Prisma.ProductCreateNestedOneWithoutPermissionsInput
+  rolePermissions?: Prisma.RolePermissionCreateNestedManyWithoutPermissionInput
 }
 
 export type PermissionUncheckedCreateInput = {
@@ -271,6 +275,7 @@ export type PermissionUncheckedCreateInput = {
   deprecatedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  rolePermissions?: Prisma.RolePermissionUncheckedCreateNestedManyWithoutPermissionInput
 }
 
 export type PermissionUpdateInput = {
@@ -281,6 +286,7 @@ export type PermissionUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   product?: Prisma.ProductUpdateOneWithoutPermissionsNestedInput
+  rolePermissions?: Prisma.RolePermissionUpdateManyWithoutPermissionNestedInput
 }
 
 export type PermissionUncheckedUpdateInput = {
@@ -291,6 +297,7 @@ export type PermissionUncheckedUpdateInput = {
   deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  rolePermissions?: Prisma.RolePermissionUncheckedUpdateManyWithoutPermissionNestedInput
 }
 
 export type PermissionCreateManyInput = {
@@ -362,6 +369,11 @@ export type PermissionMinOrderByAggregateInput = {
   updatedAt?: Prisma.SortOrder
 }
 
+export type PermissionScalarRelationFilter = {
+  is?: Prisma.PermissionWhereInput
+  isNot?: Prisma.PermissionWhereInput
+}
+
 export type PermissionCreateNestedManyWithoutProductInput = {
   create?: Prisma.XOR<Prisma.PermissionCreateWithoutProductInput, Prisma.PermissionUncheckedCreateWithoutProductInput> | Prisma.PermissionCreateWithoutProductInput[] | Prisma.PermissionUncheckedCreateWithoutProductInput[]
   connectOrCreate?: Prisma.PermissionCreateOrConnectWithoutProductInput | Prisma.PermissionCreateOrConnectWithoutProductInput[]
@@ -404,6 +416,20 @@ export type PermissionUncheckedUpdateManyWithoutProductNestedInput = {
   deleteMany?: Prisma.PermissionScalarWhereInput | Prisma.PermissionScalarWhereInput[]
 }
 
+export type PermissionCreateNestedOneWithoutRolePermissionsInput = {
+  create?: Prisma.XOR<Prisma.PermissionCreateWithoutRolePermissionsInput, Prisma.PermissionUncheckedCreateWithoutRolePermissionsInput>
+  connectOrCreate?: Prisma.PermissionCreateOrConnectWithoutRolePermissionsInput
+  connect?: Prisma.PermissionWhereUniqueInput
+}
+
+export type PermissionUpdateOneRequiredWithoutRolePermissionsNestedInput = {
+  create?: Prisma.XOR<Prisma.PermissionCreateWithoutRolePermissionsInput, Prisma.PermissionUncheckedCreateWithoutRolePermissionsInput>
+  connectOrCreate?: Prisma.PermissionCreateOrConnectWithoutRolePermissionsInput
+  upsert?: Prisma.PermissionUpsertWithoutRolePermissionsInput
+  connect?: Prisma.PermissionWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.PermissionUpdateToOneWithWhereWithoutRolePermissionsInput, Prisma.PermissionUpdateWithoutRolePermissionsInput>, Prisma.PermissionUncheckedUpdateWithoutRolePermissionsInput>
+}
+
 export type PermissionCreateWithoutProductInput = {
   id: string
   key: string
@@ -411,6 +437,7 @@ export type PermissionCreateWithoutProductInput = {
   deprecatedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  rolePermissions?: Prisma.RolePermissionCreateNestedManyWithoutPermissionInput
 }
 
 export type PermissionUncheckedCreateWithoutProductInput = {
@@ -420,6 +447,7 @@ export type PermissionUncheckedCreateWithoutProductInput = {
   deprecatedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  rolePermissions?: Prisma.RolePermissionUncheckedCreateNestedManyWithoutPermissionInput
 }
 
 export type PermissionCreateOrConnectWithoutProductInput = {
@@ -461,6 +489,62 @@ export type PermissionScalarWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Permission"> | Date | string
 }
 
+export type PermissionCreateWithoutRolePermissionsInput = {
+  id: string
+  key: string
+  description: string
+  deprecatedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  product?: Prisma.ProductCreateNestedOneWithoutPermissionsInput
+}
+
+export type PermissionUncheckedCreateWithoutRolePermissionsInput = {
+  id: string
+  key: string
+  productId?: string | null
+  description: string
+  deprecatedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type PermissionCreateOrConnectWithoutRolePermissionsInput = {
+  where: Prisma.PermissionWhereUniqueInput
+  create: Prisma.XOR<Prisma.PermissionCreateWithoutRolePermissionsInput, Prisma.PermissionUncheckedCreateWithoutRolePermissionsInput>
+}
+
+export type PermissionUpsertWithoutRolePermissionsInput = {
+  update: Prisma.XOR<Prisma.PermissionUpdateWithoutRolePermissionsInput, Prisma.PermissionUncheckedUpdateWithoutRolePermissionsInput>
+  create: Prisma.XOR<Prisma.PermissionCreateWithoutRolePermissionsInput, Prisma.PermissionUncheckedCreateWithoutRolePermissionsInput>
+  where?: Prisma.PermissionWhereInput
+}
+
+export type PermissionUpdateToOneWithWhereWithoutRolePermissionsInput = {
+  where?: Prisma.PermissionWhereInput
+  data: Prisma.XOR<Prisma.PermissionUpdateWithoutRolePermissionsInput, Prisma.PermissionUncheckedUpdateWithoutRolePermissionsInput>
+}
+
+export type PermissionUpdateWithoutRolePermissionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.StringFieldUpdateOperationsInput | string
+  deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  product?: Prisma.ProductUpdateOneWithoutPermissionsNestedInput
+}
+
+export type PermissionUncheckedUpdateWithoutRolePermissionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  productId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  description?: Prisma.StringFieldUpdateOperationsInput | string
+  deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type PermissionCreateManyProductInput = {
   id: string
   key: string
@@ -477,6 +561,7 @@ export type PermissionUpdateWithoutProductInput = {
   deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  rolePermissions?: Prisma.RolePermissionUpdateManyWithoutPermissionNestedInput
 }
 
 export type PermissionUncheckedUpdateWithoutProductInput = {
@@ -486,6 +571,7 @@ export type PermissionUncheckedUpdateWithoutProductInput = {
   deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  rolePermissions?: Prisma.RolePermissionUncheckedUpdateManyWithoutPermissionNestedInput
 }
 
 export type PermissionUncheckedUpdateManyWithoutProductInput = {
@@ -498,6 +584,35 @@ export type PermissionUncheckedUpdateManyWithoutProductInput = {
 }
 
 
+/**
+ * Count Type PermissionCountOutputType
+ */
+
+export type PermissionCountOutputType = {
+  rolePermissions: number
+}
+
+export type PermissionCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  rolePermissions?: boolean | PermissionCountOutputTypeCountRolePermissionsArgs
+}
+
+/**
+ * PermissionCountOutputType without action
+ */
+export type PermissionCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PermissionCountOutputType
+   */
+  select?: Prisma.PermissionCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * PermissionCountOutputType without action
+ */
+export type PermissionCountOutputTypeCountRolePermissionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.RolePermissionWhereInput
+}
+
 
 export type PermissionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -508,6 +623,8 @@ export type PermissionSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   createdAt?: boolean
   updatedAt?: boolean
   product?: boolean | Prisma.Permission$productArgs<ExtArgs>
+  rolePermissions?: boolean | Prisma.Permission$rolePermissionsArgs<ExtArgs>
+  _count?: boolean | Prisma.PermissionCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["permission"]>
 
 export type PermissionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -545,6 +662,8 @@ export type PermissionSelectScalar = {
 export type PermissionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "key" | "productId" | "description" | "deprecatedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["permission"]>
 export type PermissionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   product?: boolean | Prisma.Permission$productArgs<ExtArgs>
+  rolePermissions?: boolean | Prisma.Permission$rolePermissionsArgs<ExtArgs>
+  _count?: boolean | Prisma.PermissionCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type PermissionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   product?: boolean | Prisma.Permission$productArgs<ExtArgs>
@@ -557,6 +676,7 @@ export type $PermissionPayload<ExtArgs extends runtime.Types.Extensions.Internal
   name: "Permission"
   objects: {
     product: Prisma.$ProductPayload<ExtArgs> | null
+    rolePermissions: Prisma.$RolePermissionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -961,6 +1081,7 @@ readonly fields: PermissionFieldRefs;
 export interface Prisma__PermissionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   product<T extends Prisma.Permission$productArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Permission$productArgs<ExtArgs>>): Prisma.Prisma__ProductClient<runtime.Types.Result.GetResult<Prisma.$ProductPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  rolePermissions<T extends Prisma.Permission$rolePermissionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Permission$rolePermissionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RolePermissionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1414,6 +1535,30 @@ export type Permission$productArgs<ExtArgs extends runtime.Types.Extensions.Inte
    */
   include?: Prisma.ProductInclude<ExtArgs> | null
   where?: Prisma.ProductWhereInput
+}
+
+/**
+ * Permission.rolePermissions
+ */
+export type Permission$rolePermissionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the RolePermission
+   */
+  select?: Prisma.RolePermissionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the RolePermission
+   */
+  omit?: Prisma.RolePermissionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.RolePermissionInclude<ExtArgs> | null
+  where?: Prisma.RolePermissionWhereInput
+  orderBy?: Prisma.RolePermissionOrderByWithRelationInput | Prisma.RolePermissionOrderByWithRelationInput[]
+  cursor?: Prisma.RolePermissionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.RolePermissionScalarFieldEnum | Prisma.RolePermissionScalarFieldEnum[]
 }
 
 /**

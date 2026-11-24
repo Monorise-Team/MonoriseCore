@@ -1,11 +1,16 @@
 import {
+  CORE_PERMISSIONS,
   CreateEmployee,
+  CreateRole,
+  CreateRoleAssignment,
   CreateUnit,
   PageQuery,
   PERMISSIONS_REGISTER_SCOPE,
   ProductKey,
   PutUnitMember,
+  TransferOrganizationOwner,
   UnitStatus,
+  UpdateRole,
   UpdateUnit,
   type ApiErrorBody,
   type ApiListResponse,
@@ -16,16 +21,31 @@ import {
   type MachineTokenClaims,
   type Me,
   type Organization,
+  type OrganizationOwner,
   type Permission,
+  type Role,
+  type RoleAssignment,
+  type ScopeType,
   type Unit,
   type UnitMember,
 } from "@core/contracts";
 import { uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
+import { PermissionError } from "@monorise-team/permissions";
 import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
 import { z } from "zod";
 import { writeAudit } from "./audit.js";
+import {
+  assertCanAssignInScope,
+  assertCanDelegateRole,
+  assertCorePermission,
+  canViewAllRoleAssignments,
+  hasAnyRoleAssignPermission,
+  loadPermissionSnapshot,
+  toGrantScope,
+} from "./authorization.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
+import { registerRoleTemplates } from "./role-templates-registry.js";
 import { ROUTES, toFastifyPath } from "./routes.js";
 import type { MachineTokenVerifier, TokenVerifier } from "./tokens.js";
 
@@ -54,6 +74,7 @@ interface Caller {
   organizationId: string;
   employeeId: string;
   isOwner: boolean;
+  authzRevision: number;
 }
 
 interface MachineCaller {
@@ -64,13 +85,27 @@ interface MachineCaller {
 const UnitIdParams = z.object({ unitId: z.uuid() });
 const UnitMemberParams = z.object({ unitId: z.uuid(), employeeId: z.uuid() });
 const ProductKeyParams = z.object({ productKey: ProductKey });
+const RoleIdParams = z.object({ roleId: z.uuid() });
+const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
 const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
 const QueryBoolean = z
   .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
   .default(false);
+const QueryBooleanDefaultTrue = z
+  .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
+  .default(true);
 const ListPermissionsFilter = z.object({
   product: ProductKey.optional(),
   includeDeprecated: QueryBoolean,
+});
+const ListRolesFilter = z.object({
+  product: ProductKey.optional(),
+  includeTemplates: QueryBooleanDefaultTrue,
+  includeArchived: QueryBoolean,
+});
+const ListRoleAssignmentsFilter = z.object({
+  accountId: z.uuid().optional(),
+  roleId: z.uuid().optional(),
 });
 const CursorUuid = z.uuid();
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
@@ -142,8 +177,20 @@ async function lockOrganizationUnits(tx: Tx, organizationId: string): Promise<vo
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('organization_units:' || ${organizationId}::uuid::text, 0))`;
 }
 
+/** Serializuje zapisy na roli i przypisaniach tej roli (archiwizacja vs nowe przypisanie). */
+async function lockRole(tx: Tx, roleId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('role:' || ${roleId}::uuid::text, 0))`;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const err = error as { code?: string; message?: string } | null;
+  if (err?.code === "P2002" || err?.code === "23505") return true;
+  return /duplicate key value violates unique constraint/i.test(String(err?.message ?? ""));
+}
+
 function serializeEmployee(employee: {
   id: string;
+  account?: { id: string } | null;
   firstName: string;
   lastName: string;
   workEmail: string | null;
@@ -152,6 +199,7 @@ function serializeEmployee(employee: {
 }): Employee {
   return {
     id: employee.id,
+    accountId: employee.account?.id ?? null,
     firstName: employee.firstName,
     lastName: employee.lastName,
     workEmail: employee.workEmail,
@@ -187,6 +235,7 @@ function serializeUnitMember(membership: {
   joinedAt: Date;
   employee: {
     id: string;
+    account?: { id: string } | null;
     firstName: string;
     lastName: string;
     workEmail: string | null;
@@ -217,6 +266,95 @@ function serializePermission(permission: {
   };
 }
 
+function serializeRole(role: {
+  id: string;
+  organizationId: string | null;
+  key: string | null;
+  name: string;
+  description: string | null;
+  copiedFromRoleId: string | null;
+  archivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  product: { key: string } | null;
+  permissions: { permission: { key: string } }[];
+}): Role {
+  return {
+    id: role.id,
+    key: role.key,
+    product: role.product?.key ?? null,
+    name: role.name,
+    description: role.description,
+    isTemplate: role.organizationId === null,
+    copiedFromRoleId: role.copiedFromRoleId,
+    archivedAt: role.archivedAt ? role.archivedAt.toISOString() : null,
+    permissions: role.permissions.map((rp) => rp.permission.key).sort(),
+    createdAt: role.createdAt.toISOString(),
+    updatedAt: role.updatedAt.toISOString(),
+  };
+}
+
+function serializeRoleAssignment(assignment: {
+  id: string;
+  accountId: string;
+  roleId: string;
+  scopeType: ScopeType;
+  scopeId: string | null;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  grantedByAccountId: string;
+  createdAt: Date;
+}): RoleAssignment {
+  return {
+    id: assignment.id,
+    accountId: assignment.accountId,
+    roleId: assignment.roleId,
+    scopeType: assignment.scopeType,
+    scopeId: assignment.scopeId,
+    validFrom: assignment.validFrom ? assignment.validFrom.toISOString() : null,
+    validUntil: assignment.validUntil ? assignment.validUntil.toISOString() : null,
+    grantedByAccountId: assignment.grantedByAccountId,
+    createdAt: assignment.createdAt.toISOString(),
+  };
+}
+
+async function resolveActiveRolePermissions(
+  tx: Tx,
+  productId: string | null,
+  productLabel: string,
+  keys: readonly string[],
+): Promise<{ id: string; key: string }[]> {
+  const found = await tx.permission.findMany({
+    where: { key: { in: [...keys] } },
+    select: { id: true, key: true, productId: true, deprecatedAt: true },
+  });
+  const byKey = new Map(found.map((perm) => [perm.key, perm]));
+  const details: ApiErrorBody["details"] = [];
+  const resolved: { id: string; key: string }[] = [];
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]!;
+    const perm = byKey.get(key);
+    if (!perm) {
+      details.push({ field: `permissions.${i}`, message: `Nieznane uprawnienie "${key}"` });
+    } else if (perm.deprecatedAt !== null) {
+      details.push({ field: `permissions.${i}`, message: `Uprawnienie "${key}" jest wycofane` });
+    } else if (perm.productId !== productId) {
+      details.push({
+        field: `permissions.${i}`,
+        message: `Uprawnienie "${key}" nie należy do produktu "${productLabel}"`,
+      });
+    } else {
+      resolved.push({ id: perm.id, key: perm.key });
+    }
+  }
+
+  if (details.length > 0) {
+    throw new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowe uprawnienia roli", details);
+  }
+  return resolved;
+}
+
 function isCycleError(error: unknown): boolean {
   const text =
     String((error as { code?: string; message?: string })?.code ?? "") + String((error as Error)?.message ?? "");
@@ -236,6 +374,15 @@ async function createsUnitCycle(tx: Tx, unitId: string, candidateParentId: strin
     current = parentById.get(current);
   }
   return false;
+}
+
+/**
+ * Najpierw istnienie jednostki (404), potem uprawnienie (403): jednostka innej firmy albo nieistniejąca
+ * zawsze daje NOT_FOUND, zgodnie ze standardem API, a osoba bez uprawnień nie dostaje mylącego 403.
+ */
+async function assertUnitExists(tx: Tx, unitId: string, message: string): Promise<void> {
+  const unit = await tx.organizationUnit.findUnique({ where: { id: unitId }, select: { id: true } });
+  if (!unit) throw new ApiFailure(404, "NOT_FOUND", message);
 }
 
 /** Core API: format `{ data, meta, error }` (ADR-0044), firma zawsze z tokenu, dane przez RLS (ADR-0037). */
@@ -270,11 +417,13 @@ export function buildServer({
     const failure =
       error instanceof ApiFailure
         ? error
-        : statusCode === 404
-          ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-          : statusCode === 400
-            ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-            : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
+        : error instanceof PermissionError
+          ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+          : statusCode === 404
+            ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+            : statusCode === 400
+              ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+              : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -307,7 +456,12 @@ export function buildServer({
     const account = await withOrganization(db, claims.org_id, (tx) =>
       tx.account.findUnique({
         where: { id: claims.sub },
-        select: { status: true, employeeId: true, organization: { select: { ownerAccountId: true } } },
+        select: {
+          status: true,
+          employeeId: true,
+          authzRevision: true,
+          organization: { select: { ownerAccountId: true } },
+        },
       }),
     );
     if (!account || account.employeeId !== claims.employee_id) {
@@ -320,6 +474,7 @@ export function buildServer({
       organizationId: claims.org_id,
       employeeId: claims.employee_id,
       isOwner: account.organization.ownerAccountId === claims.sub,
+      authzRevision: account.authzRevision,
     };
   }
 
@@ -380,7 +535,7 @@ export function buildServer({
             status: account.status,
             isOwner: account.organization.ownerAccountId === account.id,
           },
-          employee: serializeEmployee(account.employee),
+          employee: serializeEmployee({ ...account.employee, account: { id: account.id } }),
           organization: {
             id: account.organization.id,
             name: account.organization.name,
@@ -419,6 +574,54 @@ export function buildServer({
   });
 
   app.route({
+    method: ROUTES.transferOrganizationOwner.method,
+    url: toFastifyPath(ROUTES.transferOrganizationOwner.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      requireOwner(who);
+      const body = parseInput(TransferOrganizationOwner, request.body);
+      const result = await withOrganization(db, who.organizationId, async (tx) => {
+        const org = await tx.organization.findUniqueOrThrow({
+          where: { id: who.organizationId },
+          select: { ownerAccountId: true },
+        });
+        if (org.ownerAccountId !== who.accountId) {
+          throw new ApiFailure(403, "PERMISSION_DENIED", "Tę operację może wykonać tylko Owner firmy");
+        }
+        const target = await tx.account.findUnique({
+          where: { id: body.accountId },
+          select: { id: true, status: true },
+        });
+        if (!target) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
+        }
+        if (target.id === who.accountId) {
+          throw new ApiFailure(409, "CONFLICT", "To konto jest już Ownerem firmy");
+        }
+        if (target.status !== "ACTIVE") {
+          throw new ApiFailure(409, "CONFLICT", "Ownerem firmy może zostać wyłącznie aktywne konto");
+        }
+        await tx.organization.update({
+          where: { id: who.organizationId },
+          data: { ownerAccountId: target.id },
+        });
+        await tx.account.updateMany({
+          where: { id: { in: [who.accountId, target.id] } },
+          data: { authzRevision: { increment: 1 } },
+        });
+        await writeAudit(tx, request, who, {
+          action: "organization.owner.transferred",
+          resourceType: "organization",
+          resourceId: who.organizationId,
+          metadata: { from: who.accountId, to: target.id },
+        });
+        return { ownerAccountId: target.id } satisfies OrganizationOwner;
+      });
+      return send(request, result);
+    },
+  });
+
+  app.route({
     method: ROUTES.listEmployees.method,
     url: toFastifyPath(ROUTES.listEmployees.path),
     handler: async (request) => {
@@ -427,6 +630,7 @@ export function buildServer({
       const rows = await withOrganization(db, who.organizationId, (tx) =>
         tx.employee.findMany({
           ...(page.afterId ? { where: { id: { gt: page.afterId } } } : {}),
+          include: { account: { select: { id: true } } },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         }),
@@ -441,9 +645,10 @@ export function buildServer({
     url: toFastifyPath(ROUTES.createEmployee.path),
     handler: async (request, reply) => {
       const who = await caller(request);
-      requireOwner(who);
       const body = parseInput(CreateEmployee, request.body);
       const employee = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
         const created = await tx.employee.create({
           data: {
             id: uuidv7(),
@@ -462,7 +667,7 @@ export function buildServer({
         });
         return created;
       });
-      return reply.status(201).send(send(request, serializeEmployee(employee)));
+      return reply.status(201).send(send(request, serializeEmployee({ ...employee, account: null })));
     },
   });
 
@@ -493,10 +698,16 @@ export function buildServer({
     url: toFastifyPath(ROUTES.createUnit.path),
     handler: async (request, reply) => {
       const who = await caller(request);
-      requireOwner(who);
       const body = parseInput(CreateUnit, request.body);
       const unit = await withOrganization(db, who.organizationId, async (tx) => {
         await lockOrganizationUnits(tx, who.organizationId);
+        if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(
+          snapshot,
+          CORE_PERMISSIONS.keys["structure.manage"],
+          body.parentId ? { unitIds: [body.parentId] } : {},
+        );
         if (body.parentId) {
           const parent = await tx.organizationUnit.findUnique({
             where: { id: body.parentId },
@@ -536,7 +747,6 @@ export function buildServer({
     url: toFastifyPath(ROUTES.updateUnit.path),
     handler: async (request) => {
       const who = await caller(request);
-      requireOwner(who);
       const params = parseInput(UnitIdParams, request.params);
       const body = parseInput(UpdateUnit, request.body);
 
@@ -545,6 +755,17 @@ export function buildServer({
           await lockOrganizationUnits(tx, who.organizationId);
           const unit = await tx.organizationUnit.findUnique({ where: { id: params.unitId } });
           if (!unit) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
+
+          if (body.parentId !== undefined && body.parentId !== unit.parentId) {
+            if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
+            assertCorePermission(
+              snapshot,
+              CORE_PERMISSIONS.keys["structure.manage"],
+              body.parentId ? { unitIds: [body.parentId] } : {},
+            );
+          }
 
           const nextStatus = body.status ?? unit.status;
           const nextParentId = body.parentId !== undefined ? body.parentId : unit.parentId;
@@ -647,7 +868,7 @@ export function buildServer({
             unitId: params.unitId,
             ...(page.afterId ? { id: { gt: page.afterId } } : {}),
           },
-          include: { employee: true },
+          include: { employee: { include: { account: { select: { id: true } } } } },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         });
@@ -662,11 +883,13 @@ export function buildServer({
     url: toFastifyPath(ROUTES.putUnitMember.path),
     handler: async (request) => {
       const who = await caller(request);
-      requireOwner(who);
       const params = parseInput(UnitMemberParams, request.params);
       const body = parseInput(PutUnitMember, request.body);
       const membership = await withOrganization(db, who.organizationId, async (tx) => {
         await lockOrganizationUnits(tx, who.organizationId);
+        await assertUnitExists(tx, params.unitId, "Nie znaleziono jednostki organizacyjnej");
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
         const unit = await tx.organizationUnit.findUnique({
           where: { id: params.unitId },
           select: { id: true, status: true },
@@ -690,7 +913,7 @@ export function buildServer({
             role: body.role,
           },
           update: { role: body.role },
-          include: { employee: true },
+          include: { employee: { include: { account: { select: { id: true } } } } },
         });
         await writeAudit(tx, request, who, {
           action: "unit.member.set",
@@ -713,9 +936,11 @@ export function buildServer({
     url: toFastifyPath(ROUTES.deleteUnitMember.path),
     handler: async (request, reply) => {
       const who = await caller(request);
-      requireOwner(who);
       const params = parseInput(UnitMemberParams, request.params);
       await withOrganization(db, who.organizationId, async (tx) => {
+        await assertUnitExists(tx, params.unitId, "Nie znaleziono jednostki organizacyjnej");
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
         const unit = await tx.organizationUnit.findUnique({
           where: { id: params.unitId },
           select: { id: true },
@@ -806,6 +1031,587 @@ export function buildServer({
         }
         throw error;
       }
+    },
+  });
+
+  app.route({
+    method: ROUTES.registerProductRoleTemplates.method,
+    url: toFastifyPath(ROUTES.registerProductRoleTemplates.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, PERMISSIONS_REGISTER_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const product = await db.product.findUnique({
+        where: { key: params.productKey },
+        select: { id: true, key: true, registrationClientId: true },
+      });
+      if (!product) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+      }
+      if (!product.registrationClientId || product.registrationClientId !== machine.clientId) {
+        throw new ApiFailure(
+          403,
+          "PERMISSION_DENIED",
+          "Ten klient nie może rejestrować szablonów ról wskazanego produktu",
+        );
+      }
+      const userAgent = request.headers["user-agent"];
+      try {
+        const summary = await registerRoleTemplates({
+          db,
+          product: { id: product.id, key: product.key },
+          manifest: request.body,
+          actor: {
+            type: "PRODUCT",
+            requestId: request.id,
+            ipAddress: request.ip || null,
+            userAgent: typeof userAgent === "string" && userAgent.length > 0 ? userAgent : null,
+          },
+        });
+        return send(request, summary);
+      } catch (error) {
+        if (error instanceof ManifestValidationError) {
+          throw new ApiFailure(422, "VALIDATION_FAILED", error.message, error.details);
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.listRoles.method,
+    url: toFastifyPath(ROUTES.listRoles.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const page = parsePageQuery(request.query, ListRolesFilter);
+      const where = {
+        ...(page.product === "core"
+          ? { productId: null }
+          : page.product !== undefined
+            ? { product: { is: { key: page.product } } }
+            : {}),
+        ...(page.includeTemplates ? {} : { organizationId: who.organizationId }),
+        ...(page.includeArchived ? {} : { archivedAt: null }),
+        ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+      };
+      const rows = await withOrganization(db, who.organizationId, (tx) =>
+        tx.role.findMany({
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          include: {
+            product: { select: { key: true } },
+            permissions: { select: { permission: { select: { key: true } } } },
+          },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        }),
+      );
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeRole), nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.getRole.method,
+    url: toFastifyPath(ROUTES.getRole.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const params = parseInput(RoleIdParams, request.params);
+      const role = await withOrganization(db, who.organizationId, (tx) =>
+        tx.role.findUnique({
+          where: { id: params.roleId },
+          include: {
+            product: { select: { key: true } },
+            permissions: { select: { permission: { select: { key: true } } } },
+          },
+        }),
+      );
+      if (!role) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
+      }
+      return send(request, serializeRole(role));
+    },
+  });
+
+  app.route({
+    method: ROUTES.createRole.method,
+    url: toFastifyPath(ROUTES.createRole.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const body = parseInput(CreateRole, request.body);
+
+      try {
+        const created = await withOrganization(db, who.organizationId, async (tx) => {
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["roles.manage"], {});
+
+          if ("copyFromRoleId" in body) {
+            const source = await tx.role.findUnique({
+              where: { id: body.copyFromRoleId },
+              include: {
+                product: { select: { key: true } },
+                permissions: {
+                  select: { permission: { select: { id: true, key: true, deprecatedAt: true } } },
+                },
+              },
+            });
+            if (!source) {
+              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono kopiowanej roli");
+            }
+            if (source.archivedAt !== null) {
+              throw new ApiFailure(409, "CONFLICT", "Nie można skopiować zarchiwizowanej roli");
+            }
+            const activePermissions = source.permissions
+              .filter((rp) => rp.permission.deprecatedAt === null)
+              .map((rp) => ({ id: rp.permission.id, key: rp.permission.key }));
+
+            const roleId = uuidv7();
+            const role = await tx.role.create({
+              data: {
+                id: roleId,
+                organizationId: who.organizationId,
+                productId: source.productId,
+                key: null,
+                name: body.name ?? source.name,
+                description: body.description !== undefined ? body.description : source.description,
+                copiedFromRoleId: source.id,
+              },
+            });
+            if (activePermissions.length > 0) {
+              await tx.rolePermission.createMany({
+                data: activePermissions.map((perm) => ({ roleId, permissionId: perm.id })),
+              });
+            }
+            await writeAudit(tx, request, who, {
+              action: "role.created",
+              resourceType: "role",
+              resourceId: role.id,
+              metadata: {
+                copiedFromRoleId: source.id,
+                product: source.product?.key ?? null,
+                permissions: activePermissions.map((perm) => perm.key).sort(),
+              },
+            });
+            return {
+              ...role,
+              product: source.product,
+              permissions: activePermissions.map((perm) => ({ permission: { key: perm.key } })),
+            };
+          }
+
+          if (body.product === "core") {
+            throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+              { field: "product", message: 'Dla roli platformowej podaj wartość null zamiast "core"' },
+            ]);
+          }
+
+          let product: { id: string; key: string } | null = null;
+          if (body.product !== null) {
+            product = await tx.product.findUnique({
+              where: { key: body.product },
+              select: { id: true, key: true },
+            });
+            if (!product) {
+              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+            }
+          }
+
+          const resolvedPermissions = await resolveActiveRolePermissions(
+            tx,
+            product?.id ?? null,
+            product?.key ?? "core",
+            body.permissions,
+          );
+
+          const roleId = uuidv7();
+          const role = await tx.role.create({
+            data: {
+              id: roleId,
+              organizationId: who.organizationId,
+              productId: product?.id ?? null,
+              key: null,
+              name: body.name,
+              description: body.description ?? null,
+              copiedFromRoleId: null,
+            },
+          });
+          await tx.rolePermission.createMany({
+            data: resolvedPermissions.map((perm) => ({ roleId, permissionId: perm.id })),
+          });
+          await writeAudit(tx, request, who, {
+            action: "role.created",
+            resourceType: "role",
+            resourceId: role.id,
+            metadata: {
+              product: product?.key ?? null,
+              permissions: resolvedPermissions.map((perm) => perm.key).sort(),
+            },
+          });
+          return {
+            ...role,
+            product: product ? { key: product.key } : null,
+            permissions: resolvedPermissions.map((perm) => ({ permission: { key: perm.key } })),
+          };
+        });
+        return reply.status(201).send(send(request, serializeRole(created)));
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ApiFailure(409, "CONFLICT", "Aktywna rola o takiej nazwie już istnieje w firmie");
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.updateRole.method,
+    url: toFastifyPath(ROUTES.updateRole.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const params = parseInput(RoleIdParams, request.params);
+      const body = parseInput(UpdateRole, request.body);
+
+      try {
+        const updated = await withOrganization(db, who.organizationId, async (tx) => {
+          await lockRole(tx, params.roleId);
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["roles.manage"], {});
+
+          const role = await tx.role.findUnique({
+            where: { id: params.roleId },
+            include: {
+              product: { select: { key: true } },
+              permissions: { select: { permissionId: true, permission: { select: { key: true } } } },
+            },
+          });
+          if (!role) {
+            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
+          }
+          if (role.organizationId === null) {
+            throw new ApiFailure(403, "PERMISSION_DENIED", "Nie można modyfikować gotowej roli (szablonu)");
+          }
+          if (role.archivedAt !== null) {
+            throw new ApiFailure(409, "CONFLICT", "Nie można modyfikować zarchiwizowanej roli");
+          }
+
+          let resolvedPermissions: { id: string; key: string }[] | null = null;
+          if (body.permissions !== undefined) {
+            resolvedPermissions = await resolveActiveRolePermissions(
+              tx,
+              role.productId,
+              role.product?.key ?? "core",
+              body.permissions,
+            );
+          }
+
+          const changes: Record<string, { old: string | string[] | null; new: string | string[] | null }> = {};
+          if (body.name !== undefined && body.name !== role.name) {
+            changes.name = { old: role.name, new: body.name };
+          }
+          if (body.description !== undefined && body.description !== role.description) {
+            changes.description = { old: role.description, new: body.description };
+          }
+
+          let nextPermissions = role.permissions.map((rp) => ({ permission: { key: rp.permission.key } }));
+          if (resolvedPermissions !== null) {
+            const currentIds = new Set(role.permissions.map((rp) => rp.permissionId));
+            const desiredIds = new Set(resolvedPermissions.map((perm) => perm.id));
+            const toDelete = [...currentIds].filter((id) => !desiredIds.has(id));
+            const toAdd = [...desiredIds].filter((id) => !currentIds.has(id));
+
+            if (toDelete.length > 0 || toAdd.length > 0) {
+              if (toDelete.length > 0) {
+                await tx.rolePermission.deleteMany({
+                  where: { roleId: role.id, permissionId: { in: toDelete } },
+                });
+              }
+              if (toAdd.length > 0) {
+                await tx.rolePermission.createMany({
+                  data: toAdd.map((permissionId) => ({ roleId: role.id, permissionId })),
+                });
+              }
+              await tx.account.updateMany({
+                where: { roleAssignments: { some: { roleId: role.id } } },
+                data: { authzRevision: { increment: 1 } },
+              });
+              changes.permissions = {
+                old: role.permissions.map((rp) => rp.permission.key).sort(),
+                new: resolvedPermissions.map((perm) => perm.key).sort(),
+              };
+            }
+            nextPermissions = resolvedPermissions.map((perm) => ({ permission: { key: perm.key } }));
+          }
+
+          const nextRole =
+            body.name !== undefined || body.description !== undefined || Object.keys(changes).length > 0
+              ? await tx.role.update({
+                  where: { id: role.id },
+                  data: {
+                    ...(body.name !== undefined ? { name: body.name } : {}),
+                    ...(body.description !== undefined ? { description: body.description } : {}),
+                    ...(body.name === undefined && body.description === undefined ? { updatedAt: new Date() } : {}),
+                  },
+                })
+              : role;
+
+          if (Object.keys(changes).length > 0) {
+            await writeAudit(tx, request, who, {
+              action: "role.updated",
+              resourceType: "role",
+              resourceId: role.id,
+              metadata: { changes },
+            });
+          }
+
+          return {
+            ...nextRole,
+            product: role.product,
+            permissions: nextPermissions,
+          };
+        });
+        return send(request, serializeRole(updated));
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ApiFailure(409, "CONFLICT", "Aktywna rola o takiej nazwie już istnieje w firmie");
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.archiveRole.method,
+    url: toFastifyPath(ROUTES.archiveRole.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const params = parseInput(RoleIdParams, request.params);
+
+      await withOrganization(db, who.organizationId, async (tx) => {
+        await lockRole(tx, params.roleId);
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["roles.manage"], {});
+
+        const role = await tx.role.findUnique({
+          where: { id: params.roleId },
+          select: { id: true, organizationId: true, archivedAt: true },
+        });
+        if (!role) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
+        }
+        if (role.organizationId === null) {
+          throw new ApiFailure(403, "PERMISSION_DENIED", "Nie można archiwizować gotowej roli (szablonu)");
+        }
+        if (role.archivedAt !== null) {
+          throw new ApiFailure(409, "CONFLICT", "Rola jest już zarchiwizowana");
+        }
+
+        const assignmentCount = await tx.roleAssignment.count({ where: { roleId: role.id } });
+        if (assignmentCount > 0) {
+          throw new ApiFailure(409, "CONFLICT", "Nie można zarchiwizować roli, która ma aktywne przypisania");
+        }
+
+        await tx.role.update({
+          where: { id: role.id },
+          data: { archivedAt: new Date() },
+        });
+        await tx.account.updateMany({
+          where: { roleAssignments: { some: { roleId: role.id } } },
+          data: { authzRevision: { increment: 1 } },
+        });
+        await writeAudit(tx, request, who, {
+          action: "role.archived",
+          resourceType: "role",
+          resourceId: role.id,
+          metadata: {},
+        });
+      });
+
+      return reply.status(204).send();
+    },
+  });
+
+  app.route({
+    method: ROUTES.listRoleAssignments.method,
+    url: toFastifyPath(ROUTES.listRoleAssignments.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const page = parsePageQuery(request.query, ListRoleAssignmentsFilter);
+      const rows = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        const canViewAll = canViewAllRoleAssignments(snapshot);
+        if (!canViewAll && page.accountId && page.accountId !== who.accountId) {
+          return [];
+        }
+        const effectiveAccountId = canViewAll ? page.accountId : who.accountId;
+        const where = {
+          ...(effectiveAccountId ? { accountId: effectiveAccountId } : {}),
+          ...(page.roleId ? { roleId: page.roleId } : {}),
+          ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+        };
+        return tx.roleAssignment.findMany({
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        });
+      });
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeRoleAssignment), nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.createRoleAssignment.method,
+    url: toFastifyPath(ROUTES.createRoleAssignment.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const body = parseInput(CreateRoleAssignment, request.body);
+      const scopeId = body.scopeType === "ORGANIZATION" ? null : (body.scopeId ?? null);
+      const grantScope = toGrantScope(body.scopeType, scopeId);
+
+      try {
+        const created = await withOrganization(db, who.organizationId, async (tx) => {
+          await lockRole(tx, body.roleId);
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          assertCanAssignInScope(snapshot, grantScope);
+
+          const account = await tx.account.findUnique({
+            where: { id: body.accountId },
+            select: { id: true, status: true },
+          });
+          if (!account) {
+            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
+          }
+          if (account.status === "DEACTIVATED") {
+            throw new ApiFailure(409, "CONFLICT", "Nie można nadać roli wyłączonemu kontu");
+          }
+
+          const role = await tx.role.findUnique({
+            where: { id: body.roleId },
+            include: {
+              permissions: { select: { permission: { select: { key: true, deprecatedAt: true } } } },
+            },
+          });
+          if (!role) {
+            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
+          }
+          if (role.archivedAt !== null) {
+            throw new ApiFailure(409, "CONFLICT", "Nie można przypisać zarchiwizowanej roli");
+          }
+
+          if (body.scopeType === "UNIT" && scopeId) {
+            const unit = await tx.organizationUnit.findUnique({
+              where: { id: scopeId },
+              select: { id: true, status: true },
+            });
+            if (!unit) {
+              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
+            }
+            if (unit.status === "ARCHIVED") {
+              throw new ApiFailure(409, "CONFLICT", "Nie można przypisać roli do zarchiwizowanej jednostki");
+            }
+          }
+
+          const activePermissionKeys = role.permissions
+            .filter((rp) => rp.permission.deprecatedAt === null)
+            .map((rp) => rp.permission.key);
+          assertCanDelegateRole(snapshot, activePermissionKeys, grantScope);
+
+          const assignment = await tx.roleAssignment.create({
+            data: {
+              id: uuidv7(),
+              organizationId: who.organizationId,
+              accountId: body.accountId,
+              roleId: body.roleId,
+              scopeType: body.scopeType,
+              scopeId,
+              validFrom: body.validFrom ? new Date(body.validFrom) : null,
+              validUntil: body.validUntil ? new Date(body.validUntil) : null,
+              grantedByAccountId: who.accountId,
+            },
+          });
+
+          await tx.account.update({
+            where: { id: body.accountId },
+            data: { authzRevision: { increment: 1 } },
+          });
+
+          await writeAudit(tx, request, who, {
+            action: "role.assigned",
+            resourceType: "role_assignment",
+            resourceId: assignment.id,
+            metadata: {
+              accountId: assignment.accountId,
+              roleId: assignment.roleId,
+              scopeType: assignment.scopeType,
+              scopeId: assignment.scopeId,
+              validFrom: assignment.validFrom ? assignment.validFrom.toISOString() : null,
+              validUntil: assignment.validUntil ? assignment.validUntil.toISOString() : null,
+            },
+          });
+
+          return assignment;
+        });
+        return reply.status(201).send(send(request, serializeRoleAssignment(created)));
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ApiFailure(409, "CONFLICT", "To konto ma już przypisaną tę rolę w tym zakresie");
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.deleteRoleAssignment.method,
+    url: toFastifyPath(ROUTES.deleteRoleAssignment.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const params = parseInput(AssignmentIdParams, request.params);
+
+      await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        if (!hasAnyRoleAssignPermission(snapshot)) {
+          throw new PermissionError(CORE_PERMISSIONS.keys["roles.assign"]);
+        }
+
+        const assignment = await tx.roleAssignment.findUnique({
+          where: { id: params.assignmentId },
+          include: {
+            role: {
+              select: {
+                permissions: { select: { permission: { select: { key: true, deprecatedAt: true } } } },
+              },
+            },
+          },
+        });
+        if (!assignment) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono przypisania roli");
+        }
+
+        const grantScope = toGrantScope(assignment.scopeType, assignment.scopeId);
+        assertCanAssignInScope(snapshot, grantScope);
+        const activePermissionKeys = assignment.role.permissions
+          .filter((rp) => rp.permission.deprecatedAt === null)
+          .map((rp) => rp.permission.key);
+        assertCanDelegateRole(snapshot, activePermissionKeys, grantScope);
+
+        await tx.roleAssignment.delete({ where: { id: assignment.id } });
+        await tx.account.update({
+          where: { id: assignment.accountId },
+          data: { authzRevision: { increment: 1 } },
+        });
+        await writeAudit(tx, request, who, {
+          action: "role.revoked",
+          resourceType: "role_assignment",
+          resourceId: assignment.id,
+          metadata: {
+            accountId: assignment.accountId,
+            roleId: assignment.roleId,
+            scopeType: assignment.scopeType,
+            scopeId: assignment.scopeId,
+          },
+        });
+      });
+
+      return reply.status(204).send();
     },
   });
 
