@@ -25,6 +25,10 @@ CREATE FUNCTION "public"."prevent_organization_unit_cycle"() RETURNS trigger
 DECLARE
   has_cycle boolean;
 BEGIN
+  -- Serializujemy zapisy w drzewie jednostek w obrębie firmy na czas transakcji, żeby dwa równoległe
+  -- zapisy (np. A->B i B->A) nie sprawdziły starego stanu jednocześnie i nie utworzyły cyklu.
+  PERFORM pg_advisory_xact_lock(hashtextextended('organization_units:' || NEW."organizationId"::text, 0));
+
   IF NEW."parentId" IS NULL THEN
     RETURN NEW;
   END IF;
