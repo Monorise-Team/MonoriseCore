@@ -192,6 +192,8 @@ export type ProductWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Product"> | Date | string
   permissions?: Prisma.PermissionListRelationFilter
   roles?: Prisma.RoleListRelationFilter
+  entitlements?: Prisma.EntitlementListRelationFilter
+  appAccesses?: Prisma.AppAccessListRelationFilter
   auditLogs?: Prisma.AuditLogListRelationFilter
 }
 
@@ -204,6 +206,8 @@ export type ProductOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   permissions?: Prisma.PermissionOrderByRelationAggregateInput
   roles?: Prisma.RoleOrderByRelationAggregateInput
+  entitlements?: Prisma.EntitlementOrderByRelationAggregateInput
+  appAccesses?: Prisma.AppAccessOrderByRelationAggregateInput
   auditLogs?: Prisma.AuditLogOrderByRelationAggregateInput
 }
 
@@ -219,6 +223,8 @@ export type ProductWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"Product"> | Date | string
   permissions?: Prisma.PermissionListRelationFilter
   roles?: Prisma.RoleListRelationFilter
+  entitlements?: Prisma.EntitlementListRelationFilter
+  appAccesses?: Prisma.AppAccessListRelationFilter
   auditLogs?: Prisma.AuditLogListRelationFilter
 }, "id" | "key" | "registrationClientId">
 
@@ -255,6 +261,8 @@ export type ProductCreateInput = {
   updatedAt?: Date | string
   permissions?: Prisma.PermissionCreateNestedManyWithoutProductInput
   roles?: Prisma.RoleCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutProductInput
 }
 
@@ -267,6 +275,8 @@ export type ProductUncheckedCreateInput = {
   updatedAt?: Date | string
   permissions?: Prisma.PermissionUncheckedCreateNestedManyWithoutProductInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutProductInput
 }
 
@@ -279,6 +289,8 @@ export type ProductUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUpdateManyWithoutProductNestedInput
   roles?: Prisma.RoleUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutProductNestedInput
 }
 
@@ -291,6 +303,8 @@ export type ProductUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUncheckedUpdateManyWithoutProductNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutProductNestedInput
 }
 
@@ -353,6 +367,11 @@ export type ProductNullableScalarRelationFilter = {
   isNot?: Prisma.ProductWhereInput | null
 }
 
+export type ProductScalarRelationFilter = {
+  is?: Prisma.ProductWhereInput
+  isNot?: Prisma.ProductWhereInput
+}
+
 export type ProductCreateNestedOneWithoutPermissionsInput = {
   create?: Prisma.XOR<Prisma.ProductCreateWithoutPermissionsInput, Prisma.ProductUncheckedCreateWithoutPermissionsInput>
   connectOrCreate?: Prisma.ProductCreateOrConnectWithoutPermissionsInput
@@ -401,6 +420,34 @@ export type ProductUpdateOneWithoutAuditLogsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.ProductUpdateToOneWithWhereWithoutAuditLogsInput, Prisma.ProductUpdateWithoutAuditLogsInput>, Prisma.ProductUncheckedUpdateWithoutAuditLogsInput>
 }
 
+export type ProductCreateNestedOneWithoutEntitlementsInput = {
+  create?: Prisma.XOR<Prisma.ProductCreateWithoutEntitlementsInput, Prisma.ProductUncheckedCreateWithoutEntitlementsInput>
+  connectOrCreate?: Prisma.ProductCreateOrConnectWithoutEntitlementsInput
+  connect?: Prisma.ProductWhereUniqueInput
+}
+
+export type ProductUpdateOneRequiredWithoutEntitlementsNestedInput = {
+  create?: Prisma.XOR<Prisma.ProductCreateWithoutEntitlementsInput, Prisma.ProductUncheckedCreateWithoutEntitlementsInput>
+  connectOrCreate?: Prisma.ProductCreateOrConnectWithoutEntitlementsInput
+  upsert?: Prisma.ProductUpsertWithoutEntitlementsInput
+  connect?: Prisma.ProductWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.ProductUpdateToOneWithWhereWithoutEntitlementsInput, Prisma.ProductUpdateWithoutEntitlementsInput>, Prisma.ProductUncheckedUpdateWithoutEntitlementsInput>
+}
+
+export type ProductCreateNestedOneWithoutAppAccessesInput = {
+  create?: Prisma.XOR<Prisma.ProductCreateWithoutAppAccessesInput, Prisma.ProductUncheckedCreateWithoutAppAccessesInput>
+  connectOrCreate?: Prisma.ProductCreateOrConnectWithoutAppAccessesInput
+  connect?: Prisma.ProductWhereUniqueInput
+}
+
+export type ProductUpdateOneRequiredWithoutAppAccessesNestedInput = {
+  create?: Prisma.XOR<Prisma.ProductCreateWithoutAppAccessesInput, Prisma.ProductUncheckedCreateWithoutAppAccessesInput>
+  connectOrCreate?: Prisma.ProductCreateOrConnectWithoutAppAccessesInput
+  upsert?: Prisma.ProductUpsertWithoutAppAccessesInput
+  connect?: Prisma.ProductWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.ProductUpdateToOneWithWhereWithoutAppAccessesInput, Prisma.ProductUpdateWithoutAppAccessesInput>, Prisma.ProductUncheckedUpdateWithoutAppAccessesInput>
+}
+
 export type ProductCreateWithoutPermissionsInput = {
   id: string
   key: string
@@ -409,6 +456,8 @@ export type ProductCreateWithoutPermissionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   roles?: Prisma.RoleCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutProductInput
 }
 
@@ -420,6 +469,8 @@ export type ProductUncheckedCreateWithoutPermissionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutProductInput
 }
 
@@ -447,6 +498,8 @@ export type ProductUpdateWithoutPermissionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   roles?: Prisma.RoleUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutProductNestedInput
 }
 
@@ -458,6 +511,8 @@ export type ProductUncheckedUpdateWithoutPermissionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   roles?: Prisma.RoleUncheckedUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutProductNestedInput
 }
 
@@ -469,6 +524,8 @@ export type ProductCreateWithoutRolesInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   permissions?: Prisma.PermissionCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutProductInput
 }
 
@@ -480,6 +537,8 @@ export type ProductUncheckedCreateWithoutRolesInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   permissions?: Prisma.PermissionUncheckedCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutProductInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutProductInput
 }
 
@@ -507,6 +566,8 @@ export type ProductUpdateWithoutRolesInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutProductNestedInput
 }
 
@@ -518,6 +579,8 @@ export type ProductUncheckedUpdateWithoutRolesInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUncheckedUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutProductNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutProductNestedInput
 }
 
@@ -530,6 +593,8 @@ export type ProductCreateWithoutAuditLogsInput = {
   updatedAt?: Date | string
   permissions?: Prisma.PermissionCreateNestedManyWithoutProductInput
   roles?: Prisma.RoleCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutProductInput
 }
 
 export type ProductUncheckedCreateWithoutAuditLogsInput = {
@@ -541,6 +606,8 @@ export type ProductUncheckedCreateWithoutAuditLogsInput = {
   updatedAt?: Date | string
   permissions?: Prisma.PermissionUncheckedCreateNestedManyWithoutProductInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutProductInput
 }
 
 export type ProductCreateOrConnectWithoutAuditLogsInput = {
@@ -568,6 +635,8 @@ export type ProductUpdateWithoutAuditLogsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUpdateManyWithoutProductNestedInput
   roles?: Prisma.RoleUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutProductNestedInput
 }
 
 export type ProductUncheckedUpdateWithoutAuditLogsInput = {
@@ -579,6 +648,144 @@ export type ProductUncheckedUpdateWithoutAuditLogsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   permissions?: Prisma.PermissionUncheckedUpdateManyWithoutProductNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutProductNestedInput
+}
+
+export type ProductCreateWithoutEntitlementsInput = {
+  id: string
+  key: string
+  name: string
+  registrationClientId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  permissions?: Prisma.PermissionCreateNestedManyWithoutProductInput
+  roles?: Prisma.RoleCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutProductInput
+  auditLogs?: Prisma.AuditLogCreateNestedManyWithoutProductInput
+}
+
+export type ProductUncheckedCreateWithoutEntitlementsInput = {
+  id: string
+  key: string
+  name: string
+  registrationClientId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  permissions?: Prisma.PermissionUncheckedCreateNestedManyWithoutProductInput
+  roles?: Prisma.RoleUncheckedCreateNestedManyWithoutProductInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutProductInput
+  auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutProductInput
+}
+
+export type ProductCreateOrConnectWithoutEntitlementsInput = {
+  where: Prisma.ProductWhereUniqueInput
+  create: Prisma.XOR<Prisma.ProductCreateWithoutEntitlementsInput, Prisma.ProductUncheckedCreateWithoutEntitlementsInput>
+}
+
+export type ProductUpsertWithoutEntitlementsInput = {
+  update: Prisma.XOR<Prisma.ProductUpdateWithoutEntitlementsInput, Prisma.ProductUncheckedUpdateWithoutEntitlementsInput>
+  create: Prisma.XOR<Prisma.ProductCreateWithoutEntitlementsInput, Prisma.ProductUncheckedCreateWithoutEntitlementsInput>
+  where?: Prisma.ProductWhereInput
+}
+
+export type ProductUpdateToOneWithWhereWithoutEntitlementsInput = {
+  where?: Prisma.ProductWhereInput
+  data: Prisma.XOR<Prisma.ProductUpdateWithoutEntitlementsInput, Prisma.ProductUncheckedUpdateWithoutEntitlementsInput>
+}
+
+export type ProductUpdateWithoutEntitlementsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  registrationClientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  permissions?: Prisma.PermissionUpdateManyWithoutProductNestedInput
+  roles?: Prisma.RoleUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutProductNestedInput
+  auditLogs?: Prisma.AuditLogUpdateManyWithoutProductNestedInput
+}
+
+export type ProductUncheckedUpdateWithoutEntitlementsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  registrationClientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  permissions?: Prisma.PermissionUncheckedUpdateManyWithoutProductNestedInput
+  roles?: Prisma.RoleUncheckedUpdateManyWithoutProductNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutProductNestedInput
+  auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutProductNestedInput
+}
+
+export type ProductCreateWithoutAppAccessesInput = {
+  id: string
+  key: string
+  name: string
+  registrationClientId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  permissions?: Prisma.PermissionCreateNestedManyWithoutProductInput
+  roles?: Prisma.RoleCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutProductInput
+  auditLogs?: Prisma.AuditLogCreateNestedManyWithoutProductInput
+}
+
+export type ProductUncheckedCreateWithoutAppAccessesInput = {
+  id: string
+  key: string
+  name: string
+  registrationClientId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  permissions?: Prisma.PermissionUncheckedCreateNestedManyWithoutProductInput
+  roles?: Prisma.RoleUncheckedCreateNestedManyWithoutProductInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutProductInput
+  auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutProductInput
+}
+
+export type ProductCreateOrConnectWithoutAppAccessesInput = {
+  where: Prisma.ProductWhereUniqueInput
+  create: Prisma.XOR<Prisma.ProductCreateWithoutAppAccessesInput, Prisma.ProductUncheckedCreateWithoutAppAccessesInput>
+}
+
+export type ProductUpsertWithoutAppAccessesInput = {
+  update: Prisma.XOR<Prisma.ProductUpdateWithoutAppAccessesInput, Prisma.ProductUncheckedUpdateWithoutAppAccessesInput>
+  create: Prisma.XOR<Prisma.ProductCreateWithoutAppAccessesInput, Prisma.ProductUncheckedCreateWithoutAppAccessesInput>
+  where?: Prisma.ProductWhereInput
+}
+
+export type ProductUpdateToOneWithWhereWithoutAppAccessesInput = {
+  where?: Prisma.ProductWhereInput
+  data: Prisma.XOR<Prisma.ProductUpdateWithoutAppAccessesInput, Prisma.ProductUncheckedUpdateWithoutAppAccessesInput>
+}
+
+export type ProductUpdateWithoutAppAccessesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  registrationClientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  permissions?: Prisma.PermissionUpdateManyWithoutProductNestedInput
+  roles?: Prisma.RoleUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutProductNestedInput
+  auditLogs?: Prisma.AuditLogUpdateManyWithoutProductNestedInput
+}
+
+export type ProductUncheckedUpdateWithoutAppAccessesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  key?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  registrationClientId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  permissions?: Prisma.PermissionUncheckedUpdateManyWithoutProductNestedInput
+  roles?: Prisma.RoleUncheckedUpdateManyWithoutProductNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutProductNestedInput
+  auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutProductNestedInput
 }
 
 
@@ -589,12 +796,16 @@ export type ProductUncheckedUpdateWithoutAuditLogsInput = {
 export type ProductCountOutputType = {
   permissions: number
   roles: number
+  entitlements: number
+  appAccesses: number
   auditLogs: number
 }
 
 export type ProductCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   permissions?: boolean | ProductCountOutputTypeCountPermissionsArgs
   roles?: boolean | ProductCountOutputTypeCountRolesArgs
+  entitlements?: boolean | ProductCountOutputTypeCountEntitlementsArgs
+  appAccesses?: boolean | ProductCountOutputTypeCountAppAccessesArgs
   auditLogs?: boolean | ProductCountOutputTypeCountAuditLogsArgs
 }
 
@@ -625,6 +836,20 @@ export type ProductCountOutputTypeCountRolesArgs<ExtArgs extends runtime.Types.E
 /**
  * ProductCountOutputType without action
  */
+export type ProductCountOutputTypeCountEntitlementsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.EntitlementWhereInput
+}
+
+/**
+ * ProductCountOutputType without action
+ */
+export type ProductCountOutputTypeCountAppAccessesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AppAccessWhereInput
+}
+
+/**
+ * ProductCountOutputType without action
+ */
 export type ProductCountOutputTypeCountAuditLogsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.AuditLogWhereInput
 }
@@ -639,6 +864,8 @@ export type ProductSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   updatedAt?: boolean
   permissions?: boolean | Prisma.Product$permissionsArgs<ExtArgs>
   roles?: boolean | Prisma.Product$rolesArgs<ExtArgs>
+  entitlements?: boolean | Prisma.Product$entitlementsArgs<ExtArgs>
+  appAccesses?: boolean | Prisma.Product$appAccessesArgs<ExtArgs>
   auditLogs?: boolean | Prisma.Product$auditLogsArgs<ExtArgs>
   _count?: boolean | Prisma.ProductCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["product"]>
@@ -674,6 +901,8 @@ export type ProductOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
 export type ProductInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   permissions?: boolean | Prisma.Product$permissionsArgs<ExtArgs>
   roles?: boolean | Prisma.Product$rolesArgs<ExtArgs>
+  entitlements?: boolean | Prisma.Product$entitlementsArgs<ExtArgs>
+  appAccesses?: boolean | Prisma.Product$appAccessesArgs<ExtArgs>
   auditLogs?: boolean | Prisma.Product$auditLogsArgs<ExtArgs>
   _count?: boolean | Prisma.ProductCountOutputTypeDefaultArgs<ExtArgs>
 }
@@ -685,6 +914,8 @@ export type $ProductPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
   objects: {
     permissions: Prisma.$PermissionPayload<ExtArgs>[]
     roles: Prisma.$RolePayload<ExtArgs>[]
+    entitlements: Prisma.$EntitlementPayload<ExtArgs>[]
+    appAccesses: Prisma.$AppAccessPayload<ExtArgs>[]
     auditLogs: Prisma.$AuditLogPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -1090,6 +1321,8 @@ export interface Prisma__ProductClient<T, Null = never, ExtArgs extends runtime.
   readonly [Symbol.toStringTag]: "PrismaPromise"
   permissions<T extends Prisma.Product$permissionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Product$permissionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PermissionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   roles<T extends Prisma.Product$rolesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Product$rolesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RolePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  entitlements<T extends Prisma.Product$entitlementsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Product$entitlementsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EntitlementPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  appAccesses<T extends Prisma.Product$appAccessesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Product$appAccessesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AppAccessPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   auditLogs<T extends Prisma.Product$auditLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Product$auditLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -1564,6 +1797,54 @@ export type Product$rolesArgs<ExtArgs extends runtime.Types.Extensions.InternalA
   take?: number
   skip?: number
   distinct?: Prisma.RoleScalarFieldEnum | Prisma.RoleScalarFieldEnum[]
+}
+
+/**
+ * Product.entitlements
+ */
+export type Product$entitlementsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Entitlement
+   */
+  select?: Prisma.EntitlementSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Entitlement
+   */
+  omit?: Prisma.EntitlementOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.EntitlementInclude<ExtArgs> | null
+  where?: Prisma.EntitlementWhereInput
+  orderBy?: Prisma.EntitlementOrderByWithRelationInput | Prisma.EntitlementOrderByWithRelationInput[]
+  cursor?: Prisma.EntitlementWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.EntitlementScalarFieldEnum | Prisma.EntitlementScalarFieldEnum[]
+}
+
+/**
+ * Product.appAccesses
+ */
+export type Product$appAccessesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AppAccess
+   */
+  select?: Prisma.AppAccessSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AppAccess
+   */
+  omit?: Prisma.AppAccessOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AppAccessInclude<ExtArgs> | null
+  where?: Prisma.AppAccessWhereInput
+  orderBy?: Prisma.AppAccessOrderByWithRelationInput | Prisma.AppAccessOrderByWithRelationInput[]
+  cursor?: Prisma.AppAccessWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AppAccessScalarFieldEnum | Prisma.AppAccessScalarFieldEnum[]
 }
 
 /**

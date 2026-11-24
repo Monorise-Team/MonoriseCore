@@ -316,6 +316,9 @@ model Organization {
   unitMemberships      UnitMembership[]
   roles                Role[]
   roleAssignments      RoleAssignment[]
+  entitlements         Entitlement[]
+  appAccesses          AppAccess[]
+  outboxEvents         OutboxEvent[]
   auditLogs            AuditLog[]
 
   @@map("organizations")
@@ -412,6 +415,7 @@ model Account {
   updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
   deactivatedAt     DateTime?        @db.Timestamptz(3)
   roleAssignments   RoleAssignment[]
+  appAccesses       AppAccess[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -498,6 +502,8 @@ model Product {
   updatedAt            DateTime     @updatedAt @db.Timestamptz(3)
   permissions          Permission[]
   roles                Role[]
+  entitlements         Entitlement[]
+  appAccesses          AppAccess[]
   auditLogs            AuditLog[]
 
   @@map("products")
@@ -631,5 +637,109 @@ model AuditLog {
 
   @@index([organizationId, createdAt(sort: Desc)])
   @@map("audit_log")
+  @@schema("public")
+}
+
+// ── Dostęp firm do produktów i włączanie aplikacji (ADR-0035, ADR-0051, ADR-0052) ─────────────────
+
+enum EntitlementSourceType {
+  CONTRACT
+  SUBSCRIPTION
+  TRIAL
+  MANUAL
+  OFFER
+  PACKAGE
+
+  @@schema("public")
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  SUSPENDED
+  ENDED
+
+  @@schema("public")
+}
+
+enum EntitlementSuspendedReason {
+  OVERDUE
+
+  @@schema("public")
+}
+
+/// Dostęp firmy do produktu (podzbiór modelu z 06-commercial/data-models-commercial.md, ADR-0051).
+/// Co najwyżej jeden wpis o statusie innym niż ENDED na parę (firma, produkt) (częściowy indeks w migracji).
+model Entitlement {
+  id              String                      @id @db.Uuid
+  organizationId  String                      @db.Uuid
+  organization    Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId       String                      @db.Uuid
+  product         Product                     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  planId          String?                     @db.Uuid
+  sourceType      EntitlementSourceType
+  sourceId        String?                     @db.Uuid
+  status          EntitlementStatus           @default(ACTIVE)
+  startsAt        DateTime                    @default(now()) @db.Timestamptz(3)
+  endsAt          DateTime?                   @db.Timestamptz(3)
+  suspendedReason EntitlementSuspendedReason?
+  createdAt       DateTime                    @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                    @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@index([organizationId, productId])
+  @@index([productId])
+  @@map("entitlements")
+  @@schema("public")
+}
+
+enum AppAccessStatus {
+  ACTIVE
+  REVOKED
+
+  @@schema("public")
+}
+
+/// Pierwszy krok dostępu pracownika do produktu (ADR-0035). Co najwyżej jeden wiersz ACTIVE
+/// na (accountId, productId); cofnięcie ustawia REVOKED i revokedAt (historia).
+model AppAccess {
+  id                 String          @id @db.Uuid
+  organizationId     String          @db.Uuid
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId          String          @db.Uuid
+  account            Account         @relation(fields: [organizationId, accountId], references: [organizationId, id], onDelete: Cascade)
+  productId          String          @db.Uuid
+  product            Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  status             AppAccessStatus @default(ACTIVE)
+  grantedByAccountId String          @db.Uuid
+  createdAt          DateTime        @default(now()) @db.Timestamptz(3)
+  revokedAt          DateTime?       @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@index([organizationId, accountId])
+  @@index([organizationId, productId])
+  @@index([productId])
+  @@map("app_access")
+  @@schema("public")
+}
+
+// ── Zdarzenia: tabela outbox (05-integration/events.md, ADR-0045) ─────────────────────────────────
+
+/// Zdarzenia domenowe zapisywane w tej samej transakcji co zmiana stanu (wzorzec outbox).
+/// Osobny proces wysyłkowy (relay) odczytuje wiersze z publishedAt = NULL.
+model OutboxEvent {
+  id              String        @id @db.Uuid
+  organizationId  String?       @db.Uuid
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            String
+  version         Int
+  resourceType    String
+  resourceId      String
+  resourceVersion Int
+  payload         Json
+  occurredAt      DateTime      @db.Timestamptz(3)
+  publishedAt     DateTime?     @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@map("outbox_events")
   @@schema("public")
 }

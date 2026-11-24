@@ -993,4 +993,419 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
       await ownerDb.product.deleteMany({ where: { id: productId } });
     }
   });
+
+  it("izoluje entitlements między firmami, dopuszcza zapis tylko bez kontekstu firmy oraz egzekwuje unikalność i CHECKi", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `entprod${suffix}`;
+    const productId = uuidv7();
+    const acmeEntId = uuidv7();
+    const globexEntId = uuidv7();
+    const secondAcmeEntId = uuidv7();
+
+    await db.product.create({ data: { id: productId, key: productKey, name: "Produkt Entitlement" } });
+
+    try {
+      // Zapis w kontekście firmy jest zablokowany przez RLS
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.entitlement.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              productId,
+              sourceType: "MANUAL",
+              status: "ACTIVE",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // Zapis bez kontekstu firmy (ścieżka operatora Core) działa (w tym Prisma RETURNING)
+      const createdAcme = await db.entitlement.create({
+        data: {
+          id: acmeEntId,
+          organizationId: acme.id,
+          productId,
+          sourceType: "MANUAL",
+          status: "ACTIVE",
+        },
+      });
+      expect(createdAcme.id).toBe(acmeEntId);
+
+      await db.entitlement.create({
+        data: {
+          id: globexEntId,
+          organizationId: globex.id,
+          productId,
+          sourceType: "MANUAL",
+          status: "ACTIVE",
+        },
+      });
+
+      // Firma widzi wyłącznie własny entitlement
+      const acmeVisible = await withOrganization(db, acme.id, (tx) =>
+        tx.entitlement.findMany({ where: { productId } }),
+      );
+      expect(acmeVisible.map((e) => e.id)).toEqual([acmeEntId]);
+
+      const globexVisible = await withOrganization(db, globex.id, (tx) =>
+        tx.entitlement.findMany({ where: { productId } }),
+      );
+      expect(globexVisible.map((e) => e.id)).toEqual([globexEntId]);
+
+      // Firma nie może zaktualizować nawet własnego entitlementu ani usunąć żadnego
+      const updatedInTenant = await withOrganization(db, acme.id, (tx) =>
+        tx.entitlement.updateMany({ where: { id: acmeEntId }, data: { status: "ENDED" } }),
+      );
+      expect(updatedInTenant.count).toBe(0);
+
+      await expect(db.entitlement.delete({ where: { id: acmeEntId } })).rejects.toThrow(/permission denied/i);
+
+      // Drugi nie-ENDED entitlement dla tej samej pary (firma, produkt) odrzucony indeksem częściowym
+      await expect(
+        db.entitlement.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "SUSPENDED",
+            suspendedReason: "OVERDUE",
+          },
+        }),
+      ).rejects.toThrow(/entitlements_organizationId_productId_open_key|unique|duplicate/i);
+
+      // CHECKi: endsAt <= startsAt oraz suspendedReason przy statusie innym niż SUSPENDED
+      await expect(
+        db.entitlement.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ENDED",
+            startsAt: new Date("2026-12-10T00:00:00.000Z"),
+            endsAt: new Date("2026-12-01T00:00:00.000Z"),
+          },
+        }),
+      ).rejects.toThrow(/entitlements_period_range|check constraint|violates/i);
+
+      await expect(
+        db.entitlement.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ENDED",
+            suspendedReason: "OVERDUE",
+          },
+        }),
+      ).rejects.toThrow(/entitlements_suspended_reason_consistency|check constraint|violates/i);
+
+      // Po zakończeniu pierwszego (ENDED) można dodać nowy ACTIVE dla tej samej pary (firma, produkt)
+      await db.entitlement.update({ where: { id: acmeEntId }, data: { status: "ENDED" } });
+      const second = await db.entitlement.create({
+        data: {
+          id: secondAcmeEntId,
+          organizationId: acme.id,
+          productId,
+          sourceType: "MANUAL",
+          status: "ACTIVE",
+        },
+      });
+      expect(second.id).toBe(secondAcmeEntId);
+    } finally {
+      await ownerDb.entitlement.deleteMany({ where: { id: { in: [acmeEntId, globexEntId, secondAcmeEntId] } } });
+      await ownerDb.product.deleteMany({ where: { id: productId } });
+    }
+  });
+
+  it("izoluje app_access przez RLS, pilnuje klucza złożonego, unikalności ACTIVE i CHECK status/revokedAt", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `appprod${suffix}`;
+    const productId = uuidv7();
+    const acmeAccessId = uuidv7();
+    const acmeRegrantId = uuidv7();
+    const globexAccessId = uuidv7();
+
+    await db.product.create({ data: { id: productId, key: productKey, name: "Produkt AppAccess" } });
+
+    try {
+      // Bez kontekstu firmy odczyt pusty, zapis odrzucony
+      expect(await db.appAccess.findMany({ where: { productId } })).toEqual([]);
+      await expect(
+        db.appAccess.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            productId,
+            status: "ACTIVE",
+            grantedByAccountId: acme.accountId,
+          },
+        }),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // Zapis w kontekście firmy działa; DELETE jest zablokowane dla core_app
+      await withOrganization(db, acme.id, (tx) =>
+        tx.appAccess.create({
+          data: {
+            id: acmeAccessId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            productId,
+            status: "ACTIVE",
+            grantedByAccountId: acme.accountId,
+          },
+        }),
+      );
+      await withOrganization(db, globex.id, (tx) =>
+        tx.appAccess.create({
+          data: {
+            id: globexAccessId,
+            organizationId: globex.id,
+            accountId: globex.accountId,
+            productId,
+            status: "ACTIVE",
+            grantedByAccountId: globex.accountId,
+          },
+        }),
+      );
+
+      // Izolacja odczytu i aktualizacji między firmami
+      const acmeRows = await withOrganization(db, acme.id, (tx) => tx.appAccess.findMany({ where: { productId } }));
+      expect(acmeRows.map((row) => row.id)).toEqual([acmeAccessId]);
+
+      const crossUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.appAccess.updateMany({ where: { id: globexAccessId }, data: { status: "REVOKED", revokedAt: new Date() } }),
+      );
+      expect(crossUpdate.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.appAccess.delete({ where: { id: acmeAccessId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // Klucz złożony odrzuca konto z innej firmy
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.appAccess.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: globex.accountId,
+              productId,
+              status: "ACTIVE",
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/foreign key|violates/i);
+
+      // Drugi wiersz ACTIVE dla tego samego (accountId, productId) odrzucony
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.appAccess.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              productId,
+              status: "ACTIVE",
+              grantedByAccountId: acme.accountId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/app_access_accountId_productId_active_key|unique|duplicate/i);
+
+      // CHECK status/revokedAt
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.appAccess.update({ where: { id: acmeAccessId }, data: { status: "REVOKED", revokedAt: null } }),
+        ),
+      ).rejects.toThrow(/app_access_status_revoked_consistency|check constraint|violates/i);
+
+      // Po cofnięciu (REVOKED + revokedAt) można ponownie nadać dostęp nowym wierszem ACTIVE
+      await withOrganization(db, acme.id, (tx) =>
+        tx.appAccess.update({ where: { id: acmeAccessId }, data: { status: "REVOKED", revokedAt: new Date() } }),
+      );
+      const regranted = await withOrganization(db, acme.id, (tx) =>
+        tx.appAccess.create({
+          data: {
+            id: acmeRegrantId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            productId,
+            status: "ACTIVE",
+            grantedByAccountId: acme.accountId,
+          },
+        }),
+      );
+      expect(regranted.id).toBe(acmeRegrantId);
+    } finally {
+      await withOrganization(ownerDb, acme.id, (tx) =>
+        tx.appAccess.deleteMany({ where: { id: { in: [acmeAccessId, acmeRegrantId] } } }),
+      );
+      await withOrganization(ownerDb, globex.id, (tx) => tx.appAccess.deleteMany({ where: { id: globexAccessId } }));
+      await ownerDb.product.deleteMany({ where: { id: productId } });
+    }
+  });
+
+  it("izoluje outbox_events przez RLS (z RETURNING), blokuje DELETE dla core_app i sprawdza CHECKi", async () => {
+    const acmeEventId = uuidv7();
+    const globexEventId = uuidv7();
+    const platformEventId = uuidv7();
+
+    try {
+      // Zdarzenie firmowe w kontekście firmy (z RETURNING)
+      const acmeEvent = await withOrganization(db, acme.id, (tx) =>
+        tx.outboxEvent.create({
+          data: {
+            id: acmeEventId,
+            organizationId: acme.id,
+            type: "organization.permissions.changed",
+            version: 1,
+            resourceType: "account",
+            resourceId: acme.accountId,
+            resourceVersion: 1,
+            payload: { authzRevision: 1 },
+            occurredAt: new Date(),
+            publishedAt: null,
+          },
+        }),
+      );
+      expect(acmeEvent.id).toBe(acmeEventId);
+
+      await withOrganization(db, globex.id, (tx) =>
+        tx.outboxEvent.create({
+          data: {
+            id: globexEventId,
+            organizationId: globex.id,
+            type: "organization.permissions.changed",
+            version: 1,
+            resourceType: "account",
+            resourceId: globex.accountId,
+            resourceVersion: 1,
+            payload: { authzRevision: 1 },
+            occurredAt: new Date(),
+            publishedAt: null,
+          },
+        }),
+      );
+
+      // Zdarzenie platformowe (organizationId = null) wyłącznie bez kontekstu firmy
+      const platformEvent = await db.outboxEvent.create({
+        data: {
+          id: platformEventId,
+          organizationId: null,
+          type: "platform.test.recorded",
+          version: 1,
+          resourceType: "platform",
+          resourceId: "core",
+          resourceVersion: 0,
+          payload: {},
+          occurredAt: new Date(),
+          publishedAt: null,
+        },
+      });
+      expect(platformEvent.id).toBe(platformEventId);
+
+      // Firma widzi wyłącznie swoje zdarzenia (nie widzi innej firmy ani platformowych)
+      const acmeVisible = await withOrganization(db, acme.id, (tx) =>
+        tx.outboxEvent.findMany({ where: { id: { in: [acmeEventId, globexEventId, platformEventId] } } }),
+      );
+      expect(acmeVisible.map((e) => e.id)).toEqual([acmeEventId]);
+
+      // Bez kontekstu firmy widać wyłącznie zdarzenia platformowe
+      const platformVisible = await db.outboxEvent.findMany({
+        where: { id: { in: [acmeEventId, globexEventId, platformEventId] } },
+      });
+      expect(platformVisible.map((e) => e.id)).toEqual([platformEventId]);
+
+      // Nie można dopisać zdarzenia innej firmy ani zdarzenia firmowego bez kontekstu
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.outboxEvent.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              type: "organization.permissions.changed",
+              version: 1,
+              resourceType: "account",
+              resourceId: globex.accountId,
+              resourceVersion: 2,
+              payload: { authzRevision: 2 },
+              occurredAt: new Date(),
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      await expect(
+        db.outboxEvent.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            type: "organization.permissions.changed",
+            version: 1,
+            resourceType: "account",
+            resourceId: acme.accountId,
+            resourceVersion: 2,
+            payload: { authzRevision: 2 },
+            occurredAt: new Date(),
+          },
+        }),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // core_app może oznaczyć własne zdarzenie jako wysłane (UPDATE), ale nie może go usunąć (DELETE)
+      const publishedAt = new Date();
+      const updated = await withOrganization(db, acme.id, (tx) =>
+        tx.outboxEvent.update({ where: { id: acmeEventId }, data: { publishedAt } }),
+      );
+      expect(updated.publishedAt?.toISOString()).toBe(publishedAt.toISOString());
+
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.outboxEvent.delete({ where: { id: acmeEventId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // CHECKi wersji i resourceVersion
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.outboxEvent.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              type: "organization.permissions.changed",
+              version: 0,
+              resourceType: "account",
+              resourceId: acme.accountId,
+              resourceVersion: 1,
+              payload: {},
+              occurredAt: new Date(),
+            },
+          }),
+        ),
+      ).rejects.toThrow(/outbox_events_version_positive|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.outboxEvent.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              type: "organization.permissions.changed",
+              version: 1,
+              resourceType: "account",
+              resourceId: acme.accountId,
+              resourceVersion: -1,
+              payload: {},
+              occurredAt: new Date(),
+            },
+          }),
+        ),
+      ).rejects.toThrow(/outbox_events_resource_version_nonnegative|check constraint|violates/i);
+    } finally {
+      await ownerDb.outboxEvent.deleteMany({ where: { id: { in: [acmeEventId, globexEventId, platformEventId] } } });
+    }
+  });
 });

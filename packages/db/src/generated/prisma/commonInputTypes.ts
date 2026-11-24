@@ -507,6 +507,74 @@ export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
   _max?: Prisma.NestedJsonFilter<$PrismaModel>
 }
 
+export type EnumEntitlementSourceTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSourceType | Prisma.EnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel> | $Enums.EntitlementSourceType
+}
+
+export type EnumEntitlementStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementStatus | Prisma.EnumEntitlementStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel> | $Enums.EntitlementStatus
+}
+
+export type EnumEntitlementSuspendedReasonNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSuspendedReason | Prisma.EnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  in?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  notIn?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel> | $Enums.EntitlementSuspendedReason | null
+}
+
+export type EnumEntitlementSourceTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSourceType | Prisma.EnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementSourceTypeWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementSourceType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel>
+}
+
+export type EnumEntitlementStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementStatus | Prisma.EnumEntitlementStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementStatusWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel>
+}
+
+export type EnumEntitlementSuspendedReasonNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSuspendedReason | Prisma.EnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  in?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  notIn?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedEnumEntitlementSuspendedReasonNullableWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementSuspendedReason | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel>
+}
+
+export type EnumAppAccessStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.AppAccessStatus | Prisma.EnumAppAccessStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel> | $Enums.AppAccessStatus
+}
+
+export type EnumAppAccessStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AppAccessStatus | Prisma.EnumAppAccessStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumAppAccessStatusWithAggregatesFilter<$PrismaModel> | $Enums.AppAccessStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel>
+}
+
 export type NestedUuidFilter<$PrismaModel = never> = {
   equals?: string | Prisma.StringFieldRefInput<$PrismaModel>
   in?: string[] | Prisma.ListStringFieldRefInput<$PrismaModel>
@@ -980,6 +1048,74 @@ export type NestedJsonFilterBase<$PrismaModel = never> = {
   gt?: runtime.InputJsonValue | Prisma.JsonFieldRefInput<$PrismaModel>
   gte?: runtime.InputJsonValue | Prisma.JsonFieldRefInput<$PrismaModel>
   not?: runtime.InputJsonValue | Prisma.JsonFieldRefInput<$PrismaModel> | Prisma.JsonNullValueFilter
+}
+
+export type NestedEnumEntitlementSourceTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSourceType | Prisma.EnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel> | $Enums.EntitlementSourceType
+}
+
+export type NestedEnumEntitlementStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementStatus | Prisma.EnumEntitlementStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel> | $Enums.EntitlementStatus
+}
+
+export type NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSuspendedReason | Prisma.EnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  in?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  notIn?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel> | $Enums.EntitlementSuspendedReason | null
+}
+
+export type NestedEnumEntitlementSourceTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSourceType | Prisma.EnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementSourceType[] | Prisma.ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementSourceTypeWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementSourceType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementSourceTypeFilter<$PrismaModel>
+}
+
+export type NestedEnumEntitlementStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementStatus | Prisma.EnumEntitlementStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.EntitlementStatus[] | Prisma.ListEnumEntitlementStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumEntitlementStatusWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementStatusFilter<$PrismaModel>
+}
+
+export type NestedEnumEntitlementSuspendedReasonNullableWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.EntitlementSuspendedReason | Prisma.EnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  in?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  notIn?: $Enums.EntitlementSuspendedReason[] | Prisma.ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> | null
+  not?: Prisma.NestedEnumEntitlementSuspendedReasonNullableWithAggregatesFilter<$PrismaModel> | $Enums.EntitlementSuspendedReason | null
+  _count?: Prisma.NestedIntNullableFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumEntitlementSuspendedReasonNullableFilter<$PrismaModel>
+}
+
+export type NestedEnumAppAccessStatusFilter<$PrismaModel = never> = {
+  equals?: $Enums.AppAccessStatus | Prisma.EnumAppAccessStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel> | $Enums.AppAccessStatus
+}
+
+export type NestedEnumAppAccessStatusWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.AppAccessStatus | Prisma.EnumAppAccessStatusFieldRefInput<$PrismaModel>
+  in?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  notIn?: $Enums.AppAccessStatus[] | Prisma.ListEnumAppAccessStatusFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumAppAccessStatusWithAggregatesFilter<$PrismaModel> | $Enums.AppAccessStatus
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumAppAccessStatusFilter<$PrismaModel>
 }
 
 

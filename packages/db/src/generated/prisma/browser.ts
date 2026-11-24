@@ -140,3 +140,21 @@ export type RoleAssignment = Prisma.RoleAssignmentModel
  * i usuwane kaskadowo razem z firmą (ADR-0041). Brak organizationId oznacza zdarzenie platformy.
  */
 export type AuditLog = Prisma.AuditLogModel
+/**
+ * Model Entitlement
+ * Dostęp firmy do produktu (podzbiór modelu z 06-commercial/data-models-commercial.md, ADR-0051).
+ * Co najwyżej jeden wpis o statusie innym niż ENDED na parę (firma, produkt) (częściowy indeks w migracji).
+ */
+export type Entitlement = Prisma.EntitlementModel
+/**
+ * Model AppAccess
+ * Pierwszy krok dostępu pracownika do produktu (ADR-0035). Co najwyżej jeden wiersz ACTIVE
+ * na (accountId, productId); cofnięcie ustawia REVOKED i revokedAt (historia).
+ */
+export type AppAccess = Prisma.AppAccessModel
+/**
+ * Model OutboxEvent
+ * Zdarzenia domenowe zapisywane w tej samej transakcji co zmiana stanu (wzorzec outbox).
+ * Osobny proces wysyłkowy (relay) odczytuje wiersze z publishedAt = NULL.
+ */
+export type OutboxEvent = Prisma.OutboxEventModel

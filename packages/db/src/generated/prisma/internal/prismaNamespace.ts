@@ -420,7 +420,10 @@ export const ModelName = {
   Role: 'Role',
   RolePermission: 'RolePermission',
   RoleAssignment: 'RoleAssignment',
-  AuditLog: 'AuditLog'
+  AuditLog: 'AuditLog',
+  Entitlement: 'Entitlement',
+  AppAccess: 'AppAccess',
+  OutboxEvent: 'OutboxEvent'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -436,7 +439,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog"
+    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog" | "entitlement" | "appAccess" | "outboxEvent"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2216,6 +2219,228 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Entitlement: {
+      payload: Prisma.$EntitlementPayload<ExtArgs>
+      fields: Prisma.EntitlementFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.EntitlementFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.EntitlementFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        findFirst: {
+          args: Prisma.EntitlementFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.EntitlementFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        findMany: {
+          args: Prisma.EntitlementFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>[]
+        }
+        create: {
+          args: Prisma.EntitlementCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        createMany: {
+          args: Prisma.EntitlementCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.EntitlementCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>[]
+        }
+        delete: {
+          args: Prisma.EntitlementDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        update: {
+          args: Prisma.EntitlementUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        deleteMany: {
+          args: Prisma.EntitlementDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.EntitlementUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.EntitlementUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>[]
+        }
+        upsert: {
+          args: Prisma.EntitlementUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$EntitlementPayload>
+        }
+        aggregate: {
+          args: Prisma.EntitlementAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateEntitlement>
+        }
+        groupBy: {
+          args: Prisma.EntitlementGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.EntitlementGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.EntitlementCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.EntitlementCountAggregateOutputType> | number
+        }
+      }
+    }
+    AppAccess: {
+      payload: Prisma.$AppAccessPayload<ExtArgs>
+      fields: Prisma.AppAccessFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.AppAccessFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.AppAccessFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        findFirst: {
+          args: Prisma.AppAccessFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.AppAccessFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        findMany: {
+          args: Prisma.AppAccessFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>[]
+        }
+        create: {
+          args: Prisma.AppAccessCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        createMany: {
+          args: Prisma.AppAccessCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.AppAccessCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>[]
+        }
+        delete: {
+          args: Prisma.AppAccessDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        update: {
+          args: Prisma.AppAccessUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        deleteMany: {
+          args: Prisma.AppAccessDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.AppAccessUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.AppAccessUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>[]
+        }
+        upsert: {
+          args: Prisma.AppAccessUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AppAccessPayload>
+        }
+        aggregate: {
+          args: Prisma.AppAccessAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAppAccess>
+        }
+        groupBy: {
+          args: Prisma.AppAccessGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AppAccessGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.AppAccessCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AppAccessCountAggregateOutputType> | number
+        }
+      }
+    }
+    OutboxEvent: {
+      payload: Prisma.$OutboxEventPayload<ExtArgs>
+      fields: Prisma.OutboxEventFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.OutboxEventFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.OutboxEventFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        findFirst: {
+          args: Prisma.OutboxEventFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.OutboxEventFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        findMany: {
+          args: Prisma.OutboxEventFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>[]
+        }
+        create: {
+          args: Prisma.OutboxEventCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        createMany: {
+          args: Prisma.OutboxEventCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.OutboxEventCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>[]
+        }
+        delete: {
+          args: Prisma.OutboxEventDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        update: {
+          args: Prisma.OutboxEventUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        deleteMany: {
+          args: Prisma.OutboxEventDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.OutboxEventUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.OutboxEventUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>[]
+        }
+        upsert: {
+          args: Prisma.OutboxEventUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$OutboxEventPayload>
+        }
+        aggregate: {
+          args: Prisma.OutboxEventAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateOutboxEvent>
+        }
+        groupBy: {
+          args: Prisma.OutboxEventGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.OutboxEventGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.OutboxEventCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.OutboxEventCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -2647,6 +2872,54 @@ export const AuditLogScalarFieldEnum = {
 export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
 
 
+export const EntitlementScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  productId: 'productId',
+  planId: 'planId',
+  sourceType: 'sourceType',
+  sourceId: 'sourceId',
+  status: 'status',
+  startsAt: 'startsAt',
+  endsAt: 'endsAt',
+  suspendedReason: 'suspendedReason',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type EntitlementScalarFieldEnum = (typeof EntitlementScalarFieldEnum)[keyof typeof EntitlementScalarFieldEnum]
+
+
+export const AppAccessScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  productId: 'productId',
+  status: 'status',
+  grantedByAccountId: 'grantedByAccountId',
+  createdAt: 'createdAt',
+  revokedAt: 'revokedAt'
+} as const
+
+export type AppAccessScalarFieldEnum = (typeof AppAccessScalarFieldEnum)[keyof typeof AppAccessScalarFieldEnum]
+
+
+export const OutboxEventScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  type: 'type',
+  version: 'version',
+  resourceType: 'resourceType',
+  resourceId: 'resourceId',
+  resourceVersion: 'resourceVersion',
+  payload: 'payload',
+  occurredAt: 'occurredAt',
+  publishedAt: 'publishedAt'
+} as const
+
+export type OutboxEventScalarFieldEnum = (typeof OutboxEventScalarFieldEnum)[keyof typeof OutboxEventScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -2911,6 +3184,62 @@ export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$Prisma
 
 
 /**
+ * Reference to a field of type 'EntitlementSourceType'
+ */
+export type EnumEntitlementSourceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementSourceType'>
+    
+
+
+/**
+ * Reference to a field of type 'EntitlementSourceType[]'
+ */
+export type ListEnumEntitlementSourceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementSourceType[]'>
+    
+
+
+/**
+ * Reference to a field of type 'EntitlementStatus'
+ */
+export type EnumEntitlementStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'EntitlementStatus[]'
+ */
+export type ListEnumEntitlementStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'EntitlementSuspendedReason'
+ */
+export type EnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementSuspendedReason'>
+    
+
+
+/**
+ * Reference to a field of type 'EntitlementSuspendedReason[]'
+ */
+export type ListEnumEntitlementSuspendedReasonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EntitlementSuspendedReason[]'>
+    
+
+
+/**
+ * Reference to a field of type 'AppAccessStatus'
+ */
+export type EnumAppAccessStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AppAccessStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'AppAccessStatus[]'
+ */
+export type ListEnumAppAccessStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AppAccessStatus[]'>
+    
+
+
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -3098,6 +3427,9 @@ export type GlobalOmitConfig = {
   rolePermission?: Prisma.RolePermissionOmit
   roleAssignment?: Prisma.RoleAssignmentOmit
   auditLog?: Prisma.AuditLogOmit
+  entitlement?: Prisma.EntitlementOmit
+  appAccess?: Prisma.AppAccessOmit
+  outboxEvent?: Prisma.OutboxEventOmit
 }
 
 /* Types for Logging */
