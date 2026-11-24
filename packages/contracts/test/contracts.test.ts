@@ -8,9 +8,11 @@ import {
   ApiMeta,
   apiErrorSchema,
   apiSuccessSchema,
+  AppAccess,
   CORE_PERMISSIONS,
   CORE_ROLE_TEMPLATES,
   CopyRole,
+  CreateAppAccess,
   CreateEmployee,
   CreateRole,
   CreateRoleAssignment,
@@ -18,6 +20,7 @@ import {
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
   emailDomain,
+  Entitlement,
   Health,
   isFreeEmailDomain,
   MachineTokenClaims,
@@ -28,7 +31,9 @@ import {
   OrganizationOwner,
   PageQuery,
   Permission,
+  PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
+  PermissionSnapshot,
   ProductKey,
   PutUnitMember,
   RegisterPermissionsRequest,
@@ -211,9 +216,11 @@ describe("kontrakty", () => {
       "core.employees.manage",
       "core.roles.manage",
       "core.roles.assign",
+      "core.app_access.manage",
       "core.audit.read",
     ]);
-    expect(RegisterPermissionsRequest.parse(CORE_PERMISSIONS.manifest)).toHaveLength(5);
+    expect(RegisterPermissionsRequest.parse(CORE_PERMISSIONS.manifest)).toHaveLength(6);
+    expect(PERMISSIONS_READ_SCOPE).toBe("core:permissions.read");
 
     expect(ProductKey.safeParse("timotime").success).toBe(true);
     expect(ProductKey.safeParse("TimoTime").success).toBe(false);
@@ -413,5 +420,60 @@ describe("kontrakty", () => {
 
     expect(TransferOrganizationOwner.parse({ accountId: UUID_1 }).accountId).toBe(UUID_1);
     expect(OrganizationOwner.parse({ ownerAccountId: UUID_1 }).ownerAccountId).toBe(UUID_1);
+  });
+
+  it("waliduje schematy dostępu do produktów, aplikacji i migawki uprawnień", () => {
+    expect(
+      Entitlement.parse({
+        id: UUID_1,
+        product: "timotime",
+        planId: null,
+        sourceType: "MANUAL",
+        status: "ACTIVE",
+        isActive: true,
+        startsAt: "2026-11-24T12:00:00.000Z",
+        endsAt: null,
+        suspendedReason: null,
+        createdAt: "2026-11-24T12:00:00.000Z",
+        updatedAt: "2026-11-24T12:00:00.000Z",
+      }).isActive,
+    ).toBe(true);
+
+    expect(CreateAppAccess.parse({ accountId: UUID_1, product: "timotime" })).toEqual({
+      accountId: UUID_1,
+      product: "timotime",
+    });
+    expect(CreateAppAccess.safeParse({ accountId: "bad", product: "timotime" }).success).toBe(false);
+
+    expect(
+      AppAccess.parse({
+        id: UUID_1,
+        accountId: UUID_2,
+        product: "timotime",
+        status: "ACTIVE",
+        grantedByAccountId: UUID_3,
+        createdAt: "2026-11-24T12:00:00.000Z",
+        revokedAt: null,
+      }).status,
+    ).toBe("ACTIVE");
+
+    expect(
+      PermissionSnapshot.parse({
+        accountId: UUID_1,
+        organizationId: UUID_2,
+        authzRevision: 3,
+        isOwner: false,
+        products: ["timotime"],
+        grants: [
+          {
+            permission: "timotime.entries.approve",
+            scope: { type: "UNIT", unitId: UUID_3 },
+            validFrom: null,
+            validUntil: null,
+          },
+        ],
+        units: [{ id: UUID_3, parentId: null }],
+      }).products,
+    ).toEqual(["timotime"]);
   });
 });
