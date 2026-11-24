@@ -26,8 +26,8 @@
       "description": "Stan usługi i opis OpenAPI."
     },
     {
-      "name": "Identity",
-      "description": "Tożsamość zalogowanego użytkownika (konto, pracownik i firma)."
+      "name": "People",
+      "description": "Pracownicy i konta; tu także dane zalogowanego konta."
     },
     {
       "name": "Organization",
@@ -70,7 +70,7 @@
     "/v1/me": {
       "get": {
         "tags": [
-          "Identity"
+          "People"
         ],
         "operationId": "getMe",
         "summary": "Pobierz dane zalogowanego konta, pracownika i firmy",

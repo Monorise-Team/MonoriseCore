@@ -28,6 +28,11 @@
           "type": "json",
           "path": "packages/contracts/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "openapi/core-api.json",
+          "jsonpath": "$.info.version"
         }
       ]
     }

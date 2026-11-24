@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RouteTag = "System" | "Identity" | "Organization";
+export type RouteTag = "System" | "People" | "Organization";
 
 export interface TagDefinition {
   name: RouteTag;
@@ -12,7 +12,7 @@ export interface TagDefinition {
 
 export const TAGS: readonly TagDefinition[] = [
   { name: "System", description: "Stan usługi i opis OpenAPI." },
-  { name: "Identity", description: "Tożsamość zalogowanego użytkownika (konto, pracownik i firma)." },
+  { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
   { name: "Organization", description: "Firma zalogowanego użytkownika." },
 ];
 
@@ -95,7 +95,7 @@ export const ROUTES = {
     method: "GET",
     path: `${API_PREFIX}/me`,
     operationId: "getMe",
-    tag: "Identity",
+    tag: "People",
     summary: "Pobierz dane zalogowanego konta, pracownika i firmy",
     description: "Zwraca konto, przypisanego pracownika oraz skrócone dane firmy wynikające z tokenu dostępu.",
     auth: true,
