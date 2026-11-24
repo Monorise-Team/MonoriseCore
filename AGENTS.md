@@ -69,21 +69,21 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (ustawia Ownera), weryfikacja e-maila i domeny, JWT/JWKS (`/api/auth`), OAuth 2.1 (`/api/auth/oauth2/*`) |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): tokeny z `apps/auth`, RLS; `/me`, `/organization`, `/employees`, `/units`, `/units/{unitId}/members`             |
-| `packages/db`        | Prisma (`Organization.ownerAccountId`, `OrganizationUnit`, `UnitMembership`), migracje (RLS, wyzwalacz cykli), `withOrganization`, lookup ponad firmami     |
-| `packages/contracts` | schematy zod i typy API, pola tokenu, lista darmowych domen pocztowych                                                                                      |
+| Gdzie                | Co                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (Owner), domeny, JWT/JWKS, OAuth 2.1 (`authorization_code` + PKCE, `client_credentials` dla M2M)    |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; `/me`, `/organization`, `/employees`, `/units`, `/permissions`, `/products/{productKey}/permissions`   |
+| `packages/db`        | Prisma (`OrganizationUnit`, `UnitMembership`, `Product`, `Permission`, `AuditLog`), migracje (RLS, wyzwalacze), `withOrganization`, lookup ponad firm. |
+| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, lista darmowych domen pocztowych                                   |
 
 ## Zasady kodu
 
 1. **Firma zawsze z zaufanego źródła** (token, sesja), nigdy z treści żądania, adresu ani formularza (ADR-0037).
-2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS w bazie odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez uprawnień właściciela tabel i bez BYPASSRLS).
-3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`) należące do roli `core_lookup`. Nowa taka funkcja to zmiana w obszarze bezpieczeństwa: opisz ją w pull requeście.
-4. **Każda tabela z danymi firmy** ma w migracji RLS włączone i wymuszone (`ENABLE` + `FORCE`) z polityką `tenant_isolation`, a w testach przypadek próby odczytu i zapisu cudzych danych.
-5. **Token dostępu** (ADR-0023): JWT ważny 5 minut, podpis EdDSA, pola `org_id`, `employee_id`, `sid`, `amr`, `authz_rev`; bez uprawnień w tokenie. Produkty dostają token z OAuth 2.1 (`aud` to API produktu). W tych tokenach `sid` dokłada sam serwer OAuth, a `amr` jest polem zastrzeżonym wtyczki i na razie go nie ma (kontrakt przyjmuje pustą listę); sposób przekazania MFA ustalamy razem z MFA.
-6. **Klienci OAuth tylko z kodu**: aplikacje Monorise rejestruje `ensureFirstPartyClients` (`pnpm oauth:seed`), zawsze z PKCE. Rejestracja przez HTTP jest wyłączona (`clientPrivileges` i `resourcePrivileges` zwracają `false`). Nowy klient albo nowy adres powrotu to zmiana w obszarze bezpieczeństwa: opisz ją w pull requeście.
+2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez właściciela tabel i `BYPASSRLS`).
+3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
+4. **Każda tabela z danymi firmy** ma w migracji `ENABLE` + `FORCE` RLS i testy izolacji. `audit_log` jest niezmienny (tylko `SELECT`/`INSERT` dla `core_app`, wyzwalacz blokujący `UPDATE` także dla `core_owner`).
+5. **Tokeny** (ADR-0023): JWT EdDSA ważne 5 min. Token użytkownika ma `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień; `amr` uzupełnimy z MFA). Token maszynowy (`client_credentials`, zakres `core:permissions.register`) nie ma `org_id` i działa tylko na rejestracji manifestów.
+6. **Klienci OAuth tylko z kodu**: `ensureFirstPartyClients` (`pnpm oauth:seed`) rejestruje klientów (z PKCE) i produkty (`avenmail`, `timotime`). Rejestracja HTTP wyłączona; zmiany klientów/adresów powrotu opisz w PR.
 7. **Komunikaty logowania** nie zdradzają, czy konto istnieje. Darmowe skrzynki (Gmail, WP, Onet…) nie zakładają firm (ADR-0019).
 8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /core/v1/openapi.json` zwraca czysty dokument OpenAPI). Listy przyjmują `?limit=` (1–100, domyślnie 50) i `?cursor=` oraz zwracają `meta.nextCursor`.
 9. **Katalog ścieżek i OpenAPI**: każdy nowy endpoint Core API dopisujesz do `apps/api/src/routes.ts` ze schematami Zod i uruchamiasz `pnpm openapi` (CI sprawdza `openapi/core-api.json`).

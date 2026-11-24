@@ -28,7 +28,7 @@ Produkty logują użytkowników przez Core w OAuth 2.1 (kod autoryzacji z PKCE).
 Lokalnie aplikacje Monorise rejestruje polecenie:
 
 ```bash
-pnpm oauth:seed     # klienci OAuth AvenMail i TimoTime oraz ich API jako odbiorcy tokenów
+pnpm oauth:seed     # klienci OAuth AvenMail i TimoTime, ich API oraz wpisy w rejestrze produktów
 ```
 
 Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `apps/auth/.data/oauth-clients.json`, poza repozytorium; w bazie zostaje tylko ich skrót. Ponowne uruchomienie niczego nie psuje i nie zmienia istniejących sekretów.
@@ -41,7 +41,7 @@ Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `ap
 | `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback`                                          |
 | `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go) |
 
-Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone.
+Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) wyłącznie z zakresem `core:permissions.register` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tego zakresu.
 
 ## Struktura firmy i Owner (etap 1 dziedziny Core)
 
@@ -54,7 +54,21 @@ Dostępne endpointy Core API (`/core/v1`):
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
-Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor kursorowy po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
+Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor kursorowy po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
+
+## Rejestr uprawnień produktów i dziennik zdarzeń (etap 2a dziedziny Core)
+
+Produkty deklarują swoje uprawnienia w kodzie za pomocą `definePermissions` z `@monorise-team/permissions` (ADR-0036), a Core utrzymuje ich rejestr w tabelach `products` i `permissions` (bez RLS, bez prawa `DELETE` dla `core_app`; wyzwalacz i ograniczenia `CHECK` pilnują zgodności prefiksu klucza z produktem):
+
+- **Uprawnienia platformy (`core.*`)**: zdefiniowane w `@core/contracts` (`CORE_PERMISSIONS`) i rejestrowane automatycznie przy starcie Core API (`productId = null`, aktor `SYSTEM`).
+- **Rejestracja manifestu produktu**: podczas wdrożenia serwer produktu pobiera z `POST /api/auth/oauth2/token` token maszynowy (`grant_type=client_credentials`, `scope=core:permissions.register`, `resource=<CORE_API_URL>`, bez `org_id`) i wysyła tablicę manifestu (1–500 wpisów) na `PUT /core/v1/products/{productKey}/permissions`. Core sprawdza, czy `client_id` tokenu zgadza się z `products.registrationClientId`, idempotentnie dodaje nowe klucze, aktualizuje opisy, wycofuje brakujące klucze przez `deprecatedAt` (nigdy ich nie usuwa) i przywraca ponownie obecne, zwracając podsumowanie `{ added, updated, deprecated, restored, unchanged }`. Tokeny maszynowe i tokeny użytkowników są ściśle rozdzielone.
+- **Przeglądanie uprawnień**: `GET /core/v1/permissions` (dowolne aktywne konto firmy) z filtrami `?product=<klucz|core>`, `?includeDeprecated=true|false` (domyślnie `false`) oraz stronicowaniem kursorowym.
+
+**Centralny dziennik zdarzeń (`audit_log`, ADR-0039)** działa w trybie tylko dopisywania:
+
+- `core_app` ma na tabeli `audit_log` wyłącznie `SELECT` i `INSERT`, a wyzwalacz `BEFORE UPDATE` blokuje modyfikację wpisów nawet dla roli właściciela tabel (`core_owner`). Usunięcie firmy kaskadowo usuwa jej wpisy (ADR-0041).
+- RLS odcina firmy od cudzych wpisów i od wpisów platformy (`organizationId = null`); zapisy firmowe wymagają `withOrganization`, a platformowe (rejestracja uprawnień) działają bez kontekstu firmy.
+- Zapisy w Core API (`employee.created`, `unit.created`, `unit.updated`, `unit.member.set`, `unit.member.removed`) zapisują wpis w tej samej transakcji bez danych osobowych w `metadata`, a rejestracja uprawnień zapisuje wpis `product.permissions.registered` tylko wtedy, gdy manifest coś zmienił.
 
 ## Opis API (OpenAPI)
 
