@@ -59,7 +59,7 @@ const secrets = await ensureFirstPartyClients({
     {
       clientId: "timotime-mobile",
       name: "TimoTime na telefon",
-      redirectUris: ["timotime://oauth/callback"],
+      redirectUris: ["timotime://oauth/callback", EXPO_GO],
       confidential: false,
       resources: [TIME_API, CORE_API],
     },
