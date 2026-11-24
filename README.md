@@ -54,7 +54,25 @@ Dostępne endpointy Core API (`/core/v1`):
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
-Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`, `/entitlements`, `/app-access`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza filtrowaniem widoczności przypisań i dostępu do aplikacji) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
+Endpointy listowe (`/employees`, `/invitations`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`, `/entitlements`, `/app-access`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza zaproszeniami oraz filtrowaniem widoczności przypisań i dostępu do aplikacji) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
+
+## Zaproszenia pracowników (konto `INVITED` i aktywacja)
+
+Konta pracowników powstają wyłącznie z zaproszenia (ADR-0021). Adres e-mail musi należeć do zweryfikowanej domeny firmy (`OrganizationDomain.status = VERIFIED`); darmowe skrzynki pocztowe (ADR-0019) i zajęte adresy są odrzucane (`422` / `409` bez zdradzania innych firm).
+
+- **Tworzenie zaproszenia (`POST /core/v1/invitations`)**: wymaga roli Ownera albo uprawnienia `core.employees.manage` w zakresie całej firmy (`ORGANIZATION`). Przyjmuje `{ email, firstName?, lastName?, employeeId? }` (bez `employeeId` tworzy pracownika z `workEmail = email`; z `employeeId` wymaga pracownika firmy bez konta). Tworzy konto logowania bez hasła (`emailVerified = false`), konto firmy w statusie `INVITED`, zaproszenie `PENDING` ważne 7 dni (w bazie wyłącznie skrót SHA-256 tokenu, co najwyżej jedno zaproszenie `PENDING` na konto) i wysyła wiadomość e-mail z linkiem `${CORE_AUTH_URL}/invite?token=<token>`. Token nigdy nie jest zwracany w odpowiedzi API ani zapisywany w dzienniku zdarzeń.
+- **Lista, ponowne wysłanie i cofnięcie**:
+  - `GET /core/v1/invitations` (`?status=`, `?limit=`, `?cursor=`) — lista zaproszeń firmy (wymaga `core.employees.manage` w zakresie `ORGANIZATION` lub Ownera); wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`,
+  - `POST /core/v1/invitations/{invitationId}/resend` — ponowne wysłanie zaproszenia w statusie `PENDING`, `EXPIRED` lub `REVOKED` (dopóki konto ma status `INVITED`); generuje nowy token i 7-dniowy termin ważności, unieważniając poprzedni link, oraz ustawia status `PENDING`,
+  - `DELETE /core/v1/invitations/{invitationId}` — cofa oczekujące zaproszenie (`PENDING` → `REVOKED`, `204`); konto pozostaje w statusie `INVITED`, a zaproszenie można później wysłać ponownie przez `/resend`.
+- **Aktywacja konta (`apps/auth`)**: strona `/invite?token=<token>` wyszukuje firmę i zaproszenie przez wąską funkcję bazy `invitation_by_token_hash` (SECURITY DEFINER, zwraca wyłącznie `organization_id` i `invitation_id`), pokazuje nazwę firmy, adres e-mail i formularz ustawienia hasła (12–128 znaków, ADR-0024). Nieznane, wygasłe (oznaczane jako `EXPIRED`), cofnięte lub zużyte linki pokazują jednolity komunikat bez zdradzania szczegółów. `POST /api/invitations/accept` w jednej transakcji zapisuje hasło (hashowane mechanizmem Better Auth), ustawia `emailVerified = true`, zmienia konto na `ACTIVE`, zaproszenie na `ACCEPTED` (`acceptedAt`), zapisuje wpis audytu `invitation.accepted` i przekierowuje na `/sign-in` bez automatycznego logowania. Konto `INVITED` nie może się zalogować przed aktywacją.
+- **CLI dla pilotażu i testów lokalnych** (aktor `SYSTEM`, `metadata.source = "cli"`, `invitedByAccountId = null`):
+
+```bash
+pnpm invitation:create -- --organization acme.com --email jan@acme.com --first-name Jan --last-name Kowalski
+```
+
+Wiadomość trafia na skonfigurowany serwer SMTP (`CORE_SMTP_URL`, lokalnie Mailpit pod `http://localhost:8125`). Wyłącznie gdy `CORE_SMTP_URL` ma wartość `memory` albo wskazuje na `localhost`, polecenie dodatkowo wypisuje link aktywacyjny na standardowe wyjście.
 
 ## Dostęp do aplikacji, migawka uprawnień dla produktów i zdarzenia (etap 3 dziedziny Core)
 
