@@ -97,3 +97,13 @@ export type Employee = Prisma.EmployeeModel
  * Konto pracownika w firmie. Jeden adres e-mail to jedno konto w jednej firmie (ADR-0018).
  */
 export type Account = Prisma.AccountModel
+/**
+ * Model OrganizationUnit
+ * Jednostka organizacyjna w pojedynczym drzewie firmy (ADR-0032). Brak parentId oznacza poziom firmy.
+ */
+export type OrganizationUnit = Prisma.OrganizationUnitModel
+/**
+ * Model UnitMembership
+ * Przynależność pracownika do jednostki organizacyjnej (ADR-0032).
+ */
+export type UnitMembership = Prisma.UnitMembershipModel

@@ -302,6 +302,8 @@ model Organization {
   name                 String
   status               OrganizationStatus     @default(PENDING_VERIFICATION)
   createdVia           OrganizationCreatedVia
+  ownerAccountId       String?                @unique @db.Uuid
+  ownerAccount         Account?               @relation("OrganizationOwner", fields: [ownerAccountId], references: [id], onDelete: Restrict)
   mfaRequiredForAll    Boolean                @default(false)
   suspendedAt          DateTime?              @db.Timestamptz(3)
   offboardingStartedAt DateTime?              @db.Timestamptz(3)
@@ -309,7 +311,9 @@ model Organization {
   updatedAt            DateTime               @updatedAt @db.Timestamptz(3)
   domains              OrganizationDomain[]
   employees            Employee[]
-  accounts             Account[]
+  accounts             Account[]              @relation("OrganizationAccounts")
+  units                OrganizationUnit[]
+  unitMemberships      UnitMembership[]
 
   @@map("organizations")
   @@schema("public")
@@ -359,19 +363,21 @@ enum EmployeeStatus {
 
 /// Pracownik firmy, niezależny od konta (ADR-0031). Produkty odwołują się do employeeId.
 model Employee {
-  id             String         @id @db.Uuid
-  organizationId String         @db.Uuid
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  firstName      String
-  lastName       String
-  workEmail      String?        @db.Citext
-  jobTitle       String?
-  status         EmployeeStatus @default(ACTIVE)
-  anonymizedAt   DateTime?      @db.Timestamptz(3)
-  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
-  account        Account?
+  id              String           @id @db.Uuid
+  organizationId  String           @db.Uuid
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  workEmail       String?          @db.Citext
+  jobTitle        String?
+  status          EmployeeStatus   @default(ACTIVE)
+  anonymizedAt    DateTime?        @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(3)
+  account         Account?
+  unitMemberships UnitMembership[]
 
+  @@unique([organizationId, id])
   @@index([organizationId])
   @@map("employees")
   @@schema("public")
@@ -387,22 +393,91 @@ enum AccountStatus {
 
 /// Konto pracownika w firmie. Jeden adres e-mail to jedno konto w jednej firmie (ADR-0018).
 model Account {
-  id              String        @id @db.Uuid
-  authUser        AuthUser      @relation(fields: [id], references: [id], onDelete: Cascade)
-  organizationId  String        @db.Uuid
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId      String        @unique @db.Uuid
-  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  email           String        @db.Citext
-  normalizedEmail String        @unique @db.Citext
-  status          AccountStatus @default(INVITED)
-  authzRevision   Int           @default(0)
-  lastLoginAt     DateTime?     @db.Timestamptz(3)
-  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime      @updatedAt @db.Timestamptz(3)
-  deactivatedAt   DateTime?     @db.Timestamptz(3)
+  id                String        @id @db.Uuid
+  authUser          AuthUser      @relation(fields: [id], references: [id], onDelete: Cascade)
+  organizationId    String        @db.Uuid
+  organization      Organization  @relation("OrganizationAccounts", fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedOrganization Organization? @relation("OrganizationOwner")
+  employeeId        String        @unique @db.Uuid
+  employee          Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  email             String        @db.Citext
+  normalizedEmail   String        @unique @db.Citext
+  status            AccountStatus @default(INVITED)
+  authzRevision     Int           @default(0)
+  lastLoginAt       DateTime?     @db.Timestamptz(3)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+  deactivatedAt     DateTime?     @db.Timestamptz(3)
 
+  @@unique([organizationId, id])
   @@index([organizationId])
   @@map("accounts")
+  @@schema("public")
+}
+
+// ── Struktura firmy (ADR-0032) ────────────────────────────────────────────────────────────────────
+
+enum UnitType {
+  BRANCH
+  DEPARTMENT
+  TEAM
+
+  @@schema("public")
+}
+
+enum UnitStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@schema("public")
+}
+
+/// Jednostka organizacyjna w pojedynczym drzewie firmy (ADR-0032). Brak parentId oznacza poziom firmy.
+model OrganizationUnit {
+  id             String             @id @db.Uuid
+  organizationId String             @db.Uuid
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentId       String?            @db.Uuid
+  parent         OrganizationUnit?  @relation("OrganizationUnitHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children       OrganizationUnit[] @relation("OrganizationUnitHierarchy")
+  name           String
+  type           UnitType
+  status         UnitStatus         @default(ACTIVE)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(3)
+  memberships    UnitMembership[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, parentId])
+  @@map("organization_units")
+  @@schema("public")
+}
+
+enum UnitMembershipRole {
+  MEMBER
+  LEADER
+
+  @@schema("public")
+}
+
+/// Przynależność pracownika do jednostki organizacyjnej (ADR-0032).
+model UnitMembership {
+  id             String             @id @db.Uuid
+  organizationId String             @db.Uuid
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String             @db.Uuid
+  unit           OrganizationUnit   @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Cascade)
+  employeeId     String             @db.Uuid
+  employee       Employee           @relation(fields: [organizationId, employeeId], references: [organizationId, id], onDelete: Cascade)
+  role           UnitMembershipRole @default(MEMBER)
+  joinedAt       DateTime           @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(3)
+
+  @@unique([unitId, employeeId])
+  @@index([organizationId])
+  @@index([organizationId, unitId])
+  @@index([organizationId, employeeId])
+  @@map("unit_memberships")
   @@schema("public")
 }

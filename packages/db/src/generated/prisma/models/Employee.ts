@@ -224,6 +224,7 @@ export type EmployeeWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Employee"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   account?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
+  unitMemberships?: Prisma.UnitMembershipListRelationFilter
 }
 
 export type EmployeeOrderByWithRelationInput = {
@@ -239,10 +240,12 @@ export type EmployeeOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
   account?: Prisma.AccountOrderByWithRelationInput
+  unitMemberships?: Prisma.UnitMembershipOrderByRelationAggregateInput
 }
 
 export type EmployeeWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  organizationId_id?: Prisma.EmployeeOrganizationIdIdCompoundUniqueInput
   AND?: Prisma.EmployeeWhereInput | Prisma.EmployeeWhereInput[]
   OR?: Prisma.EmployeeWhereInput[]
   NOT?: Prisma.EmployeeWhereInput | Prisma.EmployeeWhereInput[]
@@ -257,7 +260,8 @@ export type EmployeeWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"Employee"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   account?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
-}, "id">
+  unitMemberships?: Prisma.UnitMembershipListRelationFilter
+}, "id" | "organizationId_id">
 
 export type EmployeeOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -303,6 +307,7 @@ export type EmployeeCreateInput = {
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutEmployeesInput
   account?: Prisma.AccountCreateNestedOneWithoutEmployeeInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeUncheckedCreateInput = {
@@ -317,6 +322,7 @@ export type EmployeeUncheckedCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   account?: Prisma.AccountUncheckedCreateNestedOneWithoutEmployeeInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeUpdateInput = {
@@ -331,6 +337,7 @@ export type EmployeeUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutEmployeesNestedInput
   account?: Prisma.AccountUpdateOneWithoutEmployeeNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutEmployeeNestedInput
 }
 
 export type EmployeeUncheckedUpdateInput = {
@@ -345,6 +352,7 @@ export type EmployeeUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   account?: Prisma.AccountUncheckedUpdateOneWithoutEmployeeNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutEmployeeNestedInput
 }
 
 export type EmployeeCreateManyInput = {
@@ -393,6 +401,11 @@ export type EmployeeListRelationFilter = {
 
 export type EmployeeOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
+}
+
+export type EmployeeOrganizationIdIdCompoundUniqueInput = {
+  organizationId: string
+  id: string
 }
 
 export type EmployeeCountOrderByAggregateInput = {
@@ -499,6 +512,20 @@ export type EmployeeUpdateOneRequiredWithoutAccountNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.EmployeeUpdateToOneWithWhereWithoutAccountInput, Prisma.EmployeeUpdateWithoutAccountInput>, Prisma.EmployeeUncheckedUpdateWithoutAccountInput>
 }
 
+export type EmployeeCreateNestedOneWithoutUnitMembershipsInput = {
+  create?: Prisma.XOR<Prisma.EmployeeCreateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedCreateWithoutUnitMembershipsInput>
+  connectOrCreate?: Prisma.EmployeeCreateOrConnectWithoutUnitMembershipsInput
+  connect?: Prisma.EmployeeWhereUniqueInput
+}
+
+export type EmployeeUpdateOneRequiredWithoutUnitMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.EmployeeCreateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedCreateWithoutUnitMembershipsInput>
+  connectOrCreate?: Prisma.EmployeeCreateOrConnectWithoutUnitMembershipsInput
+  upsert?: Prisma.EmployeeUpsertWithoutUnitMembershipsInput
+  connect?: Prisma.EmployeeWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.EmployeeUpdateToOneWithWhereWithoutUnitMembershipsInput, Prisma.EmployeeUpdateWithoutUnitMembershipsInput>, Prisma.EmployeeUncheckedUpdateWithoutUnitMembershipsInput>
+}
+
 export type EmployeeCreateWithoutOrganizationInput = {
   id: string
   firstName: string
@@ -510,6 +537,7 @@ export type EmployeeCreateWithoutOrganizationInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   account?: Prisma.AccountCreateNestedOneWithoutEmployeeInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeUncheckedCreateWithoutOrganizationInput = {
@@ -523,6 +551,7 @@ export type EmployeeUncheckedCreateWithoutOrganizationInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   account?: Prisma.AccountUncheckedCreateNestedOneWithoutEmployeeInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeCreateOrConnectWithoutOrganizationInput = {
@@ -578,6 +607,7 @@ export type EmployeeCreateWithoutAccountInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutEmployeesInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeUncheckedCreateWithoutAccountInput = {
@@ -591,6 +621,7 @@ export type EmployeeUncheckedCreateWithoutAccountInput = {
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutEmployeeInput
 }
 
 export type EmployeeCreateOrConnectWithoutAccountInput = {
@@ -620,6 +651,7 @@ export type EmployeeUpdateWithoutAccountInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutEmployeesNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutEmployeeNestedInput
 }
 
 export type EmployeeUncheckedUpdateWithoutAccountInput = {
@@ -633,6 +665,79 @@ export type EmployeeUncheckedUpdateWithoutAccountInput = {
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutEmployeeNestedInput
+}
+
+export type EmployeeCreateWithoutUnitMembershipsInput = {
+  id: string
+  firstName: string
+  lastName: string
+  workEmail?: string | null
+  jobTitle?: string | null
+  status?: $Enums.EmployeeStatus
+  anonymizedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  organization: Prisma.OrganizationCreateNestedOneWithoutEmployeesInput
+  account?: Prisma.AccountCreateNestedOneWithoutEmployeeInput
+}
+
+export type EmployeeUncheckedCreateWithoutUnitMembershipsInput = {
+  id: string
+  organizationId: string
+  firstName: string
+  lastName: string
+  workEmail?: string | null
+  jobTitle?: string | null
+  status?: $Enums.EmployeeStatus
+  anonymizedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  account?: Prisma.AccountUncheckedCreateNestedOneWithoutEmployeeInput
+}
+
+export type EmployeeCreateOrConnectWithoutUnitMembershipsInput = {
+  where: Prisma.EmployeeWhereUniqueInput
+  create: Prisma.XOR<Prisma.EmployeeCreateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedCreateWithoutUnitMembershipsInput>
+}
+
+export type EmployeeUpsertWithoutUnitMembershipsInput = {
+  update: Prisma.XOR<Prisma.EmployeeUpdateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedUpdateWithoutUnitMembershipsInput>
+  create: Prisma.XOR<Prisma.EmployeeCreateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedCreateWithoutUnitMembershipsInput>
+  where?: Prisma.EmployeeWhereInput
+}
+
+export type EmployeeUpdateToOneWithWhereWithoutUnitMembershipsInput = {
+  where?: Prisma.EmployeeWhereInput
+  data: Prisma.XOR<Prisma.EmployeeUpdateWithoutUnitMembershipsInput, Prisma.EmployeeUncheckedUpdateWithoutUnitMembershipsInput>
+}
+
+export type EmployeeUpdateWithoutUnitMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
+  anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutEmployeesNestedInput
+  account?: Prisma.AccountUpdateOneWithoutEmployeeNestedInput
+}
+
+export type EmployeeUncheckedUpdateWithoutUnitMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
+  anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  account?: Prisma.AccountUncheckedUpdateOneWithoutEmployeeNestedInput
 }
 
 export type EmployeeCreateManyOrganizationInput = {
@@ -658,6 +763,7 @@ export type EmployeeUpdateWithoutOrganizationInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   account?: Prisma.AccountUpdateOneWithoutEmployeeNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutEmployeeNestedInput
 }
 
 export type EmployeeUncheckedUpdateWithoutOrganizationInput = {
@@ -671,6 +777,7 @@ export type EmployeeUncheckedUpdateWithoutOrganizationInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   account?: Prisma.AccountUncheckedUpdateOneWithoutEmployeeNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutEmployeeNestedInput
 }
 
 export type EmployeeUncheckedUpdateManyWithoutOrganizationInput = {
@@ -686,6 +793,35 @@ export type EmployeeUncheckedUpdateManyWithoutOrganizationInput = {
 }
 
 
+/**
+ * Count Type EmployeeCountOutputType
+ */
+
+export type EmployeeCountOutputType = {
+  unitMemberships: number
+}
+
+export type EmployeeCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  unitMemberships?: boolean | EmployeeCountOutputTypeCountUnitMembershipsArgs
+}
+
+/**
+ * EmployeeCountOutputType without action
+ */
+export type EmployeeCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the EmployeeCountOutputType
+   */
+  select?: Prisma.EmployeeCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * EmployeeCountOutputType without action
+ */
+export type EmployeeCountOutputTypeCountUnitMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.UnitMembershipWhereInput
+}
+
 
 export type EmployeeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -700,6 +836,8 @@ export type EmployeeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   account?: boolean | Prisma.Employee$accountArgs<ExtArgs>
+  unitMemberships?: boolean | Prisma.Employee$unitMembershipsArgs<ExtArgs>
+  _count?: boolean | Prisma.EmployeeCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["employee"]>
 
 export type EmployeeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -747,6 +885,8 @@ export type EmployeeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs =
 export type EmployeeInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   account?: boolean | Prisma.Employee$accountArgs<ExtArgs>
+  unitMemberships?: boolean | Prisma.Employee$unitMembershipsArgs<ExtArgs>
+  _count?: boolean | Prisma.EmployeeCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type EmployeeIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -760,6 +900,7 @@ export type $EmployeePayload<ExtArgs extends runtime.Types.Extensions.InternalAr
   objects: {
     organization: Prisma.$OrganizationPayload<ExtArgs>
     account: Prisma.$AccountPayload<ExtArgs> | null
+    unitMemberships: Prisma.$UnitMembershipPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1168,6 +1309,7 @@ export interface Prisma__EmployeeClient<T, Null = never, ExtArgs extends runtime
   readonly [Symbol.toStringTag]: "PrismaPromise"
   organization<T extends Prisma.OrganizationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.OrganizationDefaultArgs<ExtArgs>>): Prisma.Prisma__OrganizationClient<runtime.Types.Result.GetResult<Prisma.$OrganizationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   account<T extends Prisma.Employee$accountArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Employee$accountArgs<ExtArgs>>): Prisma.Prisma__AccountClient<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  unitMemberships<T extends Prisma.Employee$unitMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Employee$unitMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UnitMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1624,6 +1766,30 @@ export type Employee$accountArgs<ExtArgs extends runtime.Types.Extensions.Intern
    */
   include?: Prisma.AccountInclude<ExtArgs> | null
   where?: Prisma.AccountWhereInput
+}
+
+/**
+ * Employee.unitMemberships
+ */
+export type Employee$unitMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the UnitMembership
+   */
+  select?: Prisma.UnitMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the UnitMembership
+   */
+  omit?: Prisma.UnitMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UnitMembershipInclude<ExtArgs> | null
+  where?: Prisma.UnitMembershipWhereInput
+  orderBy?: Prisma.UnitMembershipOrderByWithRelationInput | Prisma.UnitMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.UnitMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.UnitMembershipScalarFieldEnum | Prisma.UnitMembershipScalarFieldEnum[]
 }
 
 /**

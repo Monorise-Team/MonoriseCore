@@ -62,3 +62,28 @@ export const AccountStatus = {
 } as const
 
 export type AccountStatus = (typeof AccountStatus)[keyof typeof AccountStatus]
+
+
+export const UnitType = {
+  BRANCH: 'BRANCH',
+  DEPARTMENT: 'DEPARTMENT',
+  TEAM: 'TEAM'
+} as const
+
+export type UnitType = (typeof UnitType)[keyof typeof UnitType]
+
+
+export const UnitStatus = {
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED'
+} as const
+
+export type UnitStatus = (typeof UnitStatus)[keyof typeof UnitStatus]
+
+
+export const UnitMembershipRole = {
+  MEMBER: 'MEMBER',
+  LEADER: 'LEADER'
+} as const
+
+export type UnitMembershipRole = (typeof UnitMembershipRole)[keyof typeof UnitMembershipRole]
