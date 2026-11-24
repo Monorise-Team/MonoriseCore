@@ -16,7 +16,7 @@ pnpm dev
 ```
 
 - logowanie i zakładanie firmy: http://localhost:3100,
-- Core API: http://localhost:3200/v1/health,
+- Core API: http://localhost:3200/core/v1/health,
 - maile (potwierdzenie adresu): http://localhost:8125.
 
 Lokalnie domenę firmy można potwierdzić bez rekordu DNS (przycisk „Potwierdź bez DNS”).
@@ -45,7 +45,7 @@ Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_acces
 
 ## Opis API (OpenAPI)
 
-Opis Core API w standardzie OpenAPI 3.1 znajduje się w [openapi/core-api.json](openapi/core-api.json) i jest serwowany na żywo pod `GET /v1/openapi.json` (bez tokenu, jako czysty dokument JSON — wyjątek od koperty `{ data, meta, error }`). Plik powstaje automatycznie z katalogu ścieżek (`apps/api/src/routes.ts`) oraz schematów Zod (`@core/contracts`) i stanowi jedyne źródło prawdy do generowania typowanego klienta `@monorise-team/sdk`.
+Opis Core API w standardzie OpenAPI 3.1 znajduje się w [openapi/core-api.json](openapi/core-api.json) i jest serwowany na żywo pod `GET /core/v1/openapi.json` (bez tokenu, jako czysty dokument JSON — wyjątek od koperty `{ data, meta, error }`). Plik powstaje automatycznie z katalogu ścieżek (`apps/api/src/routes.ts`) oraz schematów Zod (`@core/contracts`) i stanowi jedyne źródło prawdy do generowania typowanego klienta `@monorise-team/sdk`.
 
 Po każdej zmianie ścieżek lub schematów Core API odśwież i sprawdź plik:
 

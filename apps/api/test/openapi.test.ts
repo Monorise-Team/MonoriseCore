@@ -71,8 +71,8 @@ describe("OpenAPI Core API", () => {
     expect(serializeOpenApiDocument(buildOpenApiDocument())).toBe(rawCommitted);
   });
 
-  it("udostępnia GET /v1/openapi.json bez tokenu jako czysty dokument OpenAPI z Cache-Control: no-store", async () => {
-    const response = await app.inject({ method: "GET", url: "/v1/openapi.json" });
+  it("udostępnia GET /core/v1/openapi.json bez tokenu jako czysty dokument OpenAPI z Cache-Control: no-store", async () => {
+    const response = await app.inject({ method: "GET", url: "/core/v1/openapi.json" });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");

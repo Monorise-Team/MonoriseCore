@@ -72,7 +72,7 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 | Gdzie                | Co                                                                                                                                                                         |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, potwierdzanie e-maila i domeny, tokeny JWT i JWKS (`/api/auth`), serwer OAuth 2.1 dla produktów (`/api/auth/oauth2/*`) |
-| `apps/api`           | Core API w Fastify (`/v1`): przyjmuje tokeny z `apps/auth`, dane firm czyta zawsze przez RLS                                                                               |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): przyjmuje tokeny z `apps/auth`, dane firm czyta zawsze przez RLS                                                                |
 | `packages/db`        | schemat Prisma, migracje (tabele, RLS, uprawnienia ról), `withOrganization`, wyszukiwanie ponad granicą firm                                                               |
 | `packages/contracts` | schematy zod i typy API, pola tokenu, lista darmowych domen pocztowych                                                                                                     |
 
@@ -85,7 +85,7 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 5. **Token dostępu** (ADR-0023): JWT ważny 5 minut, podpis EdDSA, pola `org_id`, `employee_id`, `sid`, `amr`, `authz_rev`; bez uprawnień w tokenie. Produkty dostają token z OAuth 2.1 (`aud` to API produktu). W tych tokenach `sid` dokłada sam serwer OAuth, a `amr` jest polem zastrzeżonym wtyczki i na razie go nie ma (kontrakt przyjmuje pustą listę); sposób przekazania MFA ustalamy razem z MFA.
 6. **Klienci OAuth tylko z kodu**: aplikacje Monorise rejestruje `ensureFirstPartyClients` (`pnpm oauth:seed`), zawsze z PKCE. Rejestracja przez HTTP jest wyłączona (`clientPrivileges` i `resourcePrivileges` zwracają `false`). Nowy klient albo nowy adres powrotu to zmiana w obszarze bezpieczeństwa: opisz ją w pull requeście.
 7. **Komunikaty logowania** nie zdradzają, czy konto istnieje. Darmowe skrzynki (Gmail, WP, Onet…) nie zakładają firm (ADR-0019).
-8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /v1/openapi.json` zwraca czysty dokument OpenAPI).
+8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /core/v1/openapi.json` zwraca czysty dokument OpenAPI).
 9. **Katalog ścieżek i OpenAPI**: każdy nowy endpoint Core API dopisujesz do `apps/api/src/routes.ts` ze schematami Zod i uruchamiasz `pnpm openapi` (CI sprawdza `openapi/core-api.json`).
 10. **Jedna wersja**: po zmianie zależności `@monorise-team/*` używaj `pnpm shared:update`; `pnpm check:versions` musi przechodzić.
 
