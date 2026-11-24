@@ -27,6 +27,7 @@
   "devDependencies": {
     "@monorise-team/config": "0.0.1-dev.6",
     "@types/node": "^24.10.0",
+    "@types/nodemailer": "^8.0.2",
     "eslint": "^10.15.0",
     "tsx": "^4.20.0",
     "typescript": "^6.0.3",
