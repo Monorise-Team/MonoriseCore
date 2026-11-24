@@ -1,5 +1,6 @@
 import "server-only";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
 import { accountClaims, uuidv7, withOrganization } from "@core/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -8,7 +9,7 @@ import { jwt } from "better-auth/plugins";
 import { config } from "./config";
 import { db } from "./db";
 import { linkMail, sendMail } from "./mail";
-import { hashClientSecret } from "./oauth-clients";
+import { hashClientSecret, PRODUCT_SCOPES } from "./oauth-clients";
 
 /** Firmy w tych stanach nie logują się (wstrzymanie, usunięcie). */
 const BLOCKED_ORGANIZATIONS = new Set(["SUSPENDED", "DELETED"]);
@@ -99,9 +100,12 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: "/consent",
-      scopes: ["openid", "profile", "email", "offline_access"],
-      // Token dostępu ważny 5 minut (ADR-0023), odświeżanie do 30 dni
+      // core:permissions.register działa wyłącznie w przepływie client_credentials (nie jest w client.scopes ani w metadanych).
+      scopes: [...PRODUCT_SCOPES, PERMISSIONS_REGISTER_SCOPE],
+      advertisedMetadata: { scopes_supported: PRODUCT_SCOPES },
+      // Token dostępu (także maszynowy M2M) ważny 5 minut (ADR-0023), odświeżanie do 30 dni
       accessTokenExpiresIn: 300,
+      m2mAccessTokenExpiresIn: 300,
       refreshTokenExpiresIn: 30 * 24 * 60 * 60,
       // Aplikacje rejestruje tylko Core (skrypt oauth:seed). Żadne działanie na klientach i zasobach przez
       // HTTP nie jest dozwolone, także dla zalogowanych (domyślnie wtyczka pozwala na nie każdej sesji).
@@ -113,6 +117,7 @@ export const auth = betterAuth({
       allowInsecureRedirectUri: (url: URL) =>
         config.allowLocalHttpRedirects && (url.hostname === "localhost" || url.hostname.endsWith(".localhost")),
       customAccessTokenClaims: async ({ user }) => {
+        // W przepływie client_credentials (M2M) brak usera -> brak org_id, employee_id i authz_rev
         if (!user) return {};
         const claims = await accountClaims(db, user.id);
         if (!claims || claims.accountStatus === "DEACTIVATED") throw new Error("Konto nie może się logować");

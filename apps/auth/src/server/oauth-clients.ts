@@ -14,6 +14,8 @@ export interface FirstPartyResource {
   /** Adres API produktu, a zarazem odbiorca tokenu (aud), np. https://aven.monorise.studio */
   identifier: string;
   name: string;
+  /** Zakresy dopuszczone dla zasobu (domyślnie PRODUCT_SCOPES). */
+  allowedScopes?: string[];
 }
 
 export interface FirstPartyClient {
@@ -24,29 +26,50 @@ export interface FirstPartyClient {
   /** Serwer produktu (BFF) z sekretem; aplikacje na komputer i telefon są publiczne (tylko PKCE). */
   confidential: boolean;
   resources: string[];
+  /** Zakresy maszynowe (grant `client_credentials`), dozwolone wyłącznie dla klientów poufnych. */
+  clientCredentialsScopes?: string[];
+}
+
+export interface FirstPartyProduct {
+  /** Stały klucz produktu, np. `timotime` (zgodny z prefiksem kluczy uprawnień). */
+  key: string;
+  name: string;
+  /** Identyfikator poufnego klienta OAuth uprawnionego do rejestracji uprawnień produktu. */
+  registrationClientId: string;
 }
 
 /**
- * Rejestruje aplikacje Monorise jako klientów OAuth (bez ekranu zgody, z obowiązkowym PKCE) i ich API jako
- * zasoby. Działa wielokrotnie: istniejące wpisy aktualizuje. Zwraca sekrety nowych klientów poufnych;
- * w bazie zostaje tylko ich skrót, więc trzeba je zapisać od razu.
+ * Rejestruje aplikacje Monorise jako klientów OAuth (bez ekranu zgody, z obowiązkowym PKCE), ich API jako
+ * zasoby oraz opcjonalnie wpisy produktów w tabeli `products`. Działa wielokrotnie: istniejące wpisy aktualizuje.
+ * Zwraca sekrety nowych klientów poufnych; w bazie zostaje tylko ich skrót, więc trzeba je zapisać od razu.
  */
 export async function ensureFirstPartyClients({
   resources,
   clients,
+  products = [],
 }: {
   resources: FirstPartyResource[];
   clients: FirstPartyClient[];
+  products?: FirstPartyProduct[];
 }): Promise<Record<string, string>> {
   for (const resource of resources) {
+    const allowedScopes = resource.allowedScopes ?? PRODUCT_SCOPES;
     await db.authOAuthResource.upsert({
       where: { identifier: resource.identifier },
-      create: { id: uuidv7(), identifier: resource.identifier, name: resource.name, allowedScopes: PRODUCT_SCOPES },
-      update: { name: resource.name, disabled: false, allowedScopes: PRODUCT_SCOPES },
+      create: { id: uuidv7(), identifier: resource.identifier, name: resource.name, allowedScopes },
+      update: { name: resource.name, disabled: false, allowedScopes },
     });
   }
   const secrets: Record<string, string> = {};
   for (const client of clients) {
+    const m2mScopes = client.clientCredentialsScopes ?? [];
+    if (m2mScopes.length > 0 && !client.confidential) {
+      throw new Error(`Klient publiczny ${client.clientId} nie może mieć zakresów client_credentials`);
+    }
+    const grantTypes =
+      m2mScopes.length > 0
+        ? ["authorization_code", "refresh_token", "client_credentials"]
+        : ["authorization_code", "refresh_token"];
     const data = {
       name: client.name,
       redirectUris: client.redirectUris,
@@ -55,7 +78,8 @@ export async function ensureFirstPartyClients({
       disabled: false,
       enableEndSession: true,
       scopes: PRODUCT_SCOPES,
-      grantTypes: ["authorization_code", "refresh_token"],
+      clientCredentialsScopes: m2mScopes,
+      grantTypes,
       responseTypes: ["code"],
       tokenEndpointAuthMethod: client.confidential ? "client_secret_post" : "none",
       applicationType: client.confidential ? "web" : "native",
@@ -85,6 +109,21 @@ export async function ensureFirstPartyClients({
         });
       }
     }
+  }
+  for (const product of products) {
+    await db.product.upsert({
+      where: { key: product.key },
+      create: {
+        id: uuidv7(),
+        key: product.key,
+        name: product.name,
+        registrationClientId: product.registrationClientId,
+      },
+      update: {
+        name: product.name,
+        registrationClientId: product.registrationClientId,
+      },
+    });
   }
   return secrets;
 }

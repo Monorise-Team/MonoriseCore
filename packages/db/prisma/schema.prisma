@@ -314,6 +314,7 @@ model Organization {
   accounts             Account[]              @relation("OrganizationAccounts")
   units                OrganizationUnit[]
   unitMemberships      UnitMembership[]
+  auditLogs            AuditLog[]
 
   @@map("organizations")
   @@schema("public")
@@ -479,5 +480,76 @@ model UnitMembership {
   @@index([organizationId, unitId])
   @@index([organizationId, employeeId])
   @@map("unit_memberships")
+  @@schema("public")
+}
+
+// ── Rejestr produktów i uprawnień (ADR-0036) ──────────────────────────────────────────────────────
+
+/// Produkt platformy Monorise (np. timotime, avenmail). Dane platformy, bez organizationId i bez RLS.
+model Product {
+  id                   String       @id @db.Uuid
+  key                  String       @unique
+  name                 String
+  registrationClientId String?      @unique
+  createdAt            DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime     @updatedAt @db.Timestamptz(3)
+  permissions          Permission[]
+  auditLogs            AuditLog[]
+
+  @@map("products")
+  @@schema("public")
+}
+
+/// Uprawnienie zadeklarowane przez produkt lub platformę Core (ADR-0036).
+/// Brak productId oznacza uprawnienie platformy (`core.*`). Uprawnień nie usuwamy — wycofane mają deprecatedAt.
+model Permission {
+  id           String    @id @db.Uuid
+  key          String    @unique
+  productId    String?   @db.Uuid
+  product      Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description  String
+  deprecatedAt DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([productId])
+  @@map("permissions")
+  @@schema("public")
+}
+
+// ── Dziennik zdarzeń (ADR-0039) ───────────────────────────────────────────────────────────────────
+
+enum AuditActorType {
+  ACCOUNT
+  OPERATOR
+  SYSTEM
+  PRODUCT
+
+  @@schema("public")
+}
+
+/// Centralny, niezmienny dziennik zdarzeń (ADR-0039). Tylko dopisywanie; wpisy firm chronione przez RLS
+/// i usuwane kaskadowo razem z firmą (ADR-0041). Brak organizationId oznacza zdarzenie platformy.
+model AuditLog {
+  id                   String         @id @db.Uuid
+  organizationId       String?        @db.Uuid
+  organization         Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorType            AuditActorType
+  actorAccountId       String?        @db.Uuid
+  actorOperatorId      String?        @db.Uuid
+  productId            String?        @db.Uuid
+  product              Product?       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  action               String
+  resourceType         String
+  resourceId           String
+  metadata             Json           @default("{}")
+  ipAddress            String?        @db.Inet
+  userAgent            String?
+  requestId            String?
+  supportAccessGrantId String?        @db.Uuid
+  createdAt            DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("audit_log")
   @@schema("public")
 }
