@@ -73,9 +73,10 @@ describe("samorejestracja firmy i logowanie", () => {
     expect(payload.exp! - payload.iat!).toBe(300);
 
     const account = await withOrganization(db, organizationId, (tx) =>
-      tx.account.findUniqueOrThrow({ where: { id: payload.sub! } }),
+      tx.account.findUniqueOrThrow({ where: { id: payload.sub! }, include: { organization: true } }),
     );
     expect(account.lastLoginAt).not.toBeNull();
+    expect(account.organization.ownerAccountId).toBe(account.id);
   });
 
   it("odrzuca darmowe skrzynki i domenę, która ma już firmę", async () => {
