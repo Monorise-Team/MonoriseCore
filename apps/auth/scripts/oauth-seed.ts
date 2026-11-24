@@ -17,6 +17,8 @@ const AVEN_WEB = env("CORE_AVENMAIL_WEB_URL", "http://aven-mail.localhost:3000")
 const TIME_API = env("CORE_TIMOTIME_API_URL", "http://time.localhost:3300");
 const TIME_WEB = env("CORE_TIMOTIME_WEB_URL", "http://timo-time.localhost:3300");
 const CORE_API = env("CORE_API_URL", "http://localhost:3200");
+// Expo Go podczas pracy lokalnej wraca adresem exp:// serwera Metro (`expo start --localhost`)
+const EXPO_GO = env("CORE_EXPO_GO_REDIRECT", "exp://127.0.0.1:8081/--/oauth/callback");
 
 const secrets = await ensureFirstPartyClients({
   resources: [
@@ -35,14 +37,15 @@ const secrets = await ensureFirstPartyClients({
     {
       clientId: "avenmail-desktop",
       name: "AvenMail na komputer",
-      redirectUris: ["studio.monorise.avenmail://oauth/callback"],
+      // RFC 8252: aplikacja na komputer odbiera powrót na 127.0.0.1; port wybiera przy każdym logowaniu
+      redirectUris: ["http://127.0.0.1/oauth/callback"],
       confidential: false,
       resources: [AVEN_API, CORE_API],
     },
     {
       clientId: "avenmail-mobile",
       name: "AvenMail na telefon",
-      redirectUris: ["avenmail://oauth/callback"],
+      redirectUris: ["avenmail://oauth/callback", EXPO_GO],
       confidential: false,
       resources: [AVEN_API, CORE_API],
     },

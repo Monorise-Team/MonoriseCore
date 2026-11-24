@@ -181,6 +181,70 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
     expect(afterReuse.status).toBe(400);
   });
 
+  it("aplikacja na komputer loguje się przez 127.0.0.1 z dowolnym portem, bez sekretu (RFC 8252)", async () => {
+    const desktopId = `avenmail-desktop-test-${crypto.randomUUID().slice(0, 8)}`;
+    await ensureFirstPartyClients({
+      resources: [{ identifier: RESOURCE, name: "AvenMail API (test)" }],
+      clients: [
+        {
+          clientId: desktopId,
+          name: "AvenMail na komputer (test)",
+          redirectUris: ["http://127.0.0.1/oauth/callback"],
+          confidential: false,
+          resources: [RESOURCE],
+        },
+      ],
+    });
+    try {
+      const verifier = base64url(randomBytes(32));
+      const challenge = base64url(createHash("sha256").update(verifier).digest());
+      const loopback = "http://127.0.0.1:53682/oauth/callback";
+      const query = (redirectUri: string) =>
+        new URLSearchParams({
+          response_type: "code",
+          client_id: desktopId,
+          redirect_uri: redirectUri,
+          scope: "openid offline_access",
+          state: "stan-komputer",
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          resource: RESOURCE,
+        });
+
+      // Inna ścieżka niż zarejestrowana nie prowadzi do logowania
+      const wrong = await call(`/api/auth/oauth2/authorize?${query("http://127.0.0.1:53682/inna")}`);
+      expect(new URL(wrong.headers.get("location") ?? "/", BASE).pathname).not.toBe("/sign-in");
+
+      const first = await call(`/api/auth/oauth2/authorize?${query(loopback)}`);
+      const login = new URL(first.headers.get("location")!, BASE);
+      expect(login.pathname).toBe("/sign-in");
+      const signIn = await call("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: PASSWORD, oauth_query: login.search.slice(1) }),
+      });
+      const body = (await signIn.json().catch(() => ({}))) as { url?: string };
+      const back = new URL(signIn.headers.get("location") ?? body.url!);
+      expect(`${back.origin}${back.pathname}`).toBe(loopback);
+
+      const exchange = await call("/api/auth/oauth2/token", {
+        method: "POST",
+        form: {
+          grant_type: "authorization_code",
+          code: back.searchParams.get("code")!,
+          redirect_uri: loopback,
+          client_id: desktopId,
+          code_verifier: verifier,
+          resource: RESOURCE,
+        },
+      });
+      expect(exchange.status).toBe(200);
+      expect(((await exchange.json()) as { refresh_token?: string }).refresh_token).toBeTruthy();
+    } finally {
+      await db.authOAuthClient.deleteMany({ where: { clientId: desktopId } });
+    }
+  });
+
   it("nie pozwala zalogowanej osobie zarejestrować własnej aplikacji", async () => {
     const signIn = await call("/api/auth/sign-in/email", {
       method: "POST",

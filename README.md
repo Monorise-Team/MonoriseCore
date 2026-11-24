@@ -33,13 +33,13 @@ pnpm oauth:seed     # klienci OAuth AvenMail i TimoTime oraz ich API jako odbior
 
 Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `apps/auth/.data/oauth-clients.json`, poza repozytorium; w bazie zostaje tylko ich skrót. Ponowne uruchomienie niczego nie psuje i nie zmienia istniejących sekretów.
 
-| Klient             | Rodzaj                   | Powrót po zalogowaniu                               |
-| ------------------ | ------------------------ | --------------------------------------------------- |
-| `avenmail-web`     | poufny (serwer AvenMail) | `http://aven-mail.localhost:3000/api/auth/callback` |
-| `avenmail-desktop` | publiczny (Tauri)        | `studio.monorise.avenmail://oauth/callback`         |
-| `avenmail-mobile`  | publiczny (Expo)         | `avenmail://oauth/callback`                         |
-| `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback` |
-| `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`                         |
+| Klient             | Rodzaj                   | Powrót po zalogowaniu                                                                        |
+| ------------------ | ------------------------ | -------------------------------------------------------------------------------------------- |
+| `avenmail-web`     | poufny (serwer AvenMail) | `http://aven-mail.localhost:3000/api/auth/callback`                                          |
+| `avenmail-desktop` | publiczny (Tauri)        | `http://127.0.0.1/oauth/callback` (dowolny port, RFC 8252)                                   |
+| `avenmail-mobile`  | publiczny (Expo)         | `avenmail://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go) |
+| `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback`                                          |
+| `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`                                                                  |
 
 Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone.
 
