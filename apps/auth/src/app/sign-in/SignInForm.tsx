@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export function SignInForm() {
+export function SignInForm({ activated = false }: { activated?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +40,11 @@ export function SignInForm() {
         <h1 className="font-display text-xl font-semibold">Zaloguj się do Monorise</h1>
         <p className="text-sm text-text-tertiary">Jedno konto do wszystkich produktów Twojej firmy.</p>
       </div>
+      {activated ? (
+        <p role="status" className="rounded-lg bg-bg-tertiary p-3 text-sm text-text-primary">
+          Konto zostało aktywowane. Możesz się teraz zalogować.
+        </p>
+      ) : null}
       <form className="flex flex-col gap-3" onSubmit={submit}>
         <TextField
           label="Adres e-mail"

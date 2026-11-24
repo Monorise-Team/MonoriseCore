@@ -56,10 +56,10 @@ export const auth = betterAuth({
   databaseHooks: {
     session: {
       create: {
-        // Konto dezaktywowane albo firma wstrzymana: bez nowej sesji (spec §11)
+        // Konto zaproszone (INVITED), dezaktywowane albo firma wstrzymana: bez nowej sesji (spec §11)
         before: async (session) => {
           const claims = await accountClaims(db, session.userId);
-          if (!claims || claims.accountStatus === "DEACTIVATED") return false;
+          if (!claims || claims.accountStatus !== "ACTIVE") return false;
           if (BLOCKED_ORGANIZATIONS.has(claims.organizationStatus)) return false;
           return { data: session };
         },
@@ -83,7 +83,7 @@ export const auth = betterAuth({
         expirationTime: "5m",
         definePayload: async ({ user, session }) => {
           const claims = await accountClaims(db, user.id);
-          if (!claims) throw new Error("Konto logowania bez konta firmy");
+          if (!claims || claims.accountStatus !== "ACTIVE") throw new Error("Konto nie może się logować");
           return {
             org_id: claims.organizationId,
             employee_id: claims.employeeId,
@@ -119,7 +119,7 @@ export const auth = betterAuth({
         // W przepływie client_credentials (M2M) brak usera -> brak org_id, employee_id i authz_rev
         if (!user) return {};
         const claims = await accountClaims(db, user.id);
-        if (!claims || claims.accountStatus === "DEACTIVATED") throw new Error("Konto nie może się logować");
+        if (!claims || claims.accountStatus !== "ACTIVE") throw new Error("Konto nie może się logować");
         // amr i acr ustala sam serwer OAuth (pola zastrzeżone), dlatego ich tu nie ma
         return { org_id: claims.organizationId, employee_id: claims.employeeId, authz_rev: claims.authzRevision };
       },

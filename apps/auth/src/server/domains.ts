@@ -1,11 +1,13 @@
 import "server-only";
-import { createHash, createHmac } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
 import { DOMAIN_TXT_PREFIX, domainVerificationHost } from "@core/contracts";
-import { accountClaims, withOrganization } from "@core/db";
+import { accountClaims, hashToken, withOrganization } from "@core/db";
 import { config } from "./config";
 import { db } from "./db";
 import { CoreError } from "./errors";
+
+export { hashToken };
 
 /**
  * Wartość rekordu TXT potwierdzającego domenę. Wyliczana z sekretu, identyfikatora firmy i domeny, więc
@@ -14,10 +16,6 @@ import { CoreError } from "./errors";
 export function domainTxtValue(organizationId: string, domain: string): string {
   const code = createHmac("sha256", config.secret).update(`${organizationId}:${domain}`).digest("base64url");
   return `${DOMAIN_TXT_PREFIX}${code.slice(0, 32)}`;
-}
-
-export function hashToken(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 async function txtRecordMatches(domain: string, expected: string): Promise<boolean> {
