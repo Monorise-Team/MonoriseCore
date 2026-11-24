@@ -69,12 +69,12 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                                                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, potwierdzanie e-maila i domeny, tokeny JWT i JWKS (`/api/auth`), serwer OAuth 2.1 dla produktów (`/api/auth/oauth2/*`) |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): przyjmuje tokeny z `apps/auth`, dane firm czyta zawsze przez RLS                                                                |
-| `packages/db`        | schemat Prisma, migracje (tabele, RLS, uprawnienia ról), `withOrganization`, wyszukiwanie ponad granicą firm                                                               |
-| `packages/contracts` | schematy zod i typy API, pola tokenu, lista darmowych domen pocztowych                                                                                                     |
+| Gdzie                | Co                                                                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (ustawia Ownera), weryfikacja e-maila i domeny, JWT/JWKS (`/api/auth`), OAuth 2.1 (`/api/auth/oauth2/*`) |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): tokeny z `apps/auth`, RLS; `/me`, `/organization`, `/employees`, `/units`, `/units/{unitId}/members`             |
+| `packages/db`        | Prisma (`Organization.ownerAccountId`, `OrganizationUnit`, `UnitMembership`), migracje (RLS, wyzwalacz cykli), `withOrganization`, lookup ponad firmami     |
+| `packages/contracts` | schematy zod i typy API, pola tokenu, lista darmowych domen pocztowych                                                                                      |
 
 ## Zasady kodu
 
@@ -105,4 +105,5 @@ Nowa migracja: zmień `packages/db/prisma/schema.prisma`, potem w `packages/db` 
 
 - `pnpm check` wymaga uruchomionej bazy danych (`pnpm db:up`).
 - Zmiany w logowaniu, uprawnieniach i strukturze bazy scalane są dopiero po zgodzie właściciela projektu.
+- Zapisy w Core API (`/employees`, `/units`, `/units/{unitId}/members`) są tylko dla Ownera (`ownerAccountId`) do czasu wdrożenia ról (etap 2).
 - Sekrety z `.env` i `apps/auth/.data/` nigdy nie trafiają do zlecanych zadań.
