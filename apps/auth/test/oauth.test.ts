@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
-import { AccessTokenClaims } from "@core/contracts";
+import { AccessTokenClaims, MachineTokenClaims, PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
 import { withOrganization } from "@core/db";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth } from "@/server/auth";
-import { ensureFirstPartyClients } from "@/server/oauth-clients";
+import { ensureFirstPartyClients, PRODUCT_SCOPES } from "@/server/oauth-clients";
 import { db } from "@/server/db";
 import { sentMails } from "@/server/mail";
 import { signUpOrganization } from "@/server/signup";
@@ -297,5 +297,140 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       },
     });
     expect(exchange.status).toBe(400);
+  });
+
+  it("wydaje token maszynowy client_credentials tylko uprawnionemu klientowi poufnemu i blokuje ten zakres w logowaniu użytkownika", async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const coreResource = `http://core-${suffix}.localhost:3200`;
+    const m2mClientId = `timotime-web-test-${suffix}`;
+    const publicClientId = `timotime-mobile-test-${suffix}`;
+
+    const secrets = await ensureFirstPartyClients({
+      resources: [
+        { identifier: RESOURCE, name: "AvenMail API (test)" },
+        {
+          identifier: coreResource,
+          name: "Core API (test)",
+          allowedScopes: [...PRODUCT_SCOPES, PERMISSIONS_REGISTER_SCOPE],
+        },
+      ],
+      clients: [
+        {
+          clientId: m2mClientId,
+          name: "TimoTime (test)",
+          redirectUris: [REDIRECT],
+          confidential: true,
+          resources: [RESOURCE, coreResource],
+          clientCredentialsScopes: [PERMISSIONS_REGISTER_SCOPE],
+        },
+        {
+          clientId: publicClientId,
+          name: "TimoTime na telefon (test)",
+          redirectUris: ["timotime://oauth/callback"],
+          confidential: false,
+          resources: [RESOURCE, coreResource],
+        },
+      ],
+    });
+    const m2mSecret = secrets[m2mClientId]!;
+
+    try {
+      // 1. Poufny klient z grantem client_credentials dostaje token JWT dla Core API
+      const issued = await call("/api/auth/oauth2/token", {
+        method: "POST",
+        form: {
+          grant_type: "client_credentials",
+          client_id: m2mClientId,
+          client_secret: m2mSecret,
+          scope: PERMISSIONS_REGISTER_SCOPE,
+          resource: coreResource,
+        },
+      });
+      expect(issued.status).toBe(200);
+      const tokenBody = (await issued.json()) as {
+        access_token: string;
+        expires_in: number;
+        scope: string;
+        refresh_token?: string;
+      };
+      expect(tokenBody.expires_in).toBe(300);
+      expect(tokenBody.scope).toBe(PERMISSIONS_REGISTER_SCOPE);
+      expect(tokenBody.refresh_token).toBeUndefined();
+
+      const jwks = createLocalJWKSet(await auth.api.getJwks());
+      const { payload, protectedHeader } = await jwtVerify(tokenBody.access_token, jwks, {
+        audience: coreResource,
+        issuer: BASE,
+        algorithms: ["EdDSA"],
+      });
+      expect(protectedHeader.alg).toBe("EdDSA");
+      expect(payload.client_id).toBe(m2mClientId);
+      expect(payload.azp).toBe(m2mClientId);
+      expect(payload.scope).toBe(PERMISSIONS_REGISTER_SCOPE);
+      expect(payload.org_id).toBeUndefined();
+      expect(payload.employee_id).toBeUndefined();
+      expect(payload.authz_rev).toBeUndefined();
+      expect(MachineTokenClaims.parse(payload).client_id).toBe(m2mClientId);
+      expect(AccessTokenClaims.safeParse(payload).success).toBe(false);
+
+      // 2. Dla zasobu produktu (bez core:permissions.register w allowedScopes) token maszynowy nie jest wydawany
+      const wrongResource = await call("/api/auth/oauth2/token", {
+        method: "POST",
+        form: {
+          grant_type: "client_credentials",
+          client_id: m2mClientId,
+          client_secret: m2mSecret,
+          scope: PERMISSIONS_REGISTER_SCOPE,
+          resource: RESOURCE,
+        },
+      });
+      expect(wrongResource.status).toBe(400);
+
+      // 3. Klient poufny bez grantu client_credentials dostaje odmowę
+      const noGrant = await call("/api/auth/oauth2/token", {
+        method: "POST",
+        form: {
+          grant_type: "client_credentials",
+          client_id: client.client_id,
+          client_secret: client.client_secret,
+          scope: PERMISSIONS_REGISTER_SCOPE,
+          resource: coreResource,
+        },
+      });
+      expect(noGrant.status).toBe(400);
+
+      // 4. Klient publiczny dostaje odmowę
+      const publicDenied = await call("/api/auth/oauth2/token", {
+        method: "POST",
+        form: {
+          grant_type: "client_credentials",
+          client_id: publicClientId,
+          scope: PERMISSIONS_REGISTER_SCOPE,
+          resource: coreResource,
+        },
+      });
+      expect(publicDenied.status).toBe(400);
+
+      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o core:permissions.register
+      const challenge = base64url(createHash("sha256").update("weryfikator-user-scope-test-0123456789abcdef").digest());
+      const authorize = new URLSearchParams({
+        response_type: "code",
+        client_id: m2mClientId,
+        redirect_uri: REDIRECT,
+        scope: `openid ${PERMISSIONS_REGISTER_SCOPE}`,
+        state: "stan-m2m-scope",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        resource: coreResource,
+      });
+      const deniedAuthorize = await call(`/api/auth/oauth2/authorize?${authorize}`);
+      expect(deniedAuthorize.status).toBe(302);
+      const location = new URL(deniedAuthorize.headers.get("location")!, BASE);
+      expect(location.pathname).not.toBe("/sign-in");
+      expect(location.searchParams.get("error")).toBe("invalid_scope");
+    } finally {
+      await db.authOAuthClient.deleteMany({ where: { clientId: { in: [m2mClientId, publicClientId] } } });
+      await db.authOAuthResource.deleteMany({ where: { identifier: coreResource } });
+    }
   });
 });
