@@ -4,7 +4,10 @@ import { accountClaims, createDb, domainOwner, uuidv7, withOrganization } from "
 // Rola aplikacji (core_app): RLS obowiązuje ją zawsze. Lokalnie: pnpm db:up && pnpm db:migrate.
 const url =
   process.env.CORE_TEST_APP_DATABASE_URL ?? "postgresql://core_app:core_app@localhost:5433/monorise_core_test";
+const ownerUrl =
+  process.env.CORE_TEST_DATABASE_URL ?? "postgresql://core_owner:core_owner@localhost:5433/monorise_core_test";
 const db = createDb(url);
+const ownerDb = createDb(ownerUrl);
 
 interface Company {
   id: string;
@@ -98,6 +101,7 @@ afterAll(async () => {
     await db.authUser.delete({ where: { id: company.accountId } });
   }
   await db.$disconnect();
+  await ownerDb.$disconnect();
 });
 
 describe("separacja firm (RLS)", () => {
@@ -394,5 +398,212 @@ describe("separacja firm (RLS)", () => {
     expect(await accountClaims(db, uuidv7())).toBeNull();
     expect(await domainOwner(db, acme.domain.toUpperCase())).toEqual({ organizationId: acme.id, status: "PENDING" });
     expect(await domainOwner(db, "nieznana-domena.test")).toBeNull();
+  });
+});
+
+describe("dziennik zdarzeń i rejestr uprawnień", () => {
+  it("izoluje wpisy firm przez RLS, ukrywa wpisy platformy i blokuje UPDATE oraz DELETE", async () => {
+    const acmeEntryId = uuidv7();
+    const globexEntryId = uuidv7();
+    const platformEntryId = uuidv7();
+
+    await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.create({
+        data: {
+          id: acmeEntryId,
+          organizationId: acme.id,
+          actorType: "ACCOUNT",
+          actorAccountId: acme.accountId,
+          action: "unit.created",
+          resourceType: "unit",
+          resourceId: acmeKrakowId,
+          metadata: { type: "BRANCH" },
+        },
+      }),
+    );
+
+    await withOrganization(db, globex.id, (tx) =>
+      tx.auditLog.create({
+        data: {
+          id: globexEntryId,
+          organizationId: globex.id,
+          actorType: "ACCOUNT",
+          actorAccountId: globex.accountId,
+          action: "unit.created",
+          resourceType: "unit",
+          resourceId: globexGdanskId,
+          metadata: { type: "BRANCH" },
+        },
+      }),
+    );
+
+    // Wpis platformowy bez kontekstu firmy
+    await db.auditLog.create({
+      data: {
+        id: platformEntryId,
+        organizationId: null,
+        actorType: "SYSTEM",
+        action: "product.permissions.registered",
+        resourceType: "product",
+        resourceId: "core",
+        metadata: { unchanged: 0 },
+      },
+    });
+
+    try {
+      // Firma A widzi wyłącznie swój wpis; nie widzi wpisów firmy B ani wpisów platformy
+      const acmeEntries = await withOrganization(db, acme.id, (tx) => tx.auditLog.findMany());
+      expect(acmeEntries.map((entry) => entry.id)).toContain(acmeEntryId);
+      expect(acmeEntries.map((entry) => entry.id)).not.toContain(globexEntryId);
+      expect(acmeEntries.map((entry) => entry.id)).not.toContain(platformEntryId);
+      expect(acmeEntries.every((entry) => entry.organizationId === acme.id)).toBe(true);
+
+      // Bez kontekstu firmy core_app nie widzi żadnych wpisów (ani firmowych, ani platformowych)
+      expect(await db.auditLog.findMany()).toEqual([]);
+
+      // Nie można zapisać wpisu cudzej firmy ani wpisu platformowego w kontekście firmy
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.auditLog.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              actorType: "ACCOUNT",
+              actorAccountId: acme.accountId,
+              action: "unit.created",
+              resourceType: "unit",
+              resourceId: globexGdanskId,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.auditLog.create({
+            data: {
+              id: uuidv7(),
+              organizationId: null,
+              actorType: "SYSTEM",
+              action: "product.permissions.registered",
+              resourceType: "product",
+              resourceId: "core",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // core_app nie może ani zmieniać, ani usuwać wpisów dziennika
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.auditLog.updateMany({ where: { id: acmeEntryId }, data: { action: "tampered" } }),
+        ),
+      ).rejects.toThrow(/permission denied/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.auditLog.deleteMany({ where: { id: acmeEntryId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // Nawet właściciel tabel (core_owner) nie może zmodyfikować wpisu dziennika
+      await expect(
+        ownerDb.auditLog.updateMany({ where: { id: acmeEntryId }, data: { action: "tampered" } }),
+      ).rejects.toThrow(/immutable|cannot be updated/i);
+
+      await expect(
+        ownerDb.auditLog.updateMany({ where: { id: platformEntryId }, data: { action: "tampered" } }),
+      ).rejects.toThrow(/immutable|cannot be updated/i);
+    } finally {
+      await ownerDb.auditLog.deleteMany({ where: { id: { in: [acmeEntryId, globexEntryId, platformEntryId] } } });
+    }
+  });
+
+  it("usunięcie firmy kaskadowo usuwa jej wpisy dziennika (ADR-0041)", async () => {
+    const temp = await createCompany("TempAudit");
+    const entryId = uuidv7();
+    await withOrganization(db, temp.id, (tx) =>
+      tx.auditLog.create({
+        data: {
+          id: entryId,
+          organizationId: temp.id,
+          actorType: "ACCOUNT",
+          actorAccountId: temp.accountId,
+          action: "employee.created",
+          resourceType: "employee",
+          resourceId: temp.employeeId,
+        },
+      }),
+    );
+
+    expect(await ownerDb.auditLog.count({ where: { id: entryId } })).toBe(1);
+
+    await withOrganization(db, temp.id, (tx) => tx.organization.delete({ where: { id: temp.id } }));
+    await db.authUser.delete({ where: { id: temp.accountId } });
+
+    expect(await ownerDb.auditLog.count({ where: { id: entryId } })).toBe(0);
+    expect(await withOrganization(db, temp.id, (tx) => tx.auditLog.findMany())).toEqual([]);
+  });
+
+  it("egzekwuje prefiks klucza uprawnienia względem produktu i blokuje DELETE uprawnień dla core_app", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const productKey = `prod${suffix}`;
+    const otherProductKey = `other${suffix}`;
+    const productId = uuidv7();
+    const otherProductId = uuidv7();
+    const validPermId = uuidv7();
+    const corePermId = uuidv7();
+    const coreKey = `core.rls_test_${suffix}.read`;
+
+    await db.product.create({ data: { id: productId, key: productKey, name: "Produkt testowy" } });
+    await db.product.create({ data: { id: otherProductId, key: otherProductKey, name: "Inny produkt" } });
+
+    try {
+      // Poprawne uprawnienie produktu i platformowe core.*
+      await db.permission.create({
+        data: { id: validPermId, key: `${productKey}.items.read`, productId, description: "Odczyt pozycji" },
+      });
+      await db.permission.create({
+        data: { id: corePermId, key: coreKey, productId: null, description: "Uprawnienie testowe platformy" },
+      });
+
+      // Klucz innego produktu pod tym productId -> odrzucony przez wyzwalacz
+      await expect(
+        db.permission.create({
+          data: { id: uuidv7(), key: `${otherProductKey}.items.read`, productId, description: "Zły prefiks" },
+        }),
+      ).rejects.toThrow(/permissions_product_prefix|does not match product key/i);
+
+      // Klucz core.* z przypisanym productId -> odrzucony przez CHECK
+      await expect(
+        db.permission.create({
+          data: { id: uuidv7(), key: `core.bad_${suffix}.write`, productId, description: "Core z produktem" },
+        }),
+      ).rejects.toThrow(/permissions_core_product_consistency|check constraint|violates/i);
+
+      // Klucz produktu bez productId -> odrzucony przez CHECK
+      await expect(
+        db.permission.create({
+          data: {
+            id: uuidv7(),
+            key: `${productKey}.items.orphan`,
+            productId: null,
+            description: "Produkt bez productId",
+          },
+        }),
+      ).rejects.toThrow(/permissions_core_product_consistency|check constraint|violates/i);
+
+      // Niepoprawny format klucza -> odrzucony przez CHECK
+      await expect(
+        db.permission.create({
+          data: { id: uuidv7(), key: `${productKey}.short`, productId, description: "Za krótki klucz" },
+        }),
+      ).rejects.toThrow(/permissions_key_format|check constraint|violates/i);
+
+      // core_app nie może usuwać uprawnień ani produktów
+      await expect(db.permission.delete({ where: { id: validPermId } })).rejects.toThrow(/permission denied/i);
+      await expect(db.product.delete({ where: { id: otherProductId } })).rejects.toThrow(/permission denied/i);
+    } finally {
+      await ownerDb.permission.deleteMany({ where: { id: { in: [validPermId, corePermId] } } });
+      await ownerDb.product.deleteMany({ where: { id: { in: [productId, otherProductId] } } });
+    }
   });
 });

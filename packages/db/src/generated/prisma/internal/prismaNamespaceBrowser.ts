@@ -68,7 +68,10 @@ export const ModelName = {
   Employee: 'Employee',
   Account: 'Account',
   OrganizationUnit: 'OrganizationUnit',
-  UnitMembership: 'UnitMembership'
+  UnitMembership: 'UnitMembership',
+  Product: 'Product',
+  Permission: 'Permission',
+  AuditLog: 'AuditLog'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -392,12 +395,65 @@ export const UnitMembershipScalarFieldEnum = {
 export type UnitMembershipScalarFieldEnum = (typeof UnitMembershipScalarFieldEnum)[keyof typeof UnitMembershipScalarFieldEnum]
 
 
+export const ProductScalarFieldEnum = {
+  id: 'id',
+  key: 'key',
+  name: 'name',
+  registrationClientId: 'registrationClientId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ProductScalarFieldEnum = (typeof ProductScalarFieldEnum)[keyof typeof ProductScalarFieldEnum]
+
+
+export const PermissionScalarFieldEnum = {
+  id: 'id',
+  key: 'key',
+  productId: 'productId',
+  description: 'description',
+  deprecatedAt: 'deprecatedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PermissionScalarFieldEnum = (typeof PermissionScalarFieldEnum)[keyof typeof PermissionScalarFieldEnum]
+
+
+export const AuditLogScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  actorType: 'actorType',
+  actorAccountId: 'actorAccountId',
+  actorOperatorId: 'actorOperatorId',
+  productId: 'productId',
+  action: 'action',
+  resourceType: 'resourceType',
+  resourceId: 'resourceId',
+  metadata: 'metadata',
+  ipAddress: 'ipAddress',
+  userAgent: 'userAgent',
+  requestId: 'requestId',
+  supportAccessGrantId: 'supportAccessGrantId',
+  createdAt: 'createdAt'
+} as const
+
+export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
 
 
 export const QueryMode = {
@@ -414,4 +470,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 

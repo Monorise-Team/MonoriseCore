@@ -107,3 +107,20 @@ export type OrganizationUnit = Prisma.OrganizationUnitModel
  * Przynależność pracownika do jednostki organizacyjnej (ADR-0032).
  */
 export type UnitMembership = Prisma.UnitMembershipModel
+/**
+ * Model Product
+ * Produkt platformy Monorise (np. timotime, avenmail). Dane platformy, bez organizationId i bez RLS.
+ */
+export type Product = Prisma.ProductModel
+/**
+ * Model Permission
+ * Uprawnienie zadeklarowane przez produkt lub platformę Core (ADR-0036).
+ * Brak productId oznacza uprawnienie platformy (`core.*`). Uprawnień nie usuwamy — wycofane mają deprecatedAt.
+ */
+export type Permission = Prisma.PermissionModel
+/**
+ * Model AuditLog
+ * Centralny, niezmienny dziennik zdarzeń (ADR-0039). Tylko dopisywanie; wpisy firm chronione przez RLS
+ * i usuwane kaskadowo razem z firmą (ADR-0041). Brak organizationId oznacza zdarzenie platformy.
+ */
+export type AuditLog = Prisma.AuditLogModel

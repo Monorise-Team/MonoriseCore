@@ -87,3 +87,13 @@ export const UnitMembershipRole = {
 } as const
 
 export type UnitMembershipRole = (typeof UnitMembershipRole)[keyof typeof UnitMembershipRole]
+
+
+export const AuditActorType = {
+  ACCOUNT: 'ACCOUNT',
+  OPERATOR: 'OPERATOR',
+  SYSTEM: 'SYSTEM',
+  PRODUCT: 'PRODUCT'
+} as const
+
+export type AuditActorType = (typeof AuditActorType)[keyof typeof AuditActorType]
