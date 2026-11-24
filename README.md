@@ -54,7 +54,24 @@ Dostępne endpointy Core API (`/core/v1`):
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
-Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor kursorowy po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
+Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza filtrowaniem widoczności przypisań) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
+
+## Role, gotowe szablony, przypisania i przekazanie Ownera (etap 2b dziedziny Core)
+
+System ról i uprawnień w Core korzysta bezpośrednio ze wspólnej biblioteki `@monorise-team/permissions` (ADR-0033, ADR-0034, ADR-0035):
+
+- **Gotowe role (szablony)**: współdzielone między firmami (`organizationId = null`, unikalny klucz `<produkt>.<nazwa>`). Przy starcie Core API automatycznie rejestruje szablon platformy `core.company_admin` („Administrator firmy”, wszystkie uprawnienia `core.*`, wpis audytu `role_templates.registered` przy zmianach). Produkty wysyłają swoje szablony tym samym tokenem maszynowym co manifest uprawnień (`PUT /core/v1/products/{productKey}/role-templates`, zakres `core:permissions.register`, wpis audytu `product.role_templates.registered`). Zmiany szablonów od produktów **nie podbijają** `authzRevision` kont w firmach — wchodzą w życie najpóźniej w ciągu 5 minut wraz z odświeżeniem pamięci podręcznej.
+- **Role firmowe i kopiowanie**: uprawnienie `core.roles.manage` (zakres `ORGANIZATION`) pozwala tworzyć role firmowe od zera, kopiować szablony lub własne role (`copiedFromRoleId`), edytować aktywne role firmy i je archiwizować (archiwizacja wymaga braku przypisań, inaczej `409 CONFLICT`). Gotowych szablonów firmy nie mogą edytować ani archiwizować (`403`).
+- **Przypisania z zakresem i delegowanie**: przypisanie wiąże konto z rolą w zakresie `ORGANIZATION`, `UNIT` (obejmuje jednostkę i całe jej poddrzewo) albo `RESOURCE`, opcjonalnie na czas określony (`validFrom`, `validUntil`). Nadanie i odebranie roli wymaga roli Ownera albo jednocześnie uprawnienia `core.roles.assign` obejmującego docelowy zakres (`RESOURCE` i `ORGANIZATION` wymagają zakresu całej firmy) oraz posiadania każdego uprawnienia tej roli w tym zakresie (`canDelegate`). Konta z `core.roles.assign` lub `core.roles.manage` (w dowolnym zakresie) oraz Owner widzą wszystkie przypisania firmy; pozostałe konta widzą wyłącznie własne.
+- **Egzekwowanie w Core API i `authzRevision`**: zarządzanie pracownikami wymaga `core.employees.manage` (`ORGANIZATION`), a struktura firmy — `core.structure.manage` na odpowiedniej jednostce (albo `ORGANIZATION` dla jednostek głównych). Każde nadanie/odebranie przypisania, zmiana uprawnień roli firmy i przekazanie Ownera zwiększa `accounts.authzRevision` zainteresowanych kont i zapisuje wpis w `audit_log`.
+- **Przekazanie Ownera**: `PUT /core/v1/organization/owner` dostępne wyłącznie dla bieżącego Ownera; przekazuje rolę aktywnemu kontu tej samej firmy (`organization.owner.transferred` z `{ from, to }`). Poprzedni Owner zachowuje tylko uprawnienia wynikające z przypisanych ról.
+
+Endpointy etapu 2b (`/core/v1`):
+
+- `GET /core/v1/roles`, `GET /core/v1/roles/{roleId}`, `POST /core/v1/roles`, `PATCH /core/v1/roles/{roleId}`, `DELETE /core/v1/roles/{roleId}` — przegląd, tworzenie, kopiowanie, edycja i archiwizacja ról,
+- `GET /core/v1/role-assignments`, `POST /core/v1/role-assignments`, `DELETE /core/v1/role-assignments/{assignmentId}` — lista, nadawanie i odbieranie przypisań ról,
+- `PUT /core/v1/organization/owner` — przekazanie roli Ownera,
+- `PUT /core/v1/products/{productKey}/role-templates` — maszynowa rejestracja gotowych ról produktu.
 
 ## Rejestr uprawnień produktów i dziennik zdarzeń (etap 2a dziedziny Core)
 
