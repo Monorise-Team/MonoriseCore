@@ -10,7 +10,12 @@ import {
   Organization,
   PageCursor,
   PageLimit,
+  Permission,
+  PERMISSIONS_REGISTER_SCOPE,
+  ProductKey,
   PutUnitMember,
+  RegisterPermissionsRequest,
+  RegisterPermissionsResult,
   Unit,
   UnitMember,
   UnitStatus,
@@ -21,7 +26,9 @@ import { z } from "zod";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RouteTag = "System" | "People" | "Organization" | "Structure";
+export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions";
+
+export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
 export interface TagDefinition {
   name: RouteTag;
@@ -33,6 +40,7 @@ export const TAGS: readonly TagDefinition[] = [
   { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
   { name: "Organization", description: "Firma zalogowanego użytkownika." },
   { name: "Structure", description: "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie." },
+  { name: "Permissions", description: "Rejestr uprawnień platformy Core i produktów (ADR-0036)." },
 ];
 
 export type SuccessStatus = 200 | 201 | 204;
@@ -55,7 +63,7 @@ export interface RouteDefinition {
   tag: RouteTag;
   summary: string;
   description?: string;
-  auth: boolean;
+  auth: RouteAuth;
   /** Kod odpowiedzi sukcesu. */
   successStatus: SuccessStatus;
   /** Czy odpowiedź sukcesu jest owinięta w kopertę `{ data, meta, error }` (nie dotyczy 204). */
@@ -92,8 +100,18 @@ export const OpenApiDocument = z
 export const EmployeeList = z.array(Employee);
 export const UnitList = z.array(Unit);
 export const UnitMemberList = z.array(UnitMember);
+export const PermissionList = z.array(Permission);
 
 const UuidParam = z.uuid();
+const IncludeDeprecatedParam = z.boolean().default(false);
+
+const PRODUCT_KEY_PARAM: ParameterDefinition = {
+  name: "productKey",
+  in: "path",
+  required: true,
+  description: "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+  schema: ProductKey,
+};
 
 const UNIT_ID_PARAM: ParameterDefinition = {
   name: "unitId",
@@ -188,7 +206,7 @@ export const ROUTES = {
     tag: "People",
     summary: "Pobierz dane zalogowanego konta, pracownika i firmy",
     description: "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     dataSchemaName: "Me",
@@ -207,7 +225,7 @@ export const ROUTES = {
     tag: "Organization",
     summary: "Pobierz firmę zalogowanego użytkownika",
     description: "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     dataSchemaName: "Organization",
@@ -226,7 +244,7 @@ export const ROUTES = {
     tag: "People",
     summary: "Lista pracowników firmy",
     description: "Zwraca stronicowaną listę pracowników firmy wynikającej z tokenu dostępu (kolejność utworzenia).",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     paginated: true,
@@ -248,7 +266,7 @@ export const ROUTES = {
     tag: "People",
     summary: "Dodaj pracownika",
     description: "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga roli Ownera firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 201,
     envelope: true,
     requestBodySchemaName: "CreateEmployee",
@@ -273,7 +291,7 @@ export const ROUTES = {
     summary: "Lista jednostek organizacyjnych firmy",
     description:
       "Zwraca stronicowaną, płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     paginated: true,
@@ -304,7 +322,7 @@ export const ROUTES = {
     tag: "Structure",
     summary: "Utwórz jednostkę organizacyjną",
     description: "Dodaje oddział, dział lub zespół do drzewa struktury firmy (ADR-0032). Wymaga roli Ownera firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 201,
     envelope: true,
     requestBodySchemaName: "CreateUnit",
@@ -332,7 +350,7 @@ export const ROUTES = {
     description:
       "Zmienia nazwę, przenosi jednostkę w drzewie (z kontrolą cykli) albo zmienia jej status " +
       "(archiwizacja tylko bez aktywnych jednostek podrzędnych). Wymaga roli Ownera firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     parameters: [UNIT_ID_PARAM],
@@ -360,7 +378,7 @@ export const ROUTES = {
     summary: "Lista członków jednostki organizacyjnej",
     description:
       "Zwraca stronicowaną listę pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     paginated: true,
@@ -385,7 +403,7 @@ export const ROUTES = {
     description:
       "Operacja idempotentna: przypisuje pracownika do jednostki albo aktualizuje jego rolę (`MEMBER`/`LEADER`). " +
       "Wymaga roli Ownera firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 200,
     envelope: true,
     parameters: [UNIT_ID_PARAM, EMPLOYEE_ID_PARAM],
@@ -412,13 +430,82 @@ export const ROUTES = {
     tag: "Structure",
     summary: "Usuń pracownika z jednostki organizacyjnej",
     description: "Usuwa przypisanie pracownika do wskazanej jednostki. Wymaga roli Ownera firmy.",
-    auth: true,
+    auth: "bearer",
     successStatus: 204,
     envelope: false,
     parameters: [UNIT_ID_PARAM, EMPLOYEE_ID_PARAM],
     responseDescription: "Członkostwo pracownika w jednostce zostało usunięte.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listPermissions: {
+    method: "GET",
+    path: `${API_PREFIX}/permissions`,
+    operationId: "listPermissions",
+    tag: "Permissions",
+    summary: "Lista zarejestrowanych uprawnień",
+    description:
+      "Zwraca stronicowaną listę uprawnień platformy i produktów. Domyślnie pomija wycofane uprawnienia; " +
+      "dostępna dla każdego aktywnego konta firmy.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "product",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po kluczu produktu (np. `timotime`) albo `core` dla uprawnień platformy.",
+        schema: ProductKey,
+      },
+      {
+        name: "includeDeprecated",
+        in: "query",
+        required: false,
+        description: "Czy uwzględnić wycofane uprawnienia (domyślnie `false`).",
+        schema: IncludeDeprecatedParam,
+      },
+    ],
+    dataSchemaName: "PermissionList",
+    dataSchema: PermissionList,
+    responseSchemaName: "PermissionListResponse",
+    responseDescription: "Strona listy zarejestrowanych uprawnień.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  registerProductPermissions: {
+    method: "PUT",
+    path: `${API_PREFIX}/products/{productKey}/permissions`,
+    operationId: "registerProductPermissions",
+    tag: "Permissions",
+    summary: "Zarejestruj manifest uprawnień produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:permissions.register`). Idempotentnie dodaje i aktualizuje uprawnienia produktu oraz oznacza " +
+      "brakujące jako wycofane (bez usuwania).",
+    auth: { scheme: "productOAuth", scopes: [PERMISSIONS_REGISTER_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    parameters: [PRODUCT_KEY_PARAM],
+    requestBodySchemaName: "RegisterPermissionsRequest",
+    requestBodySchema: RegisterPermissionsRequest,
+    requestBodyDescription: "Manifest uprawnień produktu (1–500 pozycji z prefiksem `<productKey>.`).",
+    dataSchemaName: "RegisterPermissionsResult",
+    dataSchema: RegisterPermissionsResult,
+    responseSchemaName: "RegisterPermissionsResponse",
+    responseDescription: "Podsumowanie zmian w rejestrze uprawnień produktu.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],

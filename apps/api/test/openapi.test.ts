@@ -34,6 +34,9 @@ beforeAll(() => {
     verifyToken: async () => {
       throw new Error("Stub verifyToken nie powinien być wywołany w testach OpenAPI");
     },
+    verifyMachineToken: async () => {
+      throw new Error("Stub verifyMachineToken nie powinien być wywołany w testach OpenAPI");
+    },
     onRoute: (route) => {
       const methods = Array.isArray(route.method) ? route.method : [route.method];
       for (const method of methods) {
@@ -62,19 +65,23 @@ describe("OpenAPI Core API", () => {
     expect([...fastifySet].sort()).toEqual([...openApiSet].sort());
   });
 
-  it("wymaga bearerAuth wyłącznie w chronionych operacjach", () => {
+  it("wymaga właściwego schematu bezpieczeństwa wyłącznie w chronionych operacjach", () => {
     expect("security" in document).toBe(false);
 
     for (const route of ROUTE_LIST) {
       const operation = document.paths[route.path]?.[route.method.toLowerCase()];
       expect(operation, `Brak operacji ${route.method} ${route.path}`).toBeDefined();
 
-      if (route.auth) {
+      if (route.auth === false) {
+        expect(operation?.security).toBeUndefined();
+        expect(operation?.responses["401"]).toBeUndefined();
+      } else if (route.auth === "bearer") {
         expect(operation?.security).toEqual([{ bearerAuth: [] }]);
         expect(operation?.responses["401"]).toBeDefined();
       } else {
-        expect(operation?.security).toBeUndefined();
-        expect(operation?.responses["401"]).toBeUndefined();
+        expect(operation?.security).toEqual([{ [route.auth.scheme]: [...route.auth.scopes] }]);
+        expect(operation?.responses["401"]).toBeDefined();
+        expect(operation?.responses["403"]).toBeDefined();
       }
     }
   });

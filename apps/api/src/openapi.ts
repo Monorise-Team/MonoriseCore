@@ -20,7 +20,12 @@ import {
   Organization,
   OrganizationDomain,
   OrganizationStatus,
+  Permission,
+  PermissionManifestEntry,
+  PERMISSIONS_REGISTER_SCOPE,
+  ProductKey,
   PutUnitMember,
+  RegisterPermissionsResult,
   Unit,
   UnitMember,
   UnitMembershipRole,
@@ -52,6 +57,24 @@ const ERROR_STATUS_SUMMARY: Record<ErrorStatus, string> = {
 
 const METHOD_ORDER = ["get", "post", "put", "patch", "delete"] as const;
 
+export type OpenApiSecurityScheme =
+  | {
+      type: "http";
+      scheme: "bearer";
+      bearerFormat: string;
+      description: string;
+    }
+  | {
+      type: "oauth2";
+      description: string;
+      flows: {
+        clientCredentials: {
+          tokenUrl: string;
+          scopes: Record<string, string>;
+        };
+      };
+    };
+
 export interface OpenApiSpec {
   openapi: "3.1.0";
   info: {
@@ -68,15 +91,7 @@ export interface OpenApiSpec {
   tags: { name: string; description: string }[];
   paths: Record<string, Record<string, OpenApiOperation>>;
   components: {
-    securitySchemes: Record<
-      string,
-      {
-        type: "http";
-        scheme: "bearer";
-        bearerFormat: string;
-        description: string;
-      }
-    >;
+    securitySchemes: Record<string, OpenApiSecurityScheme>;
     schemas: Record<string, Record<string, unknown>>;
   };
 }
@@ -113,7 +128,7 @@ export interface OpenApiOperation {
   operationId: string;
   summary: string;
   description?: string;
-  security?: { bearerAuth: string[] }[];
+  security?: Record<string, string[]>[];
   parameters?: OpenApiParameterObject[];
   requestBody?: OpenApiRequestBodyObject;
   responses: Record<string, OpenApiResponseObject>;
@@ -172,6 +187,10 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("UpdateUnit", UpdateUnit);
   register("UnitMember", UnitMember);
   register("PutUnitMember", PutUnitMember);
+  register("ProductKey", ProductKey);
+  register("PermissionManifestEntry", PermissionManifestEntry);
+  register("RegisterPermissionsResult", RegisterPermissionsResult);
+  register("Permission", Permission);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -284,12 +303,19 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
       }
     : undefined;
 
+  const security: Record<string, string[]>[] | undefined =
+    route.auth === false
+      ? undefined
+      : route.auth === "bearer"
+        ? [{ bearerAuth: [] }]
+        : [{ [route.auth.scheme]: [...route.auth.scopes] }];
+
   const operation: OpenApiOperation = {
     tags: [route.tag],
     operationId: route.operationId,
     summary: route.summary,
     ...(route.description ? { description: route.description } : {}),
-    ...(route.auth ? { security: [{ bearerAuth: [] }] } : {}),
+    ...(security ? { security } : {}),
     ...(parameters ? { parameters } : {}),
     ...(requestBody ? { requestBody } : {}),
     responses,
@@ -337,7 +363,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
     info: {
       title: "Monorise Core API",
       version: readRootVersion(),
-      summary: "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura i stan usługi.",
+      summary: "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura, uprawnienia i stan usługi.",
       description:
         "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy " +
         "dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` " +
@@ -365,6 +391,19 @@ export function buildOpenApiDocument(): OpenApiSpec {
           scheme: "bearer",
           bearerFormat: "JWT",
           description: "Token dostępu JWT (EdDSA) z auth.monorise.studio, ważny 5 minut (ADR-0023).",
+        },
+        productOAuth: {
+          type: "oauth2",
+          description:
+            "Token maszynowy OAuth 2.1 (client_credentials, JWT EdDSA) wydany dla poufnego klienta produktu.",
+          flows: {
+            clientCredentials: {
+              tokenUrl: "https://auth.monorise.studio/api/auth/oauth2/token",
+              scopes: {
+                [PERMISSIONS_REGISTER_SCOPE]: "Rejestracja manifestu uprawnień produktu w Core.",
+              },
+            },
+          },
         },
       },
       schemas: buildComponentSchemas(registry),

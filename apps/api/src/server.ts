@@ -2,6 +2,8 @@ import {
   CreateEmployee,
   CreateUnit,
   PageQuery,
+  PERMISSIONS_REGISTER_SCOPE,
+  ProductKey,
   PutUnitMember,
   UnitStatus,
   UpdateUnit,
@@ -11,17 +13,21 @@ import {
   type Employee,
   type ErrorCode,
   type Health,
+  type MachineTokenClaims,
   type Me,
   type Organization,
+  type Permission,
   type Unit,
   type UnitMember,
 } from "@core/contracts";
 import { uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
 import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
 import { z } from "zod";
+import { writeAudit } from "./audit.js";
 import { buildOpenApiDocument } from "./openapi.js";
+import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
 import { ROUTES, toFastifyPath } from "./routes.js";
-import type { TokenVerifier } from "./tokens.js";
+import type { MachineTokenVerifier, TokenVerifier } from "./tokens.js";
 
 class ApiFailure extends Error {
   constructor(
@@ -37,6 +43,7 @@ class ApiFailure extends Error {
 export interface ServerOptions {
   db: PrismaClient;
   verifyToken: TokenVerifier;
+  verifyMachineToken: MachineTokenVerifier;
   logger?: boolean;
   /** Opcjonalny hook wywoływany przy rejestracji każdej ścieżki Fastify (używany w testach OpenAPI). */
   onRoute?: (route: RouteOptions) => void;
@@ -49,9 +56,22 @@ interface Caller {
   isOwner: boolean;
 }
 
+interface MachineCaller {
+  clientId: string;
+  scopes: Set<string>;
+}
+
 const UnitIdParams = z.object({ unitId: z.uuid() });
 const UnitMemberParams = z.object({ unitId: z.uuid(), employeeId: z.uuid() });
+const ProductKeyParams = z.object({ productKey: ProductKey });
 const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
+const QueryBoolean = z
+  .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
+  .default(false);
+const ListPermissionsFilter = z.object({
+  product: ProductKey.optional(),
+  includeDeprecated: QueryBoolean,
+});
 const CursorUuid = z.uuid();
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -183,6 +203,20 @@ function serializeUnitMember(membership: {
   };
 }
 
+function serializePermission(permission: {
+  key: string;
+  description: string;
+  deprecatedAt: Date | null;
+  product: { key: string } | null;
+}): Permission {
+  return {
+    key: permission.key,
+    product: permission.product?.key ?? null,
+    description: permission.description,
+    deprecated: permission.deprecatedAt !== null,
+  };
+}
+
 function isCycleError(error: unknown): boolean {
   const text =
     String((error as { code?: string; message?: string })?.code ?? "") + String((error as Error)?.message ?? "");
@@ -205,7 +239,13 @@ async function createsUnitCycle(tx: Tx, unitId: string, candidateParentId: strin
 }
 
 /** Core API: format `{ data, meta, error }` (ADR-0044), firma zawsze z tokenu, dane przez RLS (ADR-0037). */
-export function buildServer({ db, verifyToken, logger = false, onRoute }: ServerOptions): FastifyInstance {
+export function buildServer({
+  db,
+  verifyToken,
+  verifyMachineToken,
+  logger = false,
+  onRoute,
+}: ServerOptions): FastifyInstance {
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
   const openApiDocument = buildOpenApiDocument();
 
@@ -287,6 +327,24 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
     if (!who.isOwner) {
       throw new ApiFailure(403, "PERMISSION_DENIED", "Tę operację może wykonać tylko Owner firmy");
     }
+  }
+
+  /** Klient maszynowy (OAuth 2.1 `client_credentials`): bez firmy i konta, z wymaganym zakresem. */
+  async function machineCaller(request: FastifyRequest, requiredScope: string): Promise<MachineCaller> {
+    const header = request.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (!token) throw new ApiFailure(401, "UNAUTHENTICATED", "Brak tokenu dostępu");
+    let claims: MachineTokenClaims;
+    try {
+      claims = await verifyMachineToken(token);
+    } catch {
+      throw new ApiFailure(401, "UNAUTHENTICATED", "Token jest nieważny albo wygasł");
+    }
+    const scopes = new Set(claims.scope.split(" ").filter(Boolean));
+    if (!scopes.has(requiredScope)) {
+      throw new ApiFailure(403, "PERMISSION_DENIED", "Token nie ma wymaganego zakresu uprawnień");
+    }
+    return { clientId: claims.client_id, scopes };
   }
 
   app.addHook("onSend", async (_request, reply) => {
@@ -385,8 +443,8 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
       const who = await caller(request);
       requireOwner(who);
       const body = parseInput(CreateEmployee, request.body);
-      const employee = await withOrganization(db, who.organizationId, (tx) =>
-        tx.employee.create({
+      const employee = await withOrganization(db, who.organizationId, async (tx) => {
+        const created = await tx.employee.create({
           data: {
             id: uuidv7(),
             organizationId: who.organizationId,
@@ -395,8 +453,15 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
             workEmail: body.workEmail ?? null,
             jobTitle: body.jobTitle ?? null,
           },
-        }),
-      );
+        });
+        await writeAudit(tx, request, who, {
+          action: "employee.created",
+          resourceType: "employee",
+          resourceId: created.id,
+          metadata: {},
+        });
+        return created;
+      });
       return reply.status(201).send(send(request, serializeEmployee(employee)));
     },
   });
@@ -442,7 +507,7 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
             throw new ApiFailure(409, "CONFLICT", "Nie można dodać jednostki pod zarchiwizowaną jednostką");
           }
         }
-        return tx.organizationUnit.create({
+        const created = await tx.organizationUnit.create({
           data: {
             id: uuidv7(),
             organizationId: who.organizationId,
@@ -451,6 +516,16 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
             type: body.type,
           },
         });
+        await writeAudit(tx, request, who, {
+          action: "unit.created",
+          resourceType: "unit",
+          resourceId: created.id,
+          metadata: {
+            type: created.type,
+            parentId: created.parentId,
+          },
+        });
+        return created;
       });
       return reply.status(201).send(send(request, serializeUnit(unit)));
     },
@@ -513,7 +588,18 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
             }
           }
 
-          return tx.organizationUnit.update({
+          const changes: Record<string, { old: string | null; new: string | null }> = {};
+          if (body.name !== undefined && body.name !== unit.name) {
+            changes.name = { old: unit.name, new: body.name };
+          }
+          if (body.parentId !== undefined && body.parentId !== unit.parentId) {
+            changes.parentId = { old: unit.parentId, new: body.parentId };
+          }
+          if (body.status !== undefined && body.status !== unit.status) {
+            changes.status = { old: unit.status, new: body.status };
+          }
+
+          const next = await tx.organizationUnit.update({
             where: { id: unit.id },
             data: {
               ...(body.name !== undefined ? { name: body.name } : {}),
@@ -521,6 +607,17 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
               ...(body.status !== undefined ? { status: body.status } : {}),
             },
           });
+
+          if (Object.keys(changes).length > 0) {
+            await writeAudit(tx, request, who, {
+              action: "unit.updated",
+              resourceType: "unit",
+              resourceId: next.id,
+              metadata: { changes },
+            });
+          }
+
+          return next;
         });
         return send(request, serializeUnit(updated));
       } catch (error) {
@@ -583,7 +680,7 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
           select: { id: true },
         });
         if (!employee) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono pracownika");
-        return tx.unitMembership.upsert({
+        const saved = await tx.unitMembership.upsert({
           where: { unitId_employeeId: { unitId: params.unitId, employeeId: params.employeeId } },
           create: {
             id: uuidv7(),
@@ -595,6 +692,17 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
           update: { role: body.role },
           include: { employee: true },
         });
+        await writeAudit(tx, request, who, {
+          action: "unit.member.set",
+          resourceType: "unit_member",
+          resourceId: saved.id,
+          metadata: {
+            unitId: params.unitId,
+            employeeId: params.employeeId,
+            role: saved.role,
+          },
+        });
+        return saved;
       });
       return send(request, serializeUnitMember(membership));
     },
@@ -613,14 +721,91 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
           select: { id: true },
         });
         if (!unit) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
-        const deleted = await tx.unitMembership.deleteMany({
-          where: { unitId: params.unitId, employeeId: params.employeeId },
+        const existing = await tx.unitMembership.findUnique({
+          where: { unitId_employeeId: { unitId: params.unitId, employeeId: params.employeeId } },
+          select: { id: true, role: true },
         });
-        if (deleted.count === 0) {
+        if (!existing) {
           throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono przypisania pracownika do jednostki");
         }
+        await tx.unitMembership.delete({ where: { id: existing.id } });
+        await writeAudit(tx, request, who, {
+          action: "unit.member.removed",
+          resourceType: "unit_member",
+          resourceId: existing.id,
+          metadata: {
+            unitId: params.unitId,
+            employeeId: params.employeeId,
+            role: existing.role,
+          },
+        });
       });
       return reply.status(204).send();
+    },
+  });
+
+  app.route({
+    method: ROUTES.listPermissions.method,
+    url: toFastifyPath(ROUTES.listPermissions.path),
+    handler: async (request) => {
+      await caller(request);
+      const page = parsePageQuery(request.query, ListPermissionsFilter);
+      const where = {
+        ...(page.product === "core"
+          ? { productId: null }
+          : page.product !== undefined
+            ? { product: { is: { key: page.product } } }
+            : {}),
+        ...(page.includeDeprecated ? {} : { deprecatedAt: null }),
+        ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+      };
+      const rows = await db.permission.findMany({
+        ...(Object.keys(where).length > 0 ? { where } : {}),
+        include: { product: { select: { key: true } } },
+        orderBy: { id: "asc" },
+        take: page.limit + 1,
+      });
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializePermission), nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.registerProductPermissions.method,
+    url: toFastifyPath(ROUTES.registerProductPermissions.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, PERMISSIONS_REGISTER_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const product = await db.product.findUnique({
+        where: { key: params.productKey },
+        select: { id: true, key: true, registrationClientId: true },
+      });
+      if (!product) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+      }
+      if (!product.registrationClientId || product.registrationClientId !== machine.clientId) {
+        throw new ApiFailure(403, "PERMISSION_DENIED", "Ten klient nie może rejestrować uprawnień wskazanego produktu");
+      }
+      const userAgent = request.headers["user-agent"];
+      try {
+        const summary = await registerPermissions({
+          db,
+          product: { id: product.id, key: product.key },
+          manifest: request.body,
+          actor: {
+            type: "PRODUCT",
+            requestId: request.id,
+            ipAddress: request.ip || null,
+            userAgent: typeof userAgent === "string" && userAgent.length > 0 ? userAgent : null,
+          },
+        });
+        return send(request, summary);
+      } catch (error) {
+        if (error instanceof ManifestValidationError) {
+          throw new ApiFailure(422, "VALIDATION_FAILED", error.message, error.details);
+        }
+        throw error;
+      }
     },
   });
 
