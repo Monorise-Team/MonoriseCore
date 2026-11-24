@@ -269,6 +269,7 @@ export type AccountWhereInput = {
   ownedOrganization?: Prisma.XOR<Prisma.OrganizationNullableScalarRelationFilter, Prisma.OrganizationWhereInput> | null
   employee?: Prisma.XOR<Prisma.EmployeeScalarRelationFilter, Prisma.EmployeeWhereInput>
   roleAssignments?: Prisma.RoleAssignmentListRelationFilter
+  appAccesses?: Prisma.AppAccessListRelationFilter
 }
 
 export type AccountOrderByWithRelationInput = {
@@ -288,6 +289,7 @@ export type AccountOrderByWithRelationInput = {
   ownedOrganization?: Prisma.OrganizationOrderByWithRelationInput
   employee?: Prisma.EmployeeOrderByWithRelationInput
   roleAssignments?: Prisma.RoleAssignmentOrderByRelationAggregateInput
+  appAccesses?: Prisma.AppAccessOrderByRelationAggregateInput
 }
 
 export type AccountWhereUniqueInput = Prisma.AtLeast<{
@@ -311,6 +313,7 @@ export type AccountWhereUniqueInput = Prisma.AtLeast<{
   ownedOrganization?: Prisma.XOR<Prisma.OrganizationNullableScalarRelationFilter, Prisma.OrganizationWhereInput> | null
   employee?: Prisma.XOR<Prisma.EmployeeScalarRelationFilter, Prisma.EmployeeWhereInput>
   roleAssignments?: Prisma.RoleAssignmentListRelationFilter
+  appAccesses?: Prisma.AppAccessListRelationFilter
 }, "id" | "employeeId" | "normalizedEmail" | "organizationId_id">
 
 export type AccountOrderByWithAggregationInput = {
@@ -363,6 +366,7 @@ export type AccountCreateInput = {
   ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateInput = {
@@ -379,6 +383,7 @@ export type AccountUncheckedCreateInput = {
   deactivatedAt?: Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUpdateInput = {
@@ -395,6 +400,7 @@ export type AccountUpdateInput = {
   ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateInput = {
@@ -411,6 +417,7 @@ export type AccountUncheckedUpdateInput = {
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateManyInput = {
@@ -675,6 +682,20 @@ export type AccountUpdateOneRequiredWithoutRoleAssignmentsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AccountUpdateToOneWithWhereWithoutRoleAssignmentsInput, Prisma.AccountUpdateWithoutRoleAssignmentsInput>, Prisma.AccountUncheckedUpdateWithoutRoleAssignmentsInput>
 }
 
+export type AccountCreateNestedOneWithoutAppAccessesInput = {
+  create?: Prisma.XOR<Prisma.AccountCreateWithoutAppAccessesInput, Prisma.AccountUncheckedCreateWithoutAppAccessesInput>
+  connectOrCreate?: Prisma.AccountCreateOrConnectWithoutAppAccessesInput
+  connect?: Prisma.AccountWhereUniqueInput
+}
+
+export type AccountUpdateOneRequiredWithoutAppAccessesNestedInput = {
+  create?: Prisma.XOR<Prisma.AccountCreateWithoutAppAccessesInput, Prisma.AccountUncheckedCreateWithoutAppAccessesInput>
+  connectOrCreate?: Prisma.AccountCreateOrConnectWithoutAppAccessesInput
+  upsert?: Prisma.AccountUpsertWithoutAppAccessesInput
+  connect?: Prisma.AccountWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AccountUpdateToOneWithWhereWithoutAppAccessesInput, Prisma.AccountUpdateWithoutAppAccessesInput>, Prisma.AccountUncheckedUpdateWithoutAppAccessesInput>
+}
+
 export type AccountCreateWithoutAuthUserInput = {
   email: string
   normalizedEmail: string
@@ -688,6 +709,7 @@ export type AccountCreateWithoutAuthUserInput = {
   ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutAuthUserInput = {
@@ -703,6 +725,7 @@ export type AccountUncheckedCreateWithoutAuthUserInput = {
   deactivatedAt?: Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutAuthUserInput = {
@@ -734,6 +757,7 @@ export type AccountUpdateWithoutAuthUserInput = {
   ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutAuthUserInput = {
@@ -749,6 +773,7 @@ export type AccountUncheckedUpdateWithoutAuthUserInput = {
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutOwnedOrganizationInput = {
@@ -764,6 +789,7 @@ export type AccountCreateWithoutOwnedOrganizationInput = {
   organization: Prisma.OrganizationCreateNestedOneWithoutAccountsInput
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutOwnedOrganizationInput = {
@@ -779,6 +805,7 @@ export type AccountUncheckedCreateWithoutOwnedOrganizationInput = {
   updatedAt?: Date | string
   deactivatedAt?: Date | string | null
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutOwnedOrganizationInput = {
@@ -799,6 +826,7 @@ export type AccountCreateWithoutOrganizationInput = {
   ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutOrganizationInput = {
@@ -814,6 +842,7 @@ export type AccountUncheckedCreateWithoutOrganizationInput = {
   deactivatedAt?: Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutOrganizationInput = {
@@ -850,6 +879,7 @@ export type AccountUpdateWithoutOwnedOrganizationInput = {
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutAccountsNestedInput
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutOwnedOrganizationInput = {
@@ -865,6 +895,7 @@ export type AccountUncheckedUpdateWithoutOwnedOrganizationInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUpsertWithWhereUniqueWithoutOrganizationInput = {
@@ -913,6 +944,7 @@ export type AccountCreateWithoutEmployeeInput = {
   organization: Prisma.OrganizationCreateNestedOneWithoutAccountsInput
   ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutEmployeeInput = {
@@ -928,6 +960,7 @@ export type AccountUncheckedCreateWithoutEmployeeInput = {
   deactivatedAt?: Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutEmployeeInput = {
@@ -959,6 +992,7 @@ export type AccountUpdateWithoutEmployeeInput = {
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutAccountsNestedInput
   ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutEmployeeInput = {
@@ -974,6 +1008,7 @@ export type AccountUncheckedUpdateWithoutEmployeeInput = {
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutRoleAssignmentsInput = {
@@ -989,6 +1024,7 @@ export type AccountCreateWithoutRoleAssignmentsInput = {
   organization: Prisma.OrganizationCreateNestedOneWithoutAccountsInput
   ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutRoleAssignmentsInput = {
@@ -1004,6 +1040,7 @@ export type AccountUncheckedCreateWithoutRoleAssignmentsInput = {
   updatedAt?: Date | string
   deactivatedAt?: Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutRoleAssignmentsInput = {
@@ -1035,6 +1072,7 @@ export type AccountUpdateWithoutRoleAssignmentsInput = {
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutAccountsNestedInput
   ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutRoleAssignmentsInput = {
@@ -1050,6 +1088,87 @@ export type AccountUncheckedUpdateWithoutRoleAssignmentsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+}
+
+export type AccountCreateWithoutAppAccessesInput = {
+  email: string
+  normalizedEmail: string
+  status?: $Enums.AccountStatus
+  authzRevision?: number
+  lastLoginAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  deactivatedAt?: Date | string | null
+  authUser: Prisma.AuthUserCreateNestedOneWithoutAccountInput
+  organization: Prisma.OrganizationCreateNestedOneWithoutAccountsInput
+  ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
+  employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
+  roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+}
+
+export type AccountUncheckedCreateWithoutAppAccessesInput = {
+  id: string
+  organizationId: string
+  employeeId: string
+  email: string
+  normalizedEmail: string
+  status?: $Enums.AccountStatus
+  authzRevision?: number
+  lastLoginAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  deactivatedAt?: Date | string | null
+  ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+}
+
+export type AccountCreateOrConnectWithoutAppAccessesInput = {
+  where: Prisma.AccountWhereUniqueInput
+  create: Prisma.XOR<Prisma.AccountCreateWithoutAppAccessesInput, Prisma.AccountUncheckedCreateWithoutAppAccessesInput>
+}
+
+export type AccountUpsertWithoutAppAccessesInput = {
+  update: Prisma.XOR<Prisma.AccountUpdateWithoutAppAccessesInput, Prisma.AccountUncheckedUpdateWithoutAppAccessesInput>
+  create: Prisma.XOR<Prisma.AccountCreateWithoutAppAccessesInput, Prisma.AccountUncheckedCreateWithoutAppAccessesInput>
+  where?: Prisma.AccountWhereInput
+}
+
+export type AccountUpdateToOneWithWhereWithoutAppAccessesInput = {
+  where?: Prisma.AccountWhereInput
+  data: Prisma.XOR<Prisma.AccountUpdateWithoutAppAccessesInput, Prisma.AccountUncheckedUpdateWithoutAppAccessesInput>
+}
+
+export type AccountUpdateWithoutAppAccessesInput = {
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAccountStatusFieldUpdateOperationsInput | $Enums.AccountStatus
+  authzRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastLoginAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  authUser?: Prisma.AuthUserUpdateOneRequiredWithoutAccountNestedInput
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutAccountsNestedInput
+  ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
+  employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+}
+
+export type AccountUncheckedUpdateWithoutAppAccessesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  employeeId?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAccountStatusFieldUpdateOperationsInput | $Enums.AccountStatus
+  authzRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastLoginAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateManyOrganizationInput = {
@@ -1078,6 +1197,7 @@ export type AccountUpdateWithoutOrganizationInput = {
   ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutOrganizationInput = {
@@ -1093,6 +1213,7 @@ export type AccountUncheckedUpdateWithoutOrganizationInput = {
   deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateManyWithoutOrganizationInput = {
@@ -1115,10 +1236,12 @@ export type AccountUncheckedUpdateManyWithoutOrganizationInput = {
 
 export type AccountCountOutputType = {
   roleAssignments: number
+  appAccesses: number
 }
 
 export type AccountCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   roleAssignments?: boolean | AccountCountOutputTypeCountRoleAssignmentsArgs
+  appAccesses?: boolean | AccountCountOutputTypeCountAppAccessesArgs
 }
 
 /**
@@ -1136,6 +1259,13 @@ export type AccountCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Exte
  */
 export type AccountCountOutputTypeCountRoleAssignmentsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.RoleAssignmentWhereInput
+}
+
+/**
+ * AccountCountOutputType without action
+ */
+export type AccountCountOutputTypeCountAppAccessesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AppAccessWhereInput
 }
 
 
@@ -1156,6 +1286,7 @@ export type AccountSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   ownedOrganization?: boolean | Prisma.Account$ownedOrganizationArgs<ExtArgs>
   employee?: boolean | Prisma.EmployeeDefaultArgs<ExtArgs>
   roleAssignments?: boolean | Prisma.Account$roleAssignmentsArgs<ExtArgs>
+  appAccesses?: boolean | Prisma.Account$appAccessesArgs<ExtArgs>
   _count?: boolean | Prisma.AccountCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["account"]>
 
@@ -1214,6 +1345,7 @@ export type AccountInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs
   ownedOrganization?: boolean | Prisma.Account$ownedOrganizationArgs<ExtArgs>
   employee?: boolean | Prisma.EmployeeDefaultArgs<ExtArgs>
   roleAssignments?: boolean | Prisma.Account$roleAssignmentsArgs<ExtArgs>
+  appAccesses?: boolean | Prisma.Account$appAccessesArgs<ExtArgs>
   _count?: boolean | Prisma.AccountCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AccountIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1235,6 +1367,7 @@ export type $AccountPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     ownedOrganization: Prisma.$OrganizationPayload<ExtArgs> | null
     employee: Prisma.$EmployeePayload<ExtArgs>
     roleAssignments: Prisma.$RoleAssignmentPayload<ExtArgs>[]
+    appAccesses: Prisma.$AppAccessPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1647,6 +1780,7 @@ export interface Prisma__AccountClient<T, Null = never, ExtArgs extends runtime.
   ownedOrganization<T extends Prisma.Account$ownedOrganizationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$ownedOrganizationArgs<ExtArgs>>): Prisma.Prisma__OrganizationClient<runtime.Types.Result.GetResult<Prisma.$OrganizationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   employee<T extends Prisma.EmployeeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EmployeeDefaultArgs<ExtArgs>>): Prisma.Prisma__EmployeeClient<runtime.Types.Result.GetResult<Prisma.$EmployeePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   roleAssignments<T extends Prisma.Account$roleAssignmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$roleAssignmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RoleAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  appAccesses<T extends Prisma.Account$appAccessesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$appAccessesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AppAccessPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2128,6 +2262,30 @@ export type Account$roleAssignmentsArgs<ExtArgs extends runtime.Types.Extensions
   take?: number
   skip?: number
   distinct?: Prisma.RoleAssignmentScalarFieldEnum | Prisma.RoleAssignmentScalarFieldEnum[]
+}
+
+/**
+ * Account.appAccesses
+ */
+export type Account$appAccessesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AppAccess
+   */
+  select?: Prisma.AppAccessSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AppAccess
+   */
+  omit?: Prisma.AppAccessOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AppAccessInclude<ExtArgs> | null
+  where?: Prisma.AppAccessWhereInput
+  orderBy?: Prisma.AppAccessOrderByWithRelationInput | Prisma.AppAccessOrderByWithRelationInput[]
+  cursor?: Prisma.AppAccessWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AppAccessScalarFieldEnum | Prisma.AppAccessScalarFieldEnum[]
 }
 
 /**

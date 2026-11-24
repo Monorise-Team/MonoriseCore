@@ -106,3 +106,39 @@ export const AuditActorType = {
 } as const
 
 export type AuditActorType = (typeof AuditActorType)[keyof typeof AuditActorType]
+
+
+export const EntitlementSourceType = {
+  CONTRACT: 'CONTRACT',
+  SUBSCRIPTION: 'SUBSCRIPTION',
+  TRIAL: 'TRIAL',
+  MANUAL: 'MANUAL',
+  OFFER: 'OFFER',
+  PACKAGE: 'PACKAGE'
+} as const
+
+export type EntitlementSourceType = (typeof EntitlementSourceType)[keyof typeof EntitlementSourceType]
+
+
+export const EntitlementStatus = {
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ENDED: 'ENDED'
+} as const
+
+export type EntitlementStatus = (typeof EntitlementStatus)[keyof typeof EntitlementStatus]
+
+
+export const EntitlementSuspendedReason = {
+  OVERDUE: 'OVERDUE'
+} as const
+
+export type EntitlementSuspendedReason = (typeof EntitlementSuspendedReason)[keyof typeof EntitlementSuspendedReason]
+
+
+export const AppAccessStatus = {
+  ACTIVE: 'ACTIVE',
+  REVOKED: 'REVOKED'
+} as const
+
+export type AppAccessStatus = (typeof AppAccessStatus)[keyof typeof AppAccessStatus]

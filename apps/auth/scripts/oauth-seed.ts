@@ -8,9 +8,8 @@
  * Adresy produktów można zmienić zmiennymi środowiskowymi (domyślnie lokalne *.localhost).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
 import { db } from "../src/server/db";
-import { ensureFirstPartyClients, PRODUCT_SCOPES } from "../src/server/oauth-clients";
+import { ensureFirstPartyClients, PRODUCT_MACHINE_SCOPES, PRODUCT_SCOPES } from "../src/server/oauth-clients";
 
 const env = (name: string, fallback: string) => process.env[name] ?? fallback;
 const AVEN_API = env("CORE_AVENMAIL_API_URL", "http://aven.localhost:3000");
@@ -25,7 +24,7 @@ const secrets = await ensureFirstPartyClients({
   resources: [
     { identifier: AVEN_API, name: "AvenMail API" },
     { identifier: TIME_API, name: "TimoTime API" },
-    { identifier: CORE_API, name: "Core API", allowedScopes: [...PRODUCT_SCOPES, PERMISSIONS_REGISTER_SCOPE] },
+    { identifier: CORE_API, name: "Core API", allowedScopes: [...PRODUCT_SCOPES, ...PRODUCT_MACHINE_SCOPES] },
   ],
   clients: [
     {
@@ -34,7 +33,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${AVEN_WEB}/api/auth/callback`],
       confidential: true,
       resources: [AVEN_API, CORE_API],
-      clientCredentialsScopes: [PERMISSIONS_REGISTER_SCOPE],
+      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
     },
     {
       clientId: "avenmail-desktop",
@@ -57,7 +56,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${TIME_WEB}/api/auth/callback`],
       confidential: true,
       resources: [TIME_API, CORE_API],
-      clientCredentialsScopes: [PERMISSIONS_REGISTER_SCOPE],
+      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
     },
     {
       clientId: "timotime-mobile",

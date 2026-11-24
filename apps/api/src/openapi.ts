@@ -9,16 +9,27 @@ import {
   apiListSuccessSchema,
   ApiMeta,
   apiSuccessSchema,
+  AppAccess,
+  AppAccessStatus,
   CopyRole,
+  CreateAppAccess,
   CreateEmployee,
   CreateRole,
   CreateRoleAssignment,
   CreateRoleFromScratch,
   CreateUnit,
+  DIRECTORY_READ_SCOPE,
+  DirectoryEmployee,
+  DirectoryUnitMember,
   DomainStatus,
   Employee,
   EmployeeStatus,
+  Entitlement,
+  EntitlementSourceType,
+  EntitlementStatus,
+  EntitlementSuspendedReason,
   ErrorCode,
+  GrantScope,
   Health,
   Me,
   Organization,
@@ -26,8 +37,11 @@ import {
   OrganizationOwner,
   OrganizationStatus,
   Permission,
+  PermissionGrant,
   PermissionManifestEntry,
+  PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
+  PermissionSnapshot,
   ProductKey,
   PutUnitMember,
   RegisterPermissionsResult,
@@ -37,6 +51,7 @@ import {
   RoleTemplateKey,
   RoleTemplateManifestEntry,
   ScopeType,
+  SnapshotUnit,
   TransferOrganizationOwner,
   Unit,
   UnitMember,
@@ -217,6 +232,19 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("ScopeType", ScopeType);
   register("RoleAssignment", RoleAssignment);
   register("CreateRoleAssignment", CreateRoleAssignment);
+  register("EntitlementSourceType", EntitlementSourceType);
+  register("EntitlementStatus", EntitlementStatus);
+  register("EntitlementSuspendedReason", EntitlementSuspendedReason);
+  register("Entitlement", Entitlement);
+  register("AppAccessStatus", AppAccessStatus);
+  register("AppAccess", AppAccess);
+  register("CreateAppAccess", CreateAppAccess);
+  register("GrantScope", GrantScope);
+  register("PermissionGrant", PermissionGrant);
+  register("SnapshotUnit", SnapshotUnit);
+  register("PermissionSnapshot", PermissionSnapshot);
+  register("DirectoryUnitMember", DirectoryUnitMember);
+  register("DirectoryEmployee", DirectoryEmployee);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -427,6 +455,8 @@ export function buildOpenApiDocument(): OpenApiSpec {
               tokenUrl: "https://auth.monorise.studio/api/auth/oauth2/token",
               scopes: {
                 [PERMISSIONS_REGISTER_SCOPE]: "Rejestracja manifestu uprawnień i gotowych ról produktu w Core.",
+                [PERMISSIONS_READ_SCOPE]: "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
+                [DIRECTORY_READ_SCOPE]: "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu.",
               },
             },
           },

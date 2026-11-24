@@ -1,10 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
-import { AccessTokenClaims, MachineTokenClaims, PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
+import {
+  AccessTokenClaims,
+  DIRECTORY_READ_SCOPE,
+  MachineTokenClaims,
+  PERMISSIONS_READ_SCOPE,
+  PERMISSIONS_REGISTER_SCOPE,
+} from "@core/contracts";
 import { withOrganization } from "@core/db";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth } from "@/server/auth";
-import { ensureFirstPartyClients, PRODUCT_SCOPES } from "@/server/oauth-clients";
+import { ensureFirstPartyClients, PRODUCT_MACHINE_SCOPES, PRODUCT_SCOPES } from "@/server/oauth-clients";
 import { db } from "@/server/db";
 import { sentMails } from "@/server/mail";
 import { signUpOrganization } from "@/server/signup";
@@ -311,7 +317,7 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
         {
           identifier: coreResource,
           name: "Core API (test)",
-          allowedScopes: [...PRODUCT_SCOPES, PERMISSIONS_REGISTER_SCOPE],
+          allowedScopes: [...PRODUCT_SCOPES, ...PRODUCT_MACHINE_SCOPES],
         },
       ],
       clients: [
@@ -321,7 +327,7 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
           redirectUris: [REDIRECT],
           confidential: true,
           resources: [RESOURCE, coreResource],
-          clientCredentialsScopes: [PERMISSIONS_REGISTER_SCOPE],
+          clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
         },
         {
           clientId: publicClientId,
@@ -373,6 +379,30 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       expect(MachineTokenClaims.parse(payload).client_id).toBe(m2mClientId);
       expect(AccessTokenClaims.safeParse(payload).success).toBe(false);
 
+      // 1b. Poufny klient może też pobrać token maszynowy z zakresami core:permissions.read i core:directory.read
+      for (const readScope of [PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
+        const issuedRead = await call("/api/auth/oauth2/token", {
+          method: "POST",
+          form: {
+            grant_type: "client_credentials",
+            client_id: m2mClientId,
+            client_secret: m2mSecret,
+            scope: readScope,
+            resource: coreResource,
+          },
+        });
+        expect(issuedRead.status).toBe(200);
+        const readTokenBody = (await issuedRead.json()) as { access_token: string; scope: string };
+        expect(readTokenBody.scope).toBe(readScope);
+        const { payload: readPayload } = await jwtVerify(readTokenBody.access_token, jwks, {
+          audience: coreResource,
+          issuer: BASE,
+          algorithms: ["EdDSA"],
+        });
+        expect(MachineTokenClaims.parse(readPayload).scope).toBe(readScope);
+        expect(readPayload.org_id).toBeUndefined();
+      }
+
       // 2. Dla zasobu produktu (bez core:permissions.register w allowedScopes) token maszynowy nie jest wydawany
       const wrongResource = await call("/api/auth/oauth2/token", {
         method: "POST",
@@ -411,23 +441,25 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       });
       expect(publicDenied.status).toBe(400);
 
-      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o core:permissions.register
+      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o zakresy maszynowe (permissions.* ani directory.read)
       const challenge = base64url(createHash("sha256").update("weryfikator-user-scope-test-0123456789abcdef").digest());
-      const authorize = new URLSearchParams({
-        response_type: "code",
-        client_id: m2mClientId,
-        redirect_uri: REDIRECT,
-        scope: `openid ${PERMISSIONS_REGISTER_SCOPE}`,
-        state: "stan-m2m-scope",
-        code_challenge: challenge,
-        code_challenge_method: "S256",
-        resource: coreResource,
-      });
-      const deniedAuthorize = await call(`/api/auth/oauth2/authorize?${authorize}`);
-      expect(deniedAuthorize.status).toBe(302);
-      const location = new URL(deniedAuthorize.headers.get("location")!, BASE);
-      expect(location.pathname).not.toBe("/sign-in");
-      expect(location.searchParams.get("error")).toBe("invalid_scope");
+      for (const machineScope of [PERMISSIONS_REGISTER_SCOPE, PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
+        const authorize = new URLSearchParams({
+          response_type: "code",
+          client_id: m2mClientId,
+          redirect_uri: REDIRECT,
+          scope: `openid ${machineScope}`,
+          state: "stan-m2m-scope",
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          resource: coreResource,
+        });
+        const deniedAuthorize = await call(`/api/auth/oauth2/authorize?${authorize}`);
+        expect(deniedAuthorize.status).toBe(302);
+        const location = new URL(deniedAuthorize.headers.get("location")!, BASE);
+        expect(location.pathname).not.toBe("/sign-in");
+        expect(location.searchParams.get("error")).toBe("invalid_scope");
+      }
     } finally {
       await db.authOAuthClient.deleteMany({ where: { clientId: { in: [m2mClientId, publicClientId] } } });
       await db.authOAuthResource.deleteMany({ where: { identifier: coreResource } });

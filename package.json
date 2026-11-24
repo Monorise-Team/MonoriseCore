@@ -26,7 +26,9 @@
     "setup:env": "node scripts/setup-env.mjs",
     "shared:update": "node scripts/shared.mjs update",
     "prepare": "husky",
-    "oauth:seed": "pnpm --filter @core/auth oauth:seed"
+    "oauth:seed": "pnpm --filter @core/auth oauth:seed",
+    "entitlement:grant": "pnpm --filter @core/api entitlement:grant",
+    "entitlement:end": "pnpm --filter @core/api entitlement:end"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

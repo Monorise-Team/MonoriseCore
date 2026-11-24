@@ -41,7 +41,7 @@ Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `ap
 | `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback`                                          |
 | `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go) |
 
-Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) wyłącznie z zakresem `core:permissions.register` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tego zakresu.
+Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) z zakresami `core:permissions.register`, `core:permissions.read` oraz `core:directory.read` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tych zakresów.
 
 ## Struktura firmy i Owner (etap 1 dziedziny Core)
 
@@ -54,7 +54,47 @@ Dostępne endpointy Core API (`/core/v1`):
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
-Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza filtrowaniem widoczności przypisań) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
+Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`, `/entitlements`, `/app-access`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza filtrowaniem widoczności przypisań i dostępu do aplikacji) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
+
+## Dostęp do aplikacji, migawka uprawnień dla produktów i zdarzenia (etap 3 dziedziny Core)
+
+Dostęp pracownika do produktu działa dwustopniowo (ADR-0035, ADR-0051, ADR-0052):
+
+- **Dostęp firmy do produktu (`Entitlement`)**: tabela `entitlements` (ścisła izolacja odczytu RLS: firma czyta wyłącznie własne wpisy przez `GET /core/v1/entitlements`, a bez kontekstu firmy `core_app` nie widzi żadnych wierszy; zapis wymaga kontekstu firmy i transakcyjnej flagi operatora Core). Aktywny dostęp oznacza `status = ACTIVE` oraz `startsAt <= teraz` i brak albo przyszłe `endsAt`. Do czasu powstania MonoriseAdmin dostępy przyznaje i kończy CLI Core (audyt z aktorem `SYSTEM` i `metadata.source = "cli"`):
+
+```bash
+pnpm entitlement:grant -- --organization acme.com --product timotime --ends-at 2027-12-31T23:59:59Z
+pnpm entitlement:end   -- --organization acme.com --product timotime
+```
+
+- **Włączanie aplikacji pracownikowi (`AppAccess`)**: Owner firmy ma domyślny dostęp do każdego produktu, do którego firma ma aktywny `Entitlement` (bez wpisu `AppAccess`). Pozostałym aktywnym kontom aplikacje włącza Owner albo konto z uprawnieniem `core.app_access.manage` (dodanym do `CORE_PERMISSIONS` i szablonu `core.company_admin`) w zakresie jednostek pracownika (pracownik bez jednostek wymaga zakresu `ORGANIZATION`). Cofnięcie (`DELETE /core/v1/app-access/{appAccessId}`) oznacza wiersz jako `REVOKED` (historia), a ponowne włączenie tworzy nowy wiersz `ACTIVE`.
+  - `GET /core/v1/entitlements` — stronicowana lista dostępów firmy do produktów (dla każdego aktywnego konta),
+  - `GET /core/v1/app-access` (`?accountId=`, `?product=`, `?includeRevoked=`) — Owner i konta z `core.app_access.manage` widzą wszystkie wpisy firmy, pozostali tylko własne,
+  - `POST /core/v1/app-access` (`{ accountId, product }`) — włącza aplikację aktywnemu kontu (`409` przy braku aktywnego `Entitlement`, nieaktywnym koncie lub duplikacie),
+  - `DELETE /core/v1/app-access/{appAccessId}` — wyłącza aplikację (`204`, ustawia `REVOKED`).
+- **Migawka uprawnień dla serwerów produktów (`GET /core/v1/products/{productKey}/permission-snapshot?organizationId=<uuid>&accountId=<uuid>`)**: endpoint maszynowy dla poufnego klienta produktu (`grant_type=client_credentials`, zakres `core:permissions.read`, zgodność `client_id` z `products.registrationClientId`). Zwraca obiekt zgodny z `permissionSnapshotSchema` z `@monorise-team/permissions`: `products` zawiera `[productKey]` wyłącznie gdy firma ma aktywny `Entitlement` i konto jest Ownerem albo ma aktywny `AppAccess` (dla kont `INVITED`/`DEACTIVATED` zwraca puste `products` i `grants`), `grants` zawiera wyłącznie nie-wycofane uprawnienia tego produktu z niezarchiwizowanych ról (nigdy `core.*`), a `units` pełne drzewo jednostek firmy (łącznie z `ARCHIVED`). Serwer produktu używa tego endpointu z `createPermissionCache`:
+
+```ts
+import { can, createPermissionCache } from "@monorise-team/permissions";
+
+const permissions = createPermissionCache({
+  load: async ({ organizationId, accountId }) => {
+    const token = await getCoreMachineToken("core:permissions.read");
+    const url = `${CORE_API_URL}/core/v1/products/timotime/permission-snapshot?organizationId=${organizationId}&accountId=${accountId}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    return (await res.json()).data;
+  },
+});
+
+const snapshot = await permissions.get({ organizationId, accountId, authzRevision });
+const allowed = can(snapshot, "timotime.entries.approve", { unitIds: [employeeUnitId] });
+```
+
+- **Katalog pracowników i jednostek dla serwerów produktów**: endpointy maszynowe wymagające tokenu `client_credentials` z zakresem `core:directory.read`, zgodności klienta produktu (`registrationClientId`) oraz aktywnego dostępu firmy (`Entitlement`, inaczej `403`, a dla nieznanej firmy `404`), działające przez RLS ze standardowym stronicowaniem kursorowym:
+  - `GET /core/v1/products/{productKey}/directory/unit-members?organizationId=<uuid>&unitId=<uuid>` (powtarzalny parametr `unitId`, maks. 100; brak = wszystkie jednostki) — zwraca `{ unitId, employeeId, accountId, role }`,
+  - `GET /core/v1/products/{productKey}/directory/employees?organizationId=<uuid>&employeeId=<uuid>` (powtarzalny parametr `employeeId`, maks. 100; brak = wszyscy pracownicy) — zwraca minimalne dane `{ id, accountId, firstName, lastName, status }` (bez służbowego e-maila i stanowiska).
+
+- **Zdarzenia outbox (`outbox_events`, ADR-0045)**: każde podbicie `accounts.authzRevision` (nadanie/odebranie roli, zmiana uprawnień roli firmowej, archiwizacja roli, przekazanie Ownera, włączenie/wyłączenie `AppAccess` oraz zmiana `Entitlement`) w tej samej transakcji zapisuje zdarzenie `organization.permissions.changed` (budowane przez `@monorise-team/events`) w tabeli `outbox_events` (`resourceType = "account"`, `resourceId = accountId`, `resourceVersion = authzRevision`, `publishedAt = null`). Na tym etapie nie ma jeszcze procesu wysyłkowego (relay) ani szyny zdarzeń — wiersze czekają w tabeli `outbox_events` do czasu wdrożenia transportu.
 
 ## Role, gotowe szablony, przypisania i przekazanie Ownera (etap 2b dziedziny Core)
 

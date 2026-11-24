@@ -3,10 +3,14 @@
  * Format odpowiedzi jak w standardzie API Monorise (ADR-0044): `{ data, meta, error }`.
  */
 import {
+  grantScopeSchema,
+  permissionGrantSchema,
   permissionKeySchema,
   permissionManifestEntrySchema,
   permissionManifestSchema,
+  permissionSnapshotSchema,
   productNameSchema,
+  snapshotUnitSchema,
 } from "@monorise-team/permissions";
 import { z } from "zod";
 
@@ -14,9 +18,12 @@ export { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, type CorePermissionKey } from ".
 
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
+export const PERMISSIONS_READ_SCOPE = "core:permissions.read";
+export const DIRECTORY_READ_SCOPE = "core:directory.read";
 export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
 export const MAX_ROLE_TEMPLATE_ENTRIES = 100;
 export const MAX_ROLE_PERMISSIONS = 200;
+export const MAX_DIRECTORY_FILTER_IDS = 100;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
@@ -482,6 +489,81 @@ export const CreateRoleAssignment = z
     }
   });
 export type CreateRoleAssignment = z.infer<typeof CreateRoleAssignment>;
+
+// ── Dostęp do produktów, aplikacji i migawka uprawnień (ADR-0035, ADR-0036, ADR-0051) ──────────
+
+export const EntitlementSourceType = z.enum(["CONTRACT", "SUBSCRIPTION", "TRIAL", "MANUAL", "OFFER", "PACKAGE"]);
+export type EntitlementSourceType = z.infer<typeof EntitlementSourceType>;
+
+export const EntitlementStatus = z.enum(["ACTIVE", "SUSPENDED", "ENDED"]);
+export type EntitlementStatus = z.infer<typeof EntitlementStatus>;
+
+export const EntitlementSuspendedReason = z.enum(["OVERDUE"]);
+export type EntitlementSuspendedReason = z.infer<typeof EntitlementSuspendedReason>;
+
+export const Entitlement = z.object({
+  id: z.uuid(),
+  product: ProductKey,
+  planId: z.uuid().nullable(),
+  sourceType: EntitlementSourceType,
+  status: EntitlementStatus,
+  isActive: z.boolean(),
+  startsAt: z.string(),
+  endsAt: z.string().nullable(),
+  suspendedReason: EntitlementSuspendedReason.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Entitlement = z.infer<typeof Entitlement>;
+
+export const AppAccessStatus = z.enum(["ACTIVE", "REVOKED"]);
+export type AppAccessStatus = z.infer<typeof AppAccessStatus>;
+
+export const AppAccess = z.object({
+  id: z.uuid(),
+  accountId: z.uuid(),
+  product: ProductKey,
+  status: AppAccessStatus,
+  grantedByAccountId: z.uuid(),
+  createdAt: z.string(),
+  revokedAt: z.string().nullable(),
+});
+export type AppAccess = z.infer<typeof AppAccess>;
+
+export const CreateAppAccess = z.object({
+  accountId: z.uuid(),
+  product: ProductKey,
+});
+export type CreateAppAccess = z.infer<typeof CreateAppAccess>;
+
+export const GrantScope = grantScopeSchema;
+export type GrantScope = z.infer<typeof GrantScope>;
+
+export const PermissionGrant = permissionGrantSchema;
+export type PermissionGrant = z.infer<typeof PermissionGrant>;
+
+export const SnapshotUnit = snapshotUnitSchema;
+export type SnapshotUnit = z.infer<typeof SnapshotUnit>;
+
+export const PermissionSnapshot = permissionSnapshotSchema;
+export type PermissionSnapshot = z.infer<typeof PermissionSnapshot>;
+
+export const DirectoryUnitMember = z.object({
+  unitId: z.uuid(),
+  employeeId: z.uuid(),
+  accountId: z.uuid().nullable(),
+  role: UnitMembershipRole,
+});
+export type DirectoryUnitMember = z.infer<typeof DirectoryUnitMember>;
+
+export const DirectoryEmployee = z.object({
+  id: z.uuid(),
+  accountId: z.uuid().nullable(),
+  firstName: z.string(),
+  lastName: z.string(),
+  status: EmployeeStatus,
+});
+export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

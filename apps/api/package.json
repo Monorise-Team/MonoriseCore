@@ -11,11 +11,14 @@
     "start": "node dist/index.js",
     "lint": "eslint --max-warnings=0 .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "entitlement:grant": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts grant",
+    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end"
   },
   "dependencies": {
     "@core/contracts": "workspace:*",
     "@core/db": "workspace:*",
+    "@monorise-team/events": "0.0.1-dev.6",
     "@monorise-team/permissions": "0.0.1-dev.6",
     "fastify": "^5.12.0",
     "jose": "^6.2.0",

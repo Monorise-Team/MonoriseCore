@@ -74,7 +74,10 @@ export const ModelName = {
   Role: 'Role',
   RolePermission: 'RolePermission',
   RoleAssignment: 'RoleAssignment',
-  AuditLog: 'AuditLog'
+  AuditLog: 'AuditLog',
+  Entitlement: 'Entitlement',
+  AppAccess: 'AppAccess',
+  OutboxEvent: 'OutboxEvent'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -483,6 +486,54 @@ export const AuditLogScalarFieldEnum = {
 } as const
 
 export type AuditLogScalarFieldEnum = (typeof AuditLogScalarFieldEnum)[keyof typeof AuditLogScalarFieldEnum]
+
+
+export const EntitlementScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  productId: 'productId',
+  planId: 'planId',
+  sourceType: 'sourceType',
+  sourceId: 'sourceId',
+  status: 'status',
+  startsAt: 'startsAt',
+  endsAt: 'endsAt',
+  suspendedReason: 'suspendedReason',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type EntitlementScalarFieldEnum = (typeof EntitlementScalarFieldEnum)[keyof typeof EntitlementScalarFieldEnum]
+
+
+export const AppAccessScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  productId: 'productId',
+  status: 'status',
+  grantedByAccountId: 'grantedByAccountId',
+  createdAt: 'createdAt',
+  revokedAt: 'revokedAt'
+} as const
+
+export type AppAccessScalarFieldEnum = (typeof AppAccessScalarFieldEnum)[keyof typeof AppAccessScalarFieldEnum]
+
+
+export const OutboxEventScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  type: 'type',
+  version: 'version',
+  resourceType: 'resourceType',
+  resourceId: 'resourceId',
+  resourceVersion: 'resourceVersion',
+  payload: 'payload',
+  occurredAt: 'occurredAt',
+  publishedAt: 'publishedAt'
+} as const
+
+export type OutboxEventScalarFieldEnum = (typeof OutboxEventScalarFieldEnum)[keyof typeof OutboxEventScalarFieldEnum]
 
 
 export const SortOrder = {
