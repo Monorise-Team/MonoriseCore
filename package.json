@@ -18,7 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:versions": "node scripts/check-versions.mjs",
-    "check": "pnpm format:check && pnpm check:versions && turbo run lint typecheck test build",
+    "openapi": "pnpm --filter @core/contracts build && pnpm --filter @core/api exec tsx src/openapi-cli.ts",
+    "openapi:check": "pnpm --filter @core/contracts build && pnpm --filter @core/api exec tsx src/openapi-cli.ts --check",
+    "check": "pnpm format:check && pnpm check:versions && pnpm openapi:check && pnpm exec redocly lint openapi/core-api.json && turbo run lint typecheck test build",
     "db:up": "docker compose up -d",
     "db:migrate": "pnpm --filter @core/db migrate:deploy && pnpm --filter @core/db migrate:deploy:test",
     "setup:env": "node scripts/setup-env.mjs",
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@monorise-team/config": "0.0.1-dev.1",
+    "@redocly/cli": "2.76.0",
     "eslint": "^10.15.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.1",

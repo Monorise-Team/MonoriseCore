@@ -1,0 +1,14 @@
+extends:
+  - recommended
+
+apis:
+  core:
+    root: ./openapi/core-api.json
+
+rules:
+  # Publiczne endpointy (/v1/health, /v1/openapi.json) celowo nie mają pola security; test openapi.test.ts pilnuje chronionych tras.
+  security-defined: off
+  # Środowisko lokalne (http://localhost:3200) jest częścią dokumentu obok produkcji.
+  no-server-example.com: off
+  # Publiczne GET bez parametrów i uwierzytelniania (/v1/health, /v1/openapi.json) nie zwracają odpowiedzi 4xx.
+  operation-4xx-response: off
