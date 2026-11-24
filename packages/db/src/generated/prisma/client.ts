@@ -122,6 +122,12 @@ export type Employee = Prisma.EmployeeModel
  */
 export type Account = Prisma.AccountModel
 /**
+ * Model Invitation
+ * Zaproszenie pracownika do aktywacji konta INVITED (ADR-0021).
+ * Co najwyżej jedno zaproszenie PENDING na konto (częściowy indeks unikalny w migracji).
+ */
+export type Invitation = Prisma.InvitationModel
+/**
  * Model OrganizationUnit
  * Jednostka organizacyjna w pojedynczym drzewie firmy (ADR-0032). Brak parentId oznacza poziom firmy.
  */

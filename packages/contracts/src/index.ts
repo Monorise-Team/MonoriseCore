@@ -24,6 +24,8 @@ export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
 export const MAX_ROLE_TEMPLATE_ENTRIES = 100;
 export const MAX_ROLE_PERMISSIONS = 200;
 export const MAX_DIRECTORY_FILTER_IDS = 100;
+export const INVITATION_TTL_DAYS = 7;
+export const INVITATION_TTL_MS = INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
@@ -564,6 +566,58 @@ export const DirectoryEmployee = z.object({
   status: EmployeeStatus,
 });
 export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
+
+// ── Zaproszenia pracowników (ADR-0021) ──────────────────────────────────────────────────────────
+
+export const InvitationStatus = z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]);
+export type InvitationStatus = z.infer<typeof InvitationStatus>;
+
+export const Invitation = z.object({
+  id: z.uuid(),
+  accountId: z.uuid(),
+  employeeId: z.uuid(),
+  email: z.string(),
+  status: InvitationStatus,
+  expiresAt: z.string(),
+  invitedByAccountId: z.uuid().nullable(),
+  acceptedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Invitation = z.infer<typeof Invitation>;
+
+export const CreateInvitation = z
+  .object({
+    email: z.email().max(254),
+    firstName: z.string().trim().min(1).max(80).optional(),
+    lastName: z.string().trim().min(1).max(80).optional(),
+    employeeId: z.uuid().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.employeeId) {
+      if (!data.firstName) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["firstName"],
+          message: "Imię jest wymagane, gdy nie podano employeeId",
+        });
+      }
+      if (!data.lastName) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["lastName"],
+          message: "Nazwisko jest wymagane, gdy nie podano employeeId",
+        });
+      }
+    }
+  });
+export type CreateInvitation = z.infer<typeof CreateInvitation>;
+
+export const AcceptInvitationRequest = z.object({
+  token: z.string().trim().min(1).max(256),
+  password: z.string().min(12).max(128),
+});
+export type AcceptInvitationRequest = z.infer<typeof AcceptInvitationRequest>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

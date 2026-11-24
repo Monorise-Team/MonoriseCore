@@ -312,6 +312,7 @@ model Organization {
   domains              OrganizationDomain[]
   employees            Employee[]
   accounts             Account[]              @relation("OrganizationAccounts")
+  invitations          Invitation[]
   units                OrganizationUnit[]
   unitMemberships      UnitMembership[]
   roles                Role[]
@@ -414,12 +415,47 @@ model Account {
   createdAt         DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
   deactivatedAt     DateTime?        @db.Timestamptz(3)
+  invitations       Invitation[]
   roleAssignments   RoleAssignment[]
   appAccesses       AppAccess[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
   @@map("accounts")
+  @@schema("public")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+
+  @@schema("public")
+}
+
+/// Zaproszenie pracownika do aktywacji konta INVITED (ADR-0021).
+/// Co najwyżej jedno zaproszenie PENDING na konto (częściowy indeks unikalny w migracji).
+model Invitation {
+  id                 String           @id @db.Uuid
+  organizationId     String           @db.Uuid
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId          String           @db.Uuid
+  account            Account          @relation(fields: [organizationId, accountId], references: [organizationId, id], onDelete: Cascade)
+  email              String           @db.Citext
+  normalizedEmail    String           @db.Citext
+  tokenHash          String           @unique
+  status             InvitationStatus @default(PENDING)
+  expiresAt          DateTime         @db.Timestamptz(3)
+  invitedByAccountId String?          @db.Uuid
+  acceptedAt         DateTime?        @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@index([organizationId, accountId])
+  @@index([organizationId, status])
+  @@map("invitations")
   @@schema("public")
 }
 

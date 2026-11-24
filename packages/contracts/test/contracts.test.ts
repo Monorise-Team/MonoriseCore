@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AcceptInvitationRequest,
   AccessTokenClaims,
   ApiErrorBody,
   ApiErrorResponse,
@@ -14,6 +15,7 @@ import {
   CopyRole,
   CreateAppAccess,
   CreateEmployee,
+  CreateInvitation,
   CreateRole,
   CreateRoleAssignment,
   CreateRoleFromScratch,
@@ -25,6 +27,10 @@ import {
   emailDomain,
   Entitlement,
   Health,
+  Invitation,
+  InvitationStatus,
+  INVITATION_TTL_DAYS,
+  INVITATION_TTL_MS,
   isFreeEmailDomain,
   MachineTokenClaims,
   MAX_PAGE_LIMIT,
@@ -497,5 +503,55 @@ describe("kontrakty", () => {
         status: "ACTIVE",
       }).accountId,
     ).toBeNull();
+  });
+
+  it("waliduje schematy zaproszeń pracowników i aktywacji konta", () => {
+    expect(INVITATION_TTL_DAYS).toBe(7);
+    expect(INVITATION_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(InvitationStatus.parse("PENDING")).toBe("PENDING");
+
+    expect(
+      CreateInvitation.parse({
+        email: "jan@acme.com",
+        firstName: " Jan ",
+        lastName: " Kowalski ",
+      }),
+    ).toEqual({
+      email: "jan@acme.com",
+      firstName: "Jan",
+      lastName: "Kowalski",
+    });
+
+    expect(CreateInvitation.parse({ email: "jan@acme.com", employeeId: UUID_1 })).toEqual({
+      email: "jan@acme.com",
+      employeeId: UUID_1,
+    });
+
+    expect(CreateInvitation.safeParse({ email: "jan@acme.com" }).success).toBe(false);
+    expect(CreateInvitation.safeParse({ email: "jan@acme.com", firstName: "Jan" }).success).toBe(false);
+    expect(CreateInvitation.safeParse({ email: "jan@acme.com", lastName: "Kowalski" }).success).toBe(false);
+    expect(CreateInvitation.safeParse({ email: "nie-email", employeeId: UUID_1 }).success).toBe(false);
+
+    expect(
+      Invitation.parse({
+        id: UUID_1,
+        accountId: UUID_2,
+        employeeId: UUID_3,
+        email: "jan@acme.com",
+        status: "PENDING",
+        expiresAt: "2026-12-02T12:00:00.000Z",
+        invitedByAccountId: null,
+        acceptedAt: null,
+        createdAt: "2026-11-25T12:00:00.000Z",
+        updatedAt: "2026-11-25T12:00:00.000Z",
+      }).invitedByAccountId,
+    ).toBeNull();
+
+    expect(AcceptInvitationRequest.safeParse({ token: "abc", password: "za-krotkie" }).success).toBe(false);
+    expect(AcceptInvitationRequest.safeParse({ token: "", password: "dlugie-haslo-123" }).success).toBe(false);
+    expect(AcceptInvitationRequest.parse({ token: " token-123 ", password: "dlugie-haslo-123" })).toEqual({
+      token: "token-123",
+      password: "dlugie-haslo-123",
+    });
   });
 });

@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { accountClaims, createDb, domainOwner, uuidv7, withOrganization } from "../src/index.js";
+import {
+  accountClaims,
+  createDb,
+  domainOwner,
+  hashToken,
+  invitationByTokenHash,
+  uuidv7,
+  withOrganization,
+} from "../src/index.js";
 
 // Rola aplikacji (core_app): RLS obowiązuje ją zawsze. Lokalnie: pnpm db:up && pnpm db:migrate.
 const url =
@@ -1463,6 +1471,201 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
       ).rejects.toThrow(/outbox_events_resource_version_nonnegative|check constraint|violates/i);
     } finally {
       await ownerDb.outboxEvent.deleteMany({ where: { id: { in: [acmeEventId, globexEventId, platformEventId] } } });
+    }
+  });
+});
+
+describe("zaproszenia pracowników (RLS, jeden PENDING na konto i wyszukiwanie po skrócie tokenu)", () => {
+  it("izoluje zaproszenia między firmami, egzekwuje jeden PENDING na konto i ogranicza invitation_by_token_hash do samych id", async () => {
+    const acmeInvitedEmpId = uuidv7();
+    const acmeInvitedAccId = uuidv7();
+    const acmeInvitedEmail = `jan-${acmeInvitedAccId.slice(-6)}@${acme.domain}`;
+
+    const globexInvitedEmpId = uuidv7();
+    const globexInvitedAccId = uuidv7();
+    const globexInvitedEmail = `ewa-${globexInvitedAccId.slice(-6)}@${globex.domain}`;
+
+    const acmeInvId = uuidv7();
+    const acmeInv2Id = uuidv7();
+    const globexInvId = uuidv7();
+    const acmeTokenHash = hashToken(`acme-token-${acmeInvId}`);
+    const acmeToken2Hash = hashToken(`acme-token-2-${acmeInv2Id}`);
+    const globexTokenHash = hashToken(`globex-token-${globexInvId}`);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.authUser.create({
+      data: { id: acmeInvitedAccId, name: "Jan Acme", email: acmeInvitedEmail, emailVerified: false },
+    });
+    await db.authUser.create({
+      data: { id: globexInvitedAccId, name: "Ewa Globex", email: globexInvitedEmail, emailVerified: false },
+    });
+
+    try {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.employee.create({
+          data: { id: acmeInvitedEmpId, organizationId: acme.id, firstName: "Jan", lastName: "Acme" },
+        });
+        await tx.account.create({
+          data: {
+            id: acmeInvitedAccId,
+            organizationId: acme.id,
+            employeeId: acmeInvitedEmpId,
+            email: acmeInvitedEmail,
+            normalizedEmail: acmeInvitedEmail,
+            status: "INVITED",
+          },
+        });
+        await tx.invitation.create({
+          data: {
+            id: acmeInvId,
+            organizationId: acme.id,
+            accountId: acmeInvitedAccId,
+            email: acmeInvitedEmail,
+            normalizedEmail: acmeInvitedEmail,
+            tokenHash: acmeTokenHash,
+            status: "PENDING",
+            expiresAt,
+            invitedByAccountId: acme.accountId,
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.employee.create({
+          data: { id: globexInvitedEmpId, organizationId: globex.id, firstName: "Ewa", lastName: "Globex" },
+        });
+        await tx.account.create({
+          data: {
+            id: globexInvitedAccId,
+            organizationId: globex.id,
+            employeeId: globexInvitedEmpId,
+            email: globexInvitedEmail,
+            normalizedEmail: globexInvitedEmail,
+            status: "INVITED",
+          },
+        });
+        await tx.invitation.create({
+          data: {
+            id: globexInvId,
+            organizationId: globex.id,
+            accountId: globexInvitedAccId,
+            email: globexInvitedEmail,
+            normalizedEmail: globexInvitedEmail,
+            tokenHash: globexTokenHash,
+            status: "PENDING",
+            expiresAt,
+            invitedByAccountId: globex.accountId,
+          },
+        });
+      });
+
+      // Izolacja odczytu między firmami oraz brak widoczności bez kontekstu firmy
+      const acmeInvitations = await withOrganization(db, acme.id, (tx) => tx.invitation.findMany());
+      expect(acmeInvitations.map((i) => i.id)).toEqual([acmeInvId]);
+      expect(await db.invitation.findMany()).toEqual([]);
+
+      // Firma A nie zmieni zaproszenia firmy B ani nie utworzy zaproszenia dla cudzej firmy lub cudzego konta
+      const crossUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.invitation.updateMany({ where: { id: globexInvId }, data: { status: "REVOKED" } }),
+      );
+      expect(crossUpdate.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.invitation.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              accountId: globexInvitedAccId,
+              email: globexInvitedEmail,
+              normalizedEmail: globexInvitedEmail,
+              tokenHash: hashToken("cross-org"),
+              status: "PENDING",
+              expiresAt,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.invitation.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: globexInvitedAccId,
+              email: globexInvitedEmail,
+              normalizedEmail: globexInvitedEmail,
+              tokenHash: hashToken("cross-account-fk"),
+              status: "PENDING",
+              expiresAt,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/invitations_organizationId_accountId_fkey|foreign key|violates/i);
+
+      // core_app nie może usuwać zaproszeń
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.invitation.delete({ where: { id: acmeInvId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // Co najwyżej jedno zaproszenie PENDING na konto (częściowy indeks unikalny)
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.invitation.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acmeInvitedAccId,
+              email: acmeInvitedEmail,
+              normalizedEmail: acmeInvitedEmail,
+              tokenHash: hashToken("second-pending"),
+              status: "PENDING",
+              expiresAt,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/invitations_accountId_pending_key|unique|duplicate/i);
+
+      // CHECK spójności statusu i acceptedAt
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.invitation.update({ where: { id: acmeInvId }, data: { status: "ACCEPTED", acceptedAt: null } }),
+        ),
+      ).rejects.toThrow(/invitations_status_accepted_consistency|check constraint|violates/i);
+
+      // Po cofnięciu pierwszego zaproszenia można utworzyć nowe PENDING dla tego samego konta
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.invitation.update({ where: { id: acmeInvId }, data: { status: "REVOKED" } });
+        await tx.invitation.create({
+          data: {
+            id: acmeInv2Id,
+            organizationId: acme.id,
+            accountId: acmeInvitedAccId,
+            email: acmeInvitedEmail,
+            normalizedEmail: acmeInvitedEmail,
+            tokenHash: acmeToken2Hash,
+            status: "PENDING",
+            expiresAt,
+          },
+        });
+      });
+
+      // Funkcja SECURITY DEFINER zwraca wyłącznie (organizationId, invitationId) i null dla nieznanych skrótów
+      const found = await invitationByTokenHash(db, globexTokenHash);
+      expect(found).toEqual({ organizationId: globex.id, invitationId: globexInvId });
+      expect(Object.keys(found!).sort()).toEqual(["invitationId", "organizationId"]);
+      expect(await invitationByTokenHash(db, hashToken("nieznany-token"))).toBeNull();
+    } finally {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.account.deleteMany({ where: { id: acmeInvitedAccId } });
+        await tx.employee.deleteMany({ where: { id: acmeInvitedEmpId } });
+      });
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.account.deleteMany({ where: { id: globexInvitedAccId } });
+        await tx.employee.deleteMany({ where: { id: globexInvitedEmpId } });
+      });
+      await db.authUser.deleteMany({ where: { id: { in: [acmeInvitedAccId, globexInvitedAccId] } } });
     }
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "./generated/prisma/client.js";
 import type { AccountStatus, DomainStatus, OrganizationStatus } from "./generated/prisma/enums.js";
@@ -6,6 +7,11 @@ export * from "./generated/prisma/enums.js";
 export { Prisma, PrismaClient } from "./generated/prisma/client.js";
 export type * from "./generated/prisma/models.js";
 export { uuidv7 } from "./ids.js";
+
+/** Skrót SHA-256 (hex) tokenu (np. weryfikacji domeny lub zaproszenia), przechowywany w bazie zamiast samego tokenu. */
+export function hashToken(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 /** Klient transakcji: to samo API co PrismaClient, bez metod sterujących połączeniem. */
 export type Tx = Prisma.TransactionClient;
@@ -74,4 +80,15 @@ export async function domainOwner(
     SELECT * FROM public.domain_owner(${domain}::citext)`;
   const row = rows[0];
   return row ? { organizationId: row.organization_id, status: row.domain_status } : null;
+}
+
+/** Wyszukiwanie firmy i zaproszenia po skrócie tokenu z linku aktywacyjnego (ADR-0021). */
+export async function invitationByTokenHash(
+  db: PrismaClient | Tx,
+  tokenHash: string,
+): Promise<{ organizationId: string; invitationId: string } | null> {
+  const rows = await db.$queryRaw<{ organization_id: string; invitation_id: string }[]>`
+    SELECT * FROM public.invitation_by_token_hash(${tokenHash}::text)`;
+  const row = rows[0];
+  return row ? { organizationId: row.organization_id, invitationId: row.invitation_id } : null;
 }
