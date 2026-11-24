@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { AccessTokenClaims, emailDomain, isFreeEmailDomain, normalizeEmail, SignUpRequest } from "../src/index.js";
+import {
+  AccessTokenClaims,
+  ApiErrorBody,
+  ApiErrorResponse,
+  ApiMeta,
+  apiErrorSchema,
+  apiSuccessSchema,
+  emailDomain,
+  Health,
+  isFreeEmailDomain,
+  normalizeEmail,
+  SignUpRequest,
+} from "../src/index.js";
 
 describe("adresy e-mail", () => {
   it("rozpoznaje domenę i normalizuje adres", () => {
@@ -34,5 +46,29 @@ describe("kontrakty", () => {
       exp: 2,
     });
     expect(claims.amr).toEqual([]);
+  });
+
+  it("waliduje kopertę sukcesu i błędu zgodnie ze standardem API", () => {
+    const okSchema = apiSuccessSchema(Health);
+    expect(okSchema.parse({ data: { status: "ok" }, meta: { requestId: "req_123" }, error: null })).toEqual({
+      data: { status: "ok" },
+      meta: { requestId: "req_123" },
+      error: null,
+    });
+    expect(okSchema.safeParse({ data: { status: "fail" }, meta: { requestId: "req_123" }, error: null }).success).toBe(
+      false,
+    );
+
+    const err = {
+      data: null,
+      meta: ApiMeta.parse({ requestId: "req_456" }),
+      error: ApiErrorBody.parse({
+        code: "UNAUTHENTICATED",
+        message: "Brak tokenu dostępu",
+        details: [],
+      }),
+    };
+    expect(ApiErrorResponse.parse(err)).toEqual(err);
+    expect(apiErrorSchema().safeParse({ ...err, error: { ...err.error, code: "UNKNOWN_CODE" } }).success).toBe(false);
   });
 });
