@@ -18,6 +18,9 @@ import {
   CreateRoleAssignment,
   CreateRoleFromScratch,
   CreateUnit,
+  DIRECTORY_READ_SCOPE,
+  DirectoryEmployee,
+  DirectoryUnitMember,
   DomainStatus,
   Employee,
   EmployeeStatus,
@@ -240,6 +243,8 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("PermissionGrant", PermissionGrant);
   register("SnapshotUnit", SnapshotUnit);
   register("PermissionSnapshot", PermissionSnapshot);
+  register("DirectoryUnitMember", DirectoryUnitMember);
+  register("DirectoryEmployee", DirectoryEmployee);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -451,6 +456,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
               scopes: {
                 [PERMISSIONS_REGISTER_SCOPE]: "Rejestracja manifestu uprawnień i gotowych ról produktu w Core.",
                 [PERMISSIONS_READ_SCOPE]: "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
+                [DIRECTORY_READ_SCOPE]: "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu.",
               },
             },
           },

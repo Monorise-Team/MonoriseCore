@@ -19,6 +19,9 @@ import {
   CreateRoleFromScratch,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
+  DIRECTORY_READ_SCOPE,
+  DirectoryEmployee,
+  DirectoryUnitMember,
   emailDomain,
   Entitlement,
   Health,
@@ -475,5 +478,24 @@ describe("kontrakty", () => {
         units: [{ id: UUID_3, parentId: null }],
       }).products,
     ).toEqual(["timotime"]);
+
+    expect(DIRECTORY_READ_SCOPE).toBe("core:directory.read");
+    expect(
+      DirectoryUnitMember.parse({
+        unitId: UUID_1,
+        employeeId: UUID_2,
+        accountId: UUID_3,
+        role: "LEADER",
+      }).accountId,
+    ).toBe(UUID_3);
+    expect(
+      DirectoryEmployee.parse({
+        id: UUID_1,
+        accountId: null,
+        firstName: "Anna",
+        lastName: "Nowak",
+        status: "ACTIVE",
+      }).accountId,
+    ).toBeNull();
   });
 });

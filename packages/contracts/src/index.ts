@@ -19,9 +19,11 @@ export { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, type CorePermissionKey } from ".
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const PERMISSIONS_READ_SCOPE = "core:permissions.read";
+export const DIRECTORY_READ_SCOPE = "core:directory.read";
 export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
 export const MAX_ROLE_TEMPLATE_ENTRIES = 100;
 export const MAX_ROLE_PERMISSIONS = 200;
+export const MAX_DIRECTORY_FILTER_IDS = 100;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
@@ -545,6 +547,23 @@ export type SnapshotUnit = z.infer<typeof SnapshotUnit>;
 
 export const PermissionSnapshot = permissionSnapshotSchema;
 export type PermissionSnapshot = z.infer<typeof PermissionSnapshot>;
+
+export const DirectoryUnitMember = z.object({
+  unitId: z.uuid(),
+  employeeId: z.uuid(),
+  accountId: z.uuid().nullable(),
+  role: UnitMembershipRole,
+});
+export type DirectoryUnitMember = z.infer<typeof DirectoryUnitMember>;
+
+export const DirectoryEmployee = z.object({
+  id: z.uuid(),
+  accountId: z.uuid().nullable(),
+  firstName: z.string(),
+  lastName: z.string(),
+  status: EmployeeStatus,
+});
+export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

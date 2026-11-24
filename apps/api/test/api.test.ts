@@ -1,6 +1,7 @@
 import {
   CORE_PERMISSIONS,
   CORE_ROLE_TEMPLATES,
+  DIRECTORY_READ_SCOPE,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
 } from "@core/contracts";
@@ -2127,6 +2128,242 @@ describe("Core API", () => {
       await ownerDb.role.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
       await ownerDb.auditLog.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
       await ownerDb.permission.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
+      await ownerDb.product.deleteMany({ where: { id: { in: [productId, otherProductId] } } });
+    }
+  });
+
+  it("udostępnia katalog jednostek i pracowników serwerom produktów z zakresem core:directory.read, Entitlementem i RLS", async () => {
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const company = await createCompany(`dir-${suffix}`);
+    const otherCompany = await createCompany(`dir-other-${suffix}`);
+    const jan = await createMember(company, "Jan", "Kierownik");
+    const piotr = await createMember(company, "Piotr", "Pracownik");
+
+    const productKey = `dirtimo${suffix}`;
+    const otherProductKey = `diraven${suffix}`;
+    const clientId = `${productKey}-web`;
+    const otherClientId = `${otherProductKey}-web`;
+    const productId = uuidv7();
+    const otherProductId = uuidv7();
+
+    await db.product.create({
+      data: { id: productId, key: productKey, name: "TimoTime Dir", registrationClientId: clientId },
+    });
+    await db.product.create({
+      data: { id: otherProductId, key: otherProductKey, name: "AvenMail Dir", registrationClientId: otherClientId },
+    });
+
+    try {
+      const ownerToken = await token(company);
+      const otherOwnerToken = await token(otherCompany);
+      const dirToken = await machineToken(clientId, DIRECTORY_READ_SCOPE);
+      const otherDirToken = await machineToken(otherClientId, DIRECTORY_READ_SCOPE);
+      const wrongScopeToken = await machineToken(clientId, PERMISSIONS_READ_SCOPE);
+
+      // Dodajemy pracownika bez konta (z workEmail i jobTitle, które nie mogą wyciec w directory/employees)
+      const noAccountEmp = (
+        await request("POST", "/core/v1/employees", ownerToken, {
+          firstName: "Marek",
+          lastName: "BezKonta",
+          workEmail: `marek@${company.domain}`,
+          jobTitle: "Magazynier",
+        })
+      ).json().data;
+
+      // Jednostki i członkostwa w firmie oraz w innej firmie
+      const krakow = (await request("POST", "/core/v1/units", ownerToken, { name: "Kraków", type: "BRANCH" })).json()
+        .data;
+      const warszawa = (
+        await request("POST", "/core/v1/units", ownerToken, { name: "Warszawa", type: "BRANCH" })
+      ).json().data;
+      const otherUnit = (
+        await request("POST", "/core/v1/units", otherOwnerToken, { name: "Obcy oddział", type: "BRANCH" })
+      ).json().data;
+
+      expect(
+        (await request("PUT", `/core/v1/units/${krakow.id}/members/${jan.employeeId}`, ownerToken, { role: "LEADER" }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PUT", `/core/v1/units/${krakow.id}/members/${noAccountEmp.id}`, ownerToken, {
+            role: "MEMBER",
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PUT", `/core/v1/units/${warszawa.id}/members/${piotr.employeeId}`, ownerToken, {
+            role: "MEMBER",
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PUT", `/core/v1/units/${otherUnit.id}/members/${otherCompany.employeeId}`, otherOwnerToken, {
+            role: "LEADER",
+          })
+        ).statusCode,
+      ).toBe(200);
+
+      // 1. Odmowy uwierzytelniania i uprawnień: user token -> 401, zły zakres -> 403, inny produkt -> 403, nieznana firma -> 404, brak Entitlement -> 403
+      for (const path of [
+        `/core/v1/products/${productKey}/directory/unit-members`,
+        `/core/v1/products/${productKey}/directory/employees`,
+      ]) {
+        expect((await get(`${path}?organizationId=${company.id}`, ownerToken)).statusCode).toBe(401);
+        expect((await get(`${path}?organizationId=${company.id}`, wrongScopeToken)).statusCode).toBe(403);
+        expect((await get(`${path}?organizationId=${company.id}`, otherDirToken)).statusCode).toBe(403);
+        expect((await get(`${path}?organizationId=${uuidv7()}`, dirToken)).statusCode).toBe(404);
+        expect((await get(`${path}?organizationId=${company.id}`, dirToken)).statusCode).toBe(403);
+      }
+
+      // 2. Przyznajemy firmie aktywny Entitlement
+      await grantEntitlement(db, { organization: company.id, product: productKey });
+
+      // 3. directory/unit-members: wszystkie jednostki, pojedynczy i powtarzalny unitId, stronicowanie, limit >100, izolacja RLS
+      const allMembersRes = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}`,
+        dirToken,
+      );
+      expect(allMembersRes.statusCode).toBe(200);
+      expect(allMembersRes.json().data).toHaveLength(3);
+      expect(allMembersRes.json().data).toEqual(
+        expect.arrayContaining([
+          { unitId: krakow.id, employeeId: jan.employeeId, accountId: jan.accountId, role: "LEADER" },
+          { unitId: krakow.id, employeeId: noAccountEmp.id, accountId: null, role: "MEMBER" },
+          { unitId: warszawa.id, employeeId: piotr.employeeId, accountId: piotr.accountId, role: "MEMBER" },
+        ]),
+      );
+
+      // Pojedynczy unitId
+      const krakowOnly = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&unitId=${krakow.id}`,
+        dirToken,
+      );
+      expect(krakowOnly.statusCode).toBe(200);
+      expect(krakowOnly.json().data).toHaveLength(2);
+      expect(krakowOnly.json().data.every((m: { unitId: string }) => m.unitId === krakow.id)).toBe(true);
+
+      // Powtarzalny unitId + obcy unitId z innej firmy (RLS odcina inne firmy)
+      const repeatedUnits = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&unitId=${krakow.id}&unitId=${warszawa.id}&unitId=${otherUnit.id}`,
+        dirToken,
+      );
+      expect(repeatedUnits.statusCode).toBe(200);
+      expect(repeatedUnits.json().data).toHaveLength(3);
+
+      const foreignUnitOnly = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&unitId=${otherUnit.id}`,
+        dirToken,
+      );
+      expect(foreignUnitOnly.statusCode).toBe(200);
+      expect(foreignUnitOnly.json().data).toEqual([]);
+
+      // Stronicowanie kursorowe
+      const membersPage1 = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&limit=2`,
+        dirToken,
+      );
+      expect(membersPage1.statusCode).toBe(200);
+      expect(membersPage1.json().data).toHaveLength(2);
+      expect(membersPage1.json().meta.nextCursor).toBeTruthy();
+
+      const membersPage2 = await get(
+        `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&limit=2&cursor=${membersPage1.json().meta.nextCursor}`,
+        dirToken,
+      );
+      expect(membersPage2.statusCode).toBe(200);
+      expect(membersPage2.json().data).toHaveLength(1);
+      expect(membersPage2.json().meta.nextCursor).toBeNull();
+
+      // Ponad 100 filtrów unitId -> 422
+      const tooManyUnits = Array.from({ length: 101 }, () => `unitId=${uuidv7()}`).join("&");
+      expect(
+        (
+          await get(
+            `/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}&${tooManyUnits}`,
+            dirToken,
+          )
+        ).statusCode,
+      ).toBe(422);
+
+      // 4. directory/employees: minimalne pola (bez workEmail i jobTitle), powtarzalny employeeId, stronicowanie, RLS
+      const allEmpsRes = await get(
+        `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}`,
+        dirToken,
+      );
+      expect(allEmpsRes.statusCode).toBe(200);
+      const allEmps = allEmpsRes.json().data as Record<string, unknown>[];
+      expect(allEmps).toHaveLength(4);
+      for (const emp of allEmps) {
+        expect(Object.keys(emp).sort()).toEqual(["accountId", "firstName", "id", "lastName", "status"]);
+        expect("workEmail" in emp).toBe(false);
+        expect("jobTitle" in emp).toBe(false);
+      }
+      expect(allEmps).toEqual(
+        expect.arrayContaining([
+          { id: noAccountEmp.id, accountId: null, firstName: "Marek", lastName: "BezKonta", status: "ACTIVE" },
+          { id: jan.employeeId, accountId: jan.accountId, firstName: "Jan", lastName: "Kierownik", status: "ACTIVE" },
+        ]),
+      );
+
+      // Powtarzalny employeeId + obcy employeeId z innej firmy (RLS odcina inne firmy)
+      const filteredEmps = await get(
+        `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}&employeeId=${jan.employeeId}&employeeId=${noAccountEmp.id}&employeeId=${otherCompany.employeeId}`,
+        dirToken,
+      );
+      expect(filteredEmps.statusCode).toBe(200);
+      expect((filteredEmps.json().data as { id: string }[]).map((e) => e.id).sort()).toEqual(
+        [jan.employeeId, noAccountEmp.id].sort(),
+      );
+
+      // Stronicowanie employees
+      const empsPage1 = await get(
+        `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}&limit=2`,
+        dirToken,
+      );
+      expect(empsPage1.statusCode).toBe(200);
+      expect(empsPage1.json().data).toHaveLength(2);
+      expect(empsPage1.json().meta.nextCursor).toBeTruthy();
+
+      const empsPage2 = await get(
+        `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}&limit=2&cursor=${empsPage1.json().meta.nextCursor}`,
+        dirToken,
+      );
+      expect(empsPage2.statusCode).toBe(200);
+      expect(empsPage2.json().data).toHaveLength(2);
+      expect(empsPage2.json().meta.nextCursor).toBeNull();
+
+      // Ponad 100 filtrów employeeId -> 422
+      const tooManyEmps = Array.from({ length: 101 }, () => `employeeId=${uuidv7()}`).join("&");
+      expect(
+        (
+          await get(
+            `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}&${tooManyEmps}`,
+            dirToken,
+          )
+        ).statusCode,
+      ).toBe(422);
+
+      // 5. Po zakończeniu Entitlement dostęp do katalogu znowu daje 403
+      await endEntitlement(db, { organization: company.id, product: productKey });
+      expect(
+        (await get(`/core/v1/products/${productKey}/directory/unit-members?organizationId=${company.id}`, dirToken))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (await get(`/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}`, dirToken))
+          .statusCode,
+      ).toBe(403);
+    } finally {
+      for (const c of [company, otherCompany]) {
+        await withOrganization(db, c.id, (tx) => tx.organization.delete({ where: { id: c.id } }));
+        for (const accountId of [c.accountId, ...c.extraAccountIds]) {
+          await db.authUser.deleteMany({ where: { id: accountId } });
+        }
+      }
+      await ownerDb.auditLog.deleteMany({ where: { productId: { in: [productId, otherProductId] } } });
       await ownerDb.product.deleteMany({ where: { id: { in: [productId, otherProductId] } } });
     }
   });

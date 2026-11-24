@@ -5,7 +5,9 @@ import {
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
+  DIRECTORY_READ_SCOPE,
   EntitlementStatus,
+  MAX_DIRECTORY_FILTER_IDS,
   PageQuery,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
@@ -19,6 +21,8 @@ import {
   type ApiListResponse,
   type ApiResponse,
   type AppAccess,
+  type DirectoryEmployee,
+  type DirectoryUnitMember,
   type Employee,
   type Entitlement,
   type ErrorCode,
@@ -101,6 +105,17 @@ const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
 const PermissionSnapshotQuery = z.object({
   organizationId: z.uuid(),
   accountId: z.uuid(),
+});
+const RepeatableUuidFilter = z
+  .union([z.uuid().transform((id) => [id]), z.array(z.uuid()).max(MAX_DIRECTORY_FILTER_IDS)])
+  .optional();
+const DirectoryUnitMembersFilter = z.object({
+  organizationId: z.uuid(),
+  unitId: RepeatableUuidFilter,
+});
+const DirectoryEmployeesFilter = z.object({
+  organizationId: z.uuid(),
+  employeeId: RepeatableUuidFilter,
 });
 const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
 const ListEntitlementsFilter = z.object({ status: EntitlementStatus.optional() });
@@ -1719,6 +1734,138 @@ export function buildServer({
       });
 
       return send(request, snapshot);
+    },
+  });
+
+  async function requireProductForMachine(productKey: string, clientId: string, deniedMessage: string) {
+    const product = await db.product.findUnique({
+      where: { key: productKey },
+      select: { id: true, key: true, registrationClientId: true },
+    });
+    if (!product) {
+      throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+    }
+    if (!product.registrationClientId || product.registrationClientId !== clientId) {
+      throw new ApiFailure(403, "PERMISSION_DENIED", deniedMessage);
+    }
+    return product;
+  }
+
+  async function assertOrganizationHasActiveEntitlement(tx: Tx, organizationId: string, productId: string) {
+    const org = await tx.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true },
+    });
+    if (!org) {
+      throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono firmy");
+    }
+    const now = new Date();
+    const entitlement = await tx.entitlement.findFirst({
+      where: {
+        productId,
+        status: "ACTIVE",
+        startsAt: { lte: now },
+        OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      },
+      select: { id: true },
+    });
+    if (!entitlement) {
+      throw new ApiFailure(403, "PERMISSION_DENIED", "Firma nie ma aktywnego dostępu do tego produktu");
+    }
+  }
+
+  app.route({
+    method: ROUTES.listProductDirectoryUnitMembers.method,
+    url: toFastifyPath(ROUTES.listProductDirectoryUnitMembers.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, DIRECTORY_READ_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const page = parsePageQuery(request.query, DirectoryUnitMembersFilter);
+      const product = await requireProductForMachine(
+        params.productKey,
+        machine.clientId,
+        "Ten klient nie może odczytywać katalogu wskazanego produktu",
+      );
+
+      const unitIds = page.unitId ? [...new Set(page.unitId)] : undefined;
+      const rows = await withOrganization(db, page.organizationId, async (tx) => {
+        await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
+        return tx.unitMembership.findMany({
+          where: {
+            ...(unitIds ? { unitId: { in: unitIds } } : {}),
+            ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+          },
+          select: {
+            id: true,
+            unitId: true,
+            employeeId: true,
+            role: true,
+            employee: { select: { account: { select: { id: true } } } },
+          },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        });
+      });
+
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(
+        request,
+        items.map((row): DirectoryUnitMember => ({
+          unitId: row.unitId,
+          employeeId: row.employeeId,
+          accountId: row.employee.account?.id ?? null,
+          role: row.role,
+        })),
+        nextCursor,
+      );
+    },
+  });
+
+  app.route({
+    method: ROUTES.listProductDirectoryEmployees.method,
+    url: toFastifyPath(ROUTES.listProductDirectoryEmployees.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, DIRECTORY_READ_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const page = parsePageQuery(request.query, DirectoryEmployeesFilter);
+      const product = await requireProductForMachine(
+        params.productKey,
+        machine.clientId,
+        "Ten klient nie może odczytywać katalogu wskazanego produktu",
+      );
+
+      const employeeIds = page.employeeId ? [...new Set(page.employeeId)] : undefined;
+      const rows = await withOrganization(db, page.organizationId, async (tx) => {
+        await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
+        return tx.employee.findMany({
+          where: {
+            ...(employeeIds ? { id: { in: employeeIds } } : {}),
+            ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+          },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            account: { select: { id: true } },
+          },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        });
+      });
+
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(
+        request,
+        items.map((row): DirectoryEmployee => ({
+          id: row.id,
+          accountId: row.account?.id ?? null,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          status: row.status,
+        })),
+        nextCursor,
+      );
     },
   });
 

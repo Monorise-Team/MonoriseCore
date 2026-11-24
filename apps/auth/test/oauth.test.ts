@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   AccessTokenClaims,
+  DIRECTORY_READ_SCOPE,
   MachineTokenClaims,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
@@ -378,27 +379,29 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       expect(MachineTokenClaims.parse(payload).client_id).toBe(m2mClientId);
       expect(AccessTokenClaims.safeParse(payload).success).toBe(false);
 
-      // 1b. Poufny klient może też pobrać token maszynowy z zakresem core:permissions.read (do migawki uprawnień)
-      const issuedRead = await call("/api/auth/oauth2/token", {
-        method: "POST",
-        form: {
-          grant_type: "client_credentials",
-          client_id: m2mClientId,
-          client_secret: m2mSecret,
-          scope: PERMISSIONS_READ_SCOPE,
-          resource: coreResource,
-        },
-      });
-      expect(issuedRead.status).toBe(200);
-      const readTokenBody = (await issuedRead.json()) as { access_token: string; scope: string };
-      expect(readTokenBody.scope).toBe(PERMISSIONS_READ_SCOPE);
-      const { payload: readPayload } = await jwtVerify(readTokenBody.access_token, jwks, {
-        audience: coreResource,
-        issuer: BASE,
-        algorithms: ["EdDSA"],
-      });
-      expect(MachineTokenClaims.parse(readPayload).scope).toBe(PERMISSIONS_READ_SCOPE);
-      expect(readPayload.org_id).toBeUndefined();
+      // 1b. Poufny klient może też pobrać token maszynowy z zakresami core:permissions.read i core:directory.read
+      for (const readScope of [PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
+        const issuedRead = await call("/api/auth/oauth2/token", {
+          method: "POST",
+          form: {
+            grant_type: "client_credentials",
+            client_id: m2mClientId,
+            client_secret: m2mSecret,
+            scope: readScope,
+            resource: coreResource,
+          },
+        });
+        expect(issuedRead.status).toBe(200);
+        const readTokenBody = (await issuedRead.json()) as { access_token: string; scope: string };
+        expect(readTokenBody.scope).toBe(readScope);
+        const { payload: readPayload } = await jwtVerify(readTokenBody.access_token, jwks, {
+          audience: coreResource,
+          issuer: BASE,
+          algorithms: ["EdDSA"],
+        });
+        expect(MachineTokenClaims.parse(readPayload).scope).toBe(readScope);
+        expect(readPayload.org_id).toBeUndefined();
+      }
 
       // 2. Dla zasobu produktu (bez core:permissions.register w allowedScopes) token maszynowy nie jest wydawany
       const wrongResource = await call("/api/auth/oauth2/token", {
@@ -438,9 +441,9 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       });
       expect(publicDenied.status).toBe(400);
 
-      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o zakresy maszynowe (register ani read)
+      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o zakresy maszynowe (permissions.* ani directory.read)
       const challenge = base64url(createHash("sha256").update("weryfikator-user-scope-test-0123456789abcdef").digest());
-      for (const machineScope of [PERMISSIONS_REGISTER_SCOPE, PERMISSIONS_READ_SCOPE]) {
+      for (const machineScope of [PERMISSIONS_REGISTER_SCOPE, PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
         const authorize = new URLSearchParams({
           response_type: "code",
           client_id: m2mClientId,

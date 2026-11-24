@@ -7,10 +7,14 @@ import {
   CreateRoleAssignment,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
+  DIRECTORY_READ_SCOPE,
+  DirectoryEmployee,
+  DirectoryUnitMember,
   Employee,
   Entitlement,
   EntitlementStatus,
   Health,
+  MAX_DIRECTORY_FILTER_IDS,
   MAX_PAGE_LIMIT,
   Me,
   Organization,
@@ -41,7 +45,8 @@ import { z } from "zod";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles" | "AppAccess";
+export type RouteTag =
+  "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles" | "AppAccess" | "Directory";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -63,6 +68,10 @@ export const TAGS: readonly TagDefinition[] = [
   {
     name: "AppAccess",
     description: "Dostęp firm do produktów (Entitlements) oraz włączanie aplikacji pracownikom (AppAccess, ADR-0035).",
+  },
+  {
+    name: "Directory",
+    description: "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy).",
   },
 ];
 
@@ -128,8 +137,11 @@ export const RoleList = z.array(Role);
 export const RoleAssignmentList = z.array(RoleAssignment);
 export const EntitlementList = z.array(Entitlement);
 export const AppAccessList = z.array(AppAccess);
+export const DirectoryUnitMemberList = z.array(DirectoryUnitMember);
+export const DirectoryEmployeeList = z.array(DirectoryEmployee);
 
 const UuidParam = z.uuid();
+const RepeatableUuidParam = z.array(z.uuid()).max(MAX_DIRECTORY_FILTER_IDS);
 const IncludeDeprecatedParam = z.boolean().default(false);
 const IncludeTemplatesParam = z.boolean().default(true);
 const IncludeArchivedParam = z.boolean().default(false);
@@ -905,6 +917,94 @@ export const ROUTES = {
     dataSchema: PermissionSnapshot,
     responseSchemaName: "PermissionSnapshotResponse",
     responseDescription: "Migawka uprawnień konta dla wskazanego produktu.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listProductDirectoryUnitMembers: {
+    method: "GET",
+    path: `${API_PREFIX}/products/{productKey}/directory/unit-members`,
+    operationId: "listProductDirectoryUnitMembers",
+    tag: "Directory",
+    summary: "Lista członkostw pracowników w jednostkach dla serwera produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:directory.read`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego " +
+      "dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
+    auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      PRODUCT_KEY_PARAM,
+      {
+        name: "organizationId",
+        in: "query",
+        required: true,
+        description: "Identyfikator firmy (UUID v7), dla której pobierane są członkostwa.",
+        schema: UuidParam,
+      },
+      {
+        name: "unitId",
+        in: "query",
+        required: false,
+        description: `Opcjonalny powtarzalny filtr po identyfikatorach jednostek (maks. ${MAX_DIRECTORY_FILTER_IDS}; brak = wszystkie jednostki firmy).`,
+        schema: RepeatableUuidParam,
+      },
+      ...PAGE_PARAMETERS,
+    ],
+    dataSchemaName: "DirectoryUnitMemberList",
+    dataSchema: DirectoryUnitMemberList,
+    responseSchemaName: "DirectoryUnitMemberListResponse",
+    responseDescription: "Strona listy członkostw pracowników w jednostkach firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listProductDirectoryEmployees: {
+    method: "GET",
+    path: `${API_PREFIX}/products/{productKey}/directory/employees`,
+    operationId: "listProductDirectoryEmployees",
+    tag: "Directory",
+    summary: "Lista podstawowych danych pracowników dla serwera produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne (bez służbowego e-maila " +
+      "i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+    auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      PRODUCT_KEY_PARAM,
+      {
+        name: "organizationId",
+        in: "query",
+        required: true,
+        description: "Identyfikator firmy (UUID v7), dla której pobierani są pracownicy.",
+        schema: UuidParam,
+      },
+      {
+        name: "employeeId",
+        in: "query",
+        required: false,
+        description: `Opcjonalny powtarzalny filtr po identyfikatorach pracowników (maks. ${MAX_DIRECTORY_FILTER_IDS}; brak = wszyscy pracownicy firmy).`,
+        schema: RepeatableUuidParam,
+      },
+      ...PAGE_PARAMETERS,
+    ],
+    dataSchemaName: "DirectoryEmployeeList",
+    dataSchema: DirectoryEmployeeList,
+    responseSchemaName: "DirectoryEmployeeListResponse",
+    responseDescription: "Strona listy podstawowych danych pracowników firmy.",
     errors: {
       401: ["UNAUTHENTICATED"],
       403: ["PERMISSION_DENIED"],
