@@ -80,9 +80,10 @@ ALTER TABLE "public"."accounts" NO FORCE ROW LEVEL SECURITY;
 UPDATE "public"."organizations" o
 SET "ownerAccountId" = earliest."id"
 FROM (
+  -- Najpierw najstarsze aktywne konto; konto zaproszone albo wyłączone tylko wtedy, gdy firma nie ma aktywnego.
   SELECT DISTINCT ON ("organizationId") "organizationId", "id"
   FROM "public"."accounts"
-  ORDER BY "organizationId", "createdAt" ASC, "id" ASC
+  ORDER BY "organizationId", ("status" = 'ACTIVE') DESC, "createdAt" ASC, "id" ASC
 ) earliest
 WHERE o."id" = earliest."organizationId"
   AND o."ownerAccountId" IS NULL;
