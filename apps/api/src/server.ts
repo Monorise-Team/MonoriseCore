@@ -1,13 +1,15 @@
 import {
-  API_PREFIX,
   type ApiErrorBody,
   type ApiResponse,
   type ErrorCode,
+  type Health,
   type Me,
   type Organization,
 } from "@core/contracts";
 import { withOrganization, type PrismaClient } from "@core/db";
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
+import { buildOpenApiDocument } from "./openapi.js";
+import { ROUTES } from "./routes.js";
 import type { TokenVerifier } from "./tokens.js";
 
 class ApiFailure extends Error {
@@ -25,6 +27,8 @@ export interface ServerOptions {
   db: PrismaClient;
   verifyToken: TokenVerifier;
   logger?: boolean;
+  /** Opcjonalny hook wywoływany przy rejestracji każdej ścieżki Fastify (używany w testach OpenAPI). */
+  onRoute?: (route: RouteOptions) => void;
 }
 
 interface Caller {
@@ -34,8 +38,13 @@ interface Caller {
 }
 
 /** Core API: format `{ data, meta, error }` (ADR-0044), firma zawsze z tokenu, dane przez RLS (ADR-0037). */
-export function buildServer({ db, verifyToken, logger = false }: ServerOptions): FastifyInstance {
+export function buildServer({ db, verifyToken, logger = false, onRoute }: ServerOptions): FastifyInstance {
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
+  const openApiDocument = buildOpenApiDocument();
+
+  if (onRoute) {
+    app.addHook("onRoute", onRoute);
+  }
 
   const send = <T>(request: FastifyRequest, data: T): ApiResponse<T> => ({
     data,
@@ -93,55 +102,73 @@ export function buildServer({ db, verifyToken, logger = false }: ServerOptions):
     void reply.header("Cache-Control", "no-store");
   });
 
-  app.get(`${API_PREFIX}/health`, async (request) => send(request, { status: "ok" }));
-
-  app.get(`${API_PREFIX}/me`, async (request) => {
-    const who = await caller(request);
-    const me = await withOrganization(db, who.organizationId, async (tx) => {
-      const account = await tx.account.findUniqueOrThrow({
-        where: { id: who.accountId },
-        include: { employee: true, organization: true },
-      });
-      return {
-        account: { id: account.id, email: account.email, status: account.status },
-        employee: {
-          id: account.employee.id,
-          firstName: account.employee.firstName,
-          lastName: account.employee.lastName,
-          workEmail: account.employee.workEmail,
-          jobTitle: account.employee.jobTitle,
-          status: account.employee.status,
-        },
-        organization: {
-          id: account.organization.id,
-          name: account.organization.name,
-          status: account.organization.status,
-        },
-      } satisfies Me;
-    });
-    return send(request, me);
+  app.route({
+    method: ROUTES.getHealth.method,
+    url: ROUTES.getHealth.path,
+    handler: async (request) => send(request, { status: "ok" } satisfies Health),
   });
 
-  app.get(`${API_PREFIX}/organization`, async (request) => {
-    const who = await caller(request);
-    const organization = await withOrganization(db, who.organizationId, (tx) =>
-      tx.organization.findUniqueOrThrow({
-        where: { id: who.organizationId },
-        include: { domains: { orderBy: { createdAt: "asc" } } },
-      }),
-    );
-    return send(request, {
-      id: organization.id,
-      name: organization.name,
-      status: organization.status,
-      createdAt: organization.createdAt.toISOString(),
-      domains: organization.domains.map((d) => ({
-        domain: d.domain,
-        status: d.status,
-        isPrimary: d.isPrimary,
-        verifiedAt: d.verifiedAt?.toISOString() ?? null,
-      })),
-    } satisfies Organization);
+  app.route({
+    method: ROUTES.getOpenApi.method,
+    url: ROUTES.getOpenApi.path,
+    handler: async () => openApiDocument,
+  });
+
+  app.route({
+    method: ROUTES.getMe.method,
+    url: ROUTES.getMe.path,
+    handler: async (request) => {
+      const who = await caller(request);
+      const me = await withOrganization(db, who.organizationId, async (tx) => {
+        const account = await tx.account.findUniqueOrThrow({
+          where: { id: who.accountId },
+          include: { employee: true, organization: true },
+        });
+        return {
+          account: { id: account.id, email: account.email, status: account.status },
+          employee: {
+            id: account.employee.id,
+            firstName: account.employee.firstName,
+            lastName: account.employee.lastName,
+            workEmail: account.employee.workEmail,
+            jobTitle: account.employee.jobTitle,
+            status: account.employee.status,
+          },
+          organization: {
+            id: account.organization.id,
+            name: account.organization.name,
+            status: account.organization.status,
+          },
+        } satisfies Me;
+      });
+      return send(request, me);
+    },
+  });
+
+  app.route({
+    method: ROUTES.getOrganization.method,
+    url: ROUTES.getOrganization.path,
+    handler: async (request) => {
+      const who = await caller(request);
+      const organization = await withOrganization(db, who.organizationId, (tx) =>
+        tx.organization.findUniqueOrThrow({
+          where: { id: who.organizationId },
+          include: { domains: { orderBy: { createdAt: "asc" } } },
+        }),
+      );
+      return send(request, {
+        id: organization.id,
+        name: organization.name,
+        status: organization.status,
+        createdAt: organization.createdAt.toISOString(),
+        domains: organization.domains.map((d) => ({
+          domain: d.domain,
+          status: d.status,
+          isPrimary: d.isPrimary,
+          verifiedAt: d.verifiedAt?.toISOString() ?? null,
+        })),
+      } satisfies Organization);
+    },
   });
 
   return app;

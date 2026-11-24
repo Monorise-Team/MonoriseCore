@@ -43,6 +43,20 @@ Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `ap
 
 Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone.
 
+## Opis API (OpenAPI)
+
+Opis Core API w standardzie OpenAPI 3.1 znajduje się w [openapi/core-api.json](openapi/core-api.json) i jest serwowany na żywo pod `GET /v1/openapi.json` (bez tokenu, jako czysty dokument JSON — wyjątek od koperty `{ data, meta, error }`). Plik powstaje automatycznie z katalogu ścieżek (`apps/api/src/routes.ts`) oraz schematów Zod (`@core/contracts`) i stanowi jedyne źródło prawdy do generowania typowanego klienta `@monorise-team/sdk`.
+
+Po każdej zmianie ścieżek lub schematów Core API odśwież i sprawdź plik:
+
+```bash
+pnpm openapi                                 # generuje openapi/core-api.json z kodu
+pnpm openapi:check                           # sprawdza, czy plik w repo jest aktualny
+pnpm exec redocly lint openapi/core-api.json # walidacja składni i reguł OpenAPI
+```
+
+Kontrole `pnpm openapi:check` oraz `redocly lint` są częścią `pnpm check` (i CI).
+
 ## Licencja
 
 Repozytorium jest publiczne, ale nie jest open source: wszelkie prawa zastrzeżone (zob. [LICENSE](LICENSE)).

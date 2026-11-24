@@ -85,8 +85,9 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 5. **Token dostępu** (ADR-0023): JWT ważny 5 minut, podpis EdDSA, pola `org_id`, `employee_id`, `sid`, `amr`, `authz_rev`; bez uprawnień w tokenie. Produkty dostają token z OAuth 2.1 (`aud` to API produktu). W tych tokenach `sid` dokłada sam serwer OAuth, a `amr` jest polem zastrzeżonym wtyczki i na razie go nie ma (kontrakt przyjmuje pustą listę); sposób przekazania MFA ustalamy razem z MFA.
 6. **Klienci OAuth tylko z kodu**: aplikacje Monorise rejestruje `ensureFirstPartyClients` (`pnpm oauth:seed`), zawsze z PKCE. Rejestracja przez HTTP jest wyłączona (`clientPrivileges` i `resourcePrivileges` zwracają `false`). Nowy klient albo nowy adres powrotu to zmiana w obszarze bezpieczeństwa: opisz ją w pull requeście.
 7. **Komunikaty logowania** nie zdradzają, czy konto istnieje. Darmowe skrzynki (Gmail, WP, Onet…) nie zakładają firm (ADR-0019).
-8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts`.
-9. **Jedna wersja**: po zmianie zależności `@monorise-team/*` używaj `pnpm shared:update`; `pnpm check:versions` musi przechodzić.
+8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /v1/openapi.json` zwraca czysty dokument OpenAPI).
+9. **Katalog ścieżek i OpenAPI**: każdy nowy endpoint Core API dopisujesz do `apps/api/src/routes.ts` ze schematami Zod i uruchamiasz `pnpm openapi` (CI sprawdza `openapi/core-api.json`).
+10. **Jedna wersja**: po zmianie zależności `@monorise-team/*` używaj `pnpm shared:update`; `pnpm check:versions` musi przechodzić.
 
 ## Polecenia
 
@@ -94,6 +95,7 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 pnpm install && pnpm setup:env && pnpm db:up && pnpm db:migrate
 pnpm dev                 # logowanie: localhost:3100, Core API: localhost:3200, poczta (Mailpit): localhost:8125
 pnpm oauth:seed          # lokalni klienci OAuth AvenMail i TimoTime (sekrety w apps/auth/.data/)
+pnpm openapi             # generuje openapi/core-api.json z kodu (pnpm openapi:check sprawdza aktualność)
 pnpm check               # obowiązkowo przed pull requestem (wymaga bazy z pnpm db:up)
 ```
 
