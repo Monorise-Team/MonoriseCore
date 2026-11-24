@@ -1,10 +1,12 @@
 import {
   CreateEmployee,
   CreateUnit,
+  PageQuery,
   PutUnitMember,
   UnitStatus,
   UpdateUnit,
   type ApiErrorBody,
+  type ApiListResponse,
   type ApiResponse,
   type Employee,
   type ErrorCode,
@@ -49,7 +51,9 @@ interface Caller {
 
 const UnitIdParams = z.object({ unitId: z.uuid() });
 const UnitMemberParams = z.object({ unitId: z.uuid(), employeeId: z.uuid() });
-const ListUnitsQuery = z.object({ status: UnitStatus.optional() });
+const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
+const CursorUuid = z.uuid();
+const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
 
 function parseInput<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
@@ -61,6 +65,61 @@ function parseInput<T>(schema: z.ZodType<T>, input: unknown): T {
     throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", details);
   }
   return result.data;
+}
+
+function encodeCursor(id: string): string {
+  return Buffer.from(id, "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string): string {
+  if (!BASE64URL_RE.test(cursor)) {
+    throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+      { field: "cursor", message: "Nieprawidłowy kursor stronicowania" },
+    ]);
+  }
+  const decoded = Buffer.from(cursor, "base64url").toString("utf8");
+  if (!CursorUuid.safeParse(decoded).success || encodeCursor(decoded) !== cursor) {
+    throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+      { field: "cursor", message: "Nieprawidłowy kursor stronicowania" },
+    ]);
+  }
+  return decoded;
+}
+
+interface ParsedPage {
+  limit: number;
+  afterId?: string;
+}
+
+function parsePageQuery<T extends z.ZodRawShape = Record<never, never>>(
+  query: unknown,
+  extraFilter?: z.ZodObject<T>,
+): ParsedPage & z.infer<z.ZodObject<T>> {
+  const schema = extraFilter ? PageQuery.extend(extraFilter.shape) : PageQuery;
+  const parsed = parseInput(schema, query ?? {}) as { limit: number; cursor?: string } & z.infer<z.ZodObject<T>>;
+  const afterId = parsed.cursor !== undefined ? decodeCursor(parsed.cursor) : undefined;
+  return { ...parsed, limit: parsed.limit, ...(afterId ? { afterId } : {}) };
+}
+
+function paginateRows<T extends { id: string }>(
+  rows: readonly T[],
+  limit: number,
+): { items: T[]; nextCursor: string | null } {
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : [...rows];
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? encodeCursor(last.id) : null,
+  };
+}
+
+/**
+ * Serializuje zapisy w drzewie jednostek jednej firmy na czas transakcji (wspólny klucz z wyzwalaczem
+ * `prevent_organization_unit_cycle`), żeby równoległe sprawdzenia archiwizacji, członków i cykli nie ścigały się.
+ */
+async function lockOrganizationUnits(tx: Tx, organizationId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('organization_units:' || ${organizationId}::uuid::text, 0))`;
 }
 
 function serializeEmployee(employee: {
@@ -157,6 +216,12 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
   const send = <T>(request: FastifyRequest, data: T): ApiResponse<T> => ({
     data,
     meta: { requestId: request.id },
+    error: null,
+  });
+
+  const sendList = <T>(request: FastifyRequest, data: T[], nextCursor: string | null): ApiListResponse<T> => ({
+    data,
+    meta: { requestId: request.id, nextCursor },
     error: null,
   });
 
@@ -300,10 +365,16 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
     url: toFastifyPath(ROUTES.listEmployees.path),
     handler: async (request) => {
       const who = await caller(request);
-      const employees = await withOrganization(db, who.organizationId, (tx) =>
-        tx.employee.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+      const page = parsePageQuery(request.query);
+      const rows = await withOrganization(db, who.organizationId, (tx) =>
+        tx.employee.findMany({
+          ...(page.afterId ? { where: { id: { gt: page.afterId } } } : {}),
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        }),
       );
-      return send(request, employees.map(serializeEmployee));
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeEmployee), nextCursor);
     },
   });
 
@@ -335,14 +406,20 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
     url: toFastifyPath(ROUTES.listUnits.path),
     handler: async (request) => {
       const who = await caller(request);
-      const query = parseInput(ListUnitsQuery, request.query ?? {});
-      const units = await withOrganization(db, who.organizationId, (tx) =>
+      const page = parsePageQuery(request.query, ListUnitsFilter);
+      const where = {
+        ...(page.status ? { status: page.status } : {}),
+        ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+      };
+      const rows = await withOrganization(db, who.organizationId, (tx) =>
         tx.organizationUnit.findMany({
-          ...(query.status ? { where: { status: query.status } } : {}),
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
         }),
       );
-      return send(request, units.map(serializeUnit));
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeUnit), nextCursor);
     },
   });
 
@@ -354,6 +431,7 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
       requireOwner(who);
       const body = parseInput(CreateUnit, request.body);
       const unit = await withOrganization(db, who.organizationId, async (tx) => {
+        await lockOrganizationUnits(tx, who.organizationId);
         if (body.parentId) {
           const parent = await tx.organizationUnit.findUnique({
             where: { id: body.parentId },
@@ -389,6 +467,7 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
 
       try {
         const updated = await withOrganization(db, who.organizationId, async (tx) => {
+          await lockOrganizationUnits(tx, who.organizationId);
           const unit = await tx.organizationUnit.findUnique({ where: { id: params.unitId } });
           if (!unit) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
 
@@ -459,19 +538,25 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
     handler: async (request) => {
       const who = await caller(request);
       const params = parseInput(UnitIdParams, request.params);
-      const members = await withOrganization(db, who.organizationId, async (tx) => {
+      const page = parsePageQuery(request.query);
+      const rows = await withOrganization(db, who.organizationId, async (tx) => {
         const unit = await tx.organizationUnit.findUnique({
           where: { id: params.unitId },
           select: { id: true },
         });
         if (!unit) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
         return tx.unitMembership.findMany({
-          where: { unitId: params.unitId },
+          where: {
+            unitId: params.unitId,
+            ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+          },
           include: { employee: true },
-          orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
         });
       });
-      return send(request, members.map(serializeUnitMember));
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeUnitMember), nextCursor);
     },
   });
 
@@ -484,6 +569,7 @@ export function buildServer({ db, verifyToken, logger = false, onRoute }: Server
       const params = parseInput(UnitMemberParams, request.params);
       const body = parseInput(PutUnitMember, request.body);
       const membership = await withOrganization(db, who.organizationId, async (tx) => {
+        await lockOrganizationUnits(tx, who.organizationId);
         const unit = await tx.organizationUnit.findUnique({
           where: { id: params.unitId },
           select: { id: true, status: true },

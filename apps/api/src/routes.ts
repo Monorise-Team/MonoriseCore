@@ -2,10 +2,14 @@ import {
   API_PREFIX,
   CreateEmployee,
   CreateUnit,
+  DEFAULT_PAGE_LIMIT,
   Employee,
   Health,
+  MAX_PAGE_LIMIT,
   Me,
   Organization,
+  PageCursor,
+  PageLimit,
   PutUnitMember,
   Unit,
   UnitMember,
@@ -56,6 +60,8 @@ export interface RouteDefinition {
   successStatus: SuccessStatus;
   /** Czy odpowiedź sukcesu jest owinięta w kopertę `{ data, meta, error }` (nie dotyczy 204). */
   envelope: boolean;
+  /** Czy odpowiedź listy używa stronicowania kursorowego (`meta.nextCursor`). */
+  paginated?: boolean;
   /** Parametry ścieżki (`path`) i zapytania (`query`). */
   parameters?: readonly ParameterDefinition[];
   /** Nazwa i schemat treści żądania (dla POST/PUT/PATCH). */
@@ -104,6 +110,23 @@ const EMPLOYEE_ID_PARAM: ParameterDefinition = {
   description: "Identyfikator pracownika (UUID v7).",
   schema: UuidParam,
 };
+
+const PAGE_PARAMETERS: readonly ParameterDefinition[] = [
+  {
+    name: "limit",
+    in: "query",
+    required: false,
+    description: `Liczba elementów na stronie (1–${MAX_PAGE_LIMIT}, domyślnie ${DEFAULT_PAGE_LIMIT}).`,
+    schema: PageLimit,
+  },
+  {
+    name: "cursor",
+    in: "query",
+    required: false,
+    description: "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+    schema: PageCursor,
+  },
+];
 
 /** Zamienia ścieżkę OpenAPI (`/units/{unitId}`) na format Fastify (`/units/:unitId`). */
 export function toFastifyPath(openApiPath: string): string {
@@ -202,16 +225,19 @@ export const ROUTES = {
     operationId: "listEmployees",
     tag: "People",
     summary: "Lista pracowników firmy",
-    description: "Zwraca wszystkich pracowników firmy wynikającej z tokenu dostępu.",
+    description: "Zwraca stronicowaną listę pracowników firmy wynikającej z tokenu dostępu (kolejność utworzenia).",
     auth: true,
     successStatus: 200,
     envelope: true,
+    paginated: true,
+    parameters: PAGE_PARAMETERS,
     dataSchemaName: "EmployeeList",
     dataSchema: EmployeeList,
     responseSchemaName: "EmployeeListResponse",
-    responseDescription: "Lista pracowników firmy.",
+    responseDescription: "Strona listy pracowników firmy.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
       500: ["INTERNAL"],
     },
   },
@@ -245,11 +271,14 @@ export const ROUTES = {
     operationId: "listUnits",
     tag: "Structure",
     summary: "Lista jednostek organizacyjnych firmy",
-    description: "Zwraca płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
+    description:
+      "Zwraca stronicowaną, płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
     auth: true,
     successStatus: 200,
     envelope: true,
+    paginated: true,
     parameters: [
+      ...PAGE_PARAMETERS,
       {
         name: "status",
         in: "query",
@@ -261,7 +290,7 @@ export const ROUTES = {
     dataSchemaName: "UnitList",
     dataSchema: UnitList,
     responseSchemaName: "UnitListResponse",
-    responseDescription: "Lista jednostek organizacyjnych firmy.",
+    responseDescription: "Strona listy jednostek organizacyjnych firmy.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
@@ -329,15 +358,17 @@ export const ROUTES = {
     operationId: "listUnitMembers",
     tag: "Structure",
     summary: "Lista członków jednostki organizacyjnej",
-    description: "Zwraca pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą w jednostce.",
+    description:
+      "Zwraca stronicowaną listę pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą.",
     auth: true,
     successStatus: 200,
     envelope: true,
-    parameters: [UNIT_ID_PARAM],
+    paginated: true,
+    parameters: [UNIT_ID_PARAM, ...PAGE_PARAMETERS],
     dataSchemaName: "UnitMemberList",
     dataSchema: UnitMemberList,
     responseSchemaName: "UnitMemberListResponse",
-    responseDescription: "Lista członków jednostki organizacyjnej.",
+    responseDescription: "Strona listy członków jednostki organizacyjnej.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       404: ["NOT_FOUND"],

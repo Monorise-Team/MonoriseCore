@@ -46,15 +46,40 @@
         ],
         "operationId": "listEmployees",
         "summary": "Lista pracowników firmy",
-        "description": "Zwraca wszystkich pracowników firmy wynikającej z tokenu dostępu.",
+        "description": "Zwraca stronicowaną listę pracowników firmy wynikającej z tokenu dostępu (kolejność utworzenia).",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Lista pracowników firmy.",
+            "description": "Strona listy pracowników firmy.",
             "content": {
               "application/json": {
                 "schema": {
@@ -65,6 +90,16 @@
           },
           "401": {
             "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -327,13 +362,36 @@
         ],
         "operationId": "listUnits",
         "summary": "Lista jednostek organizacyjnych firmy",
-        "description": "Zwraca płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
+        "description": "Zwraca stronicowaną, płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
         "security": [
           {
             "bearerAuth": []
           }
         ],
         "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
           {
             "name": "status",
             "in": "query",
@@ -346,7 +404,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Lista jednostek organizacyjnych firmy.",
+            "description": "Strona listy jednostek organizacyjnych firmy.",
             "content": {
               "application/json": {
                 "schema": {
@@ -602,7 +660,7 @@
         ],
         "operationId": "listUnitMembers",
         "summary": "Lista członków jednostki organizacyjnej",
-        "description": "Zwraca pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą w jednostce.",
+        "description": "Zwraca stronicowaną listę pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą.",
         "security": [
           {
             "bearerAuth": []
@@ -619,11 +677,34 @@
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Lista członków jednostki organizacyjnej.",
+            "description": "Strona listy członków jednostki organizacyjnej.",
             "content": {
               "application/json": {
                 "schema": {
@@ -966,6 +1047,25 @@
         ],
         "additionalProperties": false
       },
+      "ApiListMeta": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
       "ApiMeta": {
         "type": "object",
         "properties": {
@@ -1101,7 +1201,7 @@
             "$ref": "#/components/schemas/EmployeeList"
           },
           "meta": {
-            "$ref": "#/components/schemas/ApiMeta"
+            "$ref": "#/components/schemas/ApiListMeta"
           },
           "error": {
             "type": "null"
@@ -1472,7 +1572,7 @@
             "$ref": "#/components/schemas/UnitList"
           },
           "meta": {
-            "$ref": "#/components/schemas/ApiMeta"
+            "$ref": "#/components/schemas/ApiListMeta"
           },
           "error": {
             "type": "null"
@@ -1530,7 +1630,7 @@
             "$ref": "#/components/schemas/UnitMemberList"
           },
           "meta": {
-            "$ref": "#/components/schemas/ApiMeta"
+            "$ref": "#/components/schemas/ApiListMeta"
           },
           "error": {
             "type": "null"

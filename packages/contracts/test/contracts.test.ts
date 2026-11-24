@@ -3,16 +3,21 @@ import {
   AccessTokenClaims,
   ApiErrorBody,
   ApiErrorResponse,
+  ApiListMeta,
+  apiListSuccessSchema,
   ApiMeta,
   apiErrorSchema,
   apiSuccessSchema,
   CreateEmployee,
   CreateUnit,
+  DEFAULT_PAGE_LIMIT,
   emailDomain,
   Health,
   isFreeEmailDomain,
+  MAX_PAGE_LIMIT,
   Me,
   normalizeEmail,
+  PageQuery,
   PutUnitMember,
   SignUpRequest,
   Unit,
@@ -155,5 +160,24 @@ describe("kontrakty", () => {
         organization: { id: UUID_3, name: "Acme", status: "ACTIVE" },
       }).account.isOwner,
     ).toBe(true);
+  });
+
+  it("waliduje parametry stronicowania i kopertę listy z nextCursor", () => {
+    expect(PageQuery.parse({})).toEqual({ limit: DEFAULT_PAGE_LIMIT });
+    expect(PageQuery.parse({ limit: "25", cursor: "abc_123" })).toEqual({ limit: 25, cursor: "abc_123" });
+    expect(PageQuery.safeParse({ limit: String(MAX_PAGE_LIMIT + 1) }).success).toBe(false);
+    expect(PageQuery.safeParse({ limit: "0" }).success).toBe(false);
+    expect(PageQuery.safeParse({ limit: "" }).success).toBe(false);
+    expect(PageQuery.safeParse({ limit: "1.5" }).success).toBe(false);
+    expect(PageQuery.safeParse({ cursor: "" }).success).toBe(false);
+
+    const listSchema = apiListSuccessSchema(Health);
+    expect(
+      listSchema.parse({
+        data: { status: "ok" },
+        meta: ApiListMeta.parse({ requestId: "req_123", nextCursor: null }),
+        error: null,
+      }).meta.nextCursor,
+    ).toBeNull();
   });
 });

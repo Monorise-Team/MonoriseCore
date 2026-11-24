@@ -5,6 +5,8 @@ import {
   ApiErrorBody,
   ApiErrorDetail,
   ApiErrorResponse,
+  ApiListMeta,
+  apiListSuccessSchema,
   ApiMeta,
   apiSuccessSchema,
   CreateEmployee,
@@ -149,6 +151,7 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("ApiErrorDetail", ApiErrorDetail);
   register("ApiErrorBody", ApiErrorBody);
   register("ApiMeta", ApiMeta);
+  register("ApiListMeta", ApiListMeta);
   register("ApiErrorResponse", ApiErrorResponse);
   register("Health", Health);
   register("OpenApiDocument", OpenApiDocument);
@@ -177,7 +180,10 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
     if (route.dataSchemaName && route.dataSchema) {
       register(route.dataSchemaName, route.dataSchema);
       if (route.envelope && route.responseSchemaName) {
-        register(route.responseSchemaName, apiSuccessSchema(route.dataSchema));
+        const envelopeSchema = route.paginated
+          ? apiListSuccessSchema(route.dataSchema)
+          : apiSuccessSchema(route.dataSchema);
+        register(route.responseSchemaName, envelopeSchema);
       }
     }
   }

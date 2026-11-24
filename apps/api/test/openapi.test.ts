@@ -108,6 +108,18 @@ describe("OpenAPI Core API", () => {
         }
       }
     }
+
+    for (const paginatedRoute of ROUTE_LIST.filter((route) => route.paginated)) {
+      const operation = document.paths[paginatedRoute.path]?.[paginatedRoute.method.toLowerCase()];
+      expect(operation?.parameters?.find((p) => p.in === "query" && p.name === "limit")).toBeDefined();
+      expect(operation?.parameters?.find((p) => p.in === "query" && p.name === "cursor")).toBeDefined();
+      const responseSchema = paginatedRoute.responseSchemaName
+        ? document.components.schemas[paginatedRoute.responseSchemaName]
+        : undefined;
+      expect((responseSchema?.properties as Record<string, unknown> | undefined)?.meta).toEqual({
+        $ref: "#/components/schemas/ApiListMeta",
+      });
+    }
   });
 
   it("jest zgodny z zakomitowanym plikiem openapi/core-api.json i deterministyczny", () => {

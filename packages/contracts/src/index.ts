@@ -42,11 +42,37 @@ export const ApiMeta = z.object({
 });
 export type ApiMeta = z.infer<typeof ApiMeta>;
 
+export const DEFAULT_PAGE_LIMIT = 50;
+export const MAX_PAGE_LIMIT = 100;
+
+export const PageLimit = z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT);
+export const PageCursor = z.string().min(1).max(256);
+
+export const PageQuery = z.object({
+  limit: PageLimit,
+  cursor: PageCursor.optional(),
+});
+export type PageQuery = z.infer<typeof PageQuery>;
+
+export const ApiListMeta = ApiMeta.extend({
+  nextCursor: z.string().nullable(),
+});
+export type ApiListMeta = z.infer<typeof ApiListMeta>;
+
 /** Koperta udanej odpowiedzi Core API: `{ data, meta, error: null }` (ADR-0044). */
 export function apiSuccessSchema<T extends z.ZodType>(data: T) {
   return z.object({
     data,
     meta: ApiMeta,
+    error: z.null(),
+  });
+}
+
+/** Koperta udanej odpowiedzi listy Core API ze stronicowaniem kursorowym (`meta.nextCursor`). */
+export function apiListSuccessSchema<T extends z.ZodType>(data: T) {
+  return z.object({
+    data,
+    meta: ApiListMeta,
     error: z.null(),
   });
 }
@@ -67,6 +93,12 @@ export interface ApiResponse<T> {
   data: T | null;
   meta: { requestId?: string; [key: string]: unknown };
   error: ApiErrorBody | null;
+}
+
+export interface ApiListResponse<T> {
+  data: T[];
+  meta: { requestId: string; nextCursor: string | null };
+  error: null;
 }
 
 export const Health = z.object({

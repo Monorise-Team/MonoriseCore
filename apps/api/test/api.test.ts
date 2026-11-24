@@ -347,6 +347,101 @@ describe("Core API", () => {
     }
   });
 
+  it("stronicuje listy pracowników, jednostek (także z filtrem statusu) i członków kursorami", async () => {
+    const ownerToken = await token(acme);
+
+    // Pracownicy: mamy co najmniej 3 (Anna, Jan, Marek); pobieramy po 2 aż do ostatniej strony
+    const firstEmp = await get("/core/v1/employees?limit=2", ownerToken);
+    expect(firstEmp.statusCode).toBe(200);
+    const firstEmpBody = firstEmp.json();
+    expect(firstEmpBody.data).toHaveLength(2);
+    expect(firstEmpBody.meta.nextCursor).toEqual(expect.any(String));
+
+    const secondEmp = await get(
+      `/core/v1/employees?limit=2&cursor=${encodeURIComponent(firstEmpBody.meta.nextCursor)}`,
+      ownerToken,
+    );
+    expect(secondEmp.statusCode).toBe(200);
+    const secondEmpBody = secondEmp.json();
+    expect(secondEmpBody.data).toHaveLength(1);
+    expect(secondEmpBody.meta.nextCursor).toBeNull();
+
+    const allEmpIds = [...firstEmpBody.data, ...secondEmpBody.data].map((e: { id: string }) => e.id);
+    expect(new Set(allEmpIds).size).toBe(3);
+    expect(allEmpIds).toEqual([...allEmpIds].sort());
+
+    // Jednostki: dodajemy 2 aktywne (łącznie 3 ACTIVE i 2 ARCHIVED = 5) i sprawdzamy stronicowanie + filtr ?status=
+    const poznanRes = await request("POST", "/core/v1/units", ownerToken, { name: "Poznań", type: "BRANCH" });
+    expect(poznanRes.statusCode).toBe(201);
+    const poznan = poznanRes.json().data;
+    const wroclawRes = await request("POST", "/core/v1/units", ownerToken, { name: "Wrocław", type: "BRANCH" });
+    expect(wroclawRes.statusCode).toBe(201);
+
+    const activePage1 = await get("/core/v1/units?status=ACTIVE&limit=2", ownerToken);
+    expect(activePage1.statusCode).toBe(200);
+    const activePage1Body = activePage1.json();
+    expect(activePage1Body.data).toHaveLength(2);
+    expect(activePage1Body.data.every((u: { status: string }) => u.status === "ACTIVE")).toBe(true);
+    expect(activePage1Body.meta.nextCursor).toEqual(expect.any(String));
+
+    const activePage2 = await get(
+      `/core/v1/units?status=ACTIVE&limit=2&cursor=${encodeURIComponent(activePage1Body.meta.nextCursor)}`,
+      ownerToken,
+    );
+    expect(activePage2.statusCode).toBe(200);
+    const activePage2Body = activePage2.json();
+    expect(activePage2Body.data).toHaveLength(1);
+    expect(activePage2Body.data[0].status).toBe("ACTIVE");
+    expect(activePage2Body.meta.nextCursor).toBeNull();
+
+    const activeIds = [...activePage1Body.data, ...activePage2Body.data].map((u: { id: string }) => u.id);
+    expect(new Set(activeIds).size).toBe(3);
+
+    // Członkowie jednostki: przypisujemy wszystkich 3 pracowników do Poznania i stronicujemy po 2
+    for (const empId of allEmpIds) {
+      const added = await request("PUT", `/core/v1/units/${poznan.id}/members/${empId}`, ownerToken, {
+        role: "MEMBER",
+      });
+      expect(added.statusCode).toBe(200);
+    }
+
+    const membersPage1 = await get(`/core/v1/units/${poznan.id}/members?limit=2`, ownerToken);
+    expect(membersPage1.statusCode).toBe(200);
+    const membersPage1Body = membersPage1.json();
+    expect(membersPage1Body.data).toHaveLength(2);
+    expect(membersPage1Body.meta.nextCursor).toEqual(expect.any(String));
+
+    const membersPage2 = await get(
+      `/core/v1/units/${poznan.id}/members?limit=2&cursor=${encodeURIComponent(membersPage1Body.meta.nextCursor)}`,
+      ownerToken,
+    );
+    expect(membersPage2.statusCode).toBe(200);
+    const membersPage2Body = membersPage2.json();
+    expect(membersPage2Body.data).toHaveLength(1);
+    expect(membersPage2Body.meta.nextCursor).toBeNull();
+
+    const memberEmpIds = [...membersPage1Body.data, ...membersPage2Body.data].map(
+      (m: { employeeId: string }) => m.employeeId,
+    );
+    expect(new Set(memberEmpIds)).toEqual(new Set(allEmpIds));
+
+    // Błędny limit (> 100, 0, nie-liczba) i błędny kursor -> 422 VALIDATION_FAILED
+    const nonUuidCursor = Buffer.from("not-a-uuid", "utf8").toString("base64url");
+    for (const invalid of [
+      await get("/core/v1/employees?limit=101", ownerToken),
+      await get("/core/v1/units?limit=0", ownerToken),
+      await get("/core/v1/units?limit=abc", ownerToken),
+      await get(`/core/v1/units/${poznan.id}/members?limit=101`, ownerToken),
+      await get("/core/v1/employees?cursor=!!!bad!!!", ownerToken),
+      await get(`/core/v1/units?cursor=${nonUuidCursor}`, ownerToken),
+      await get(`/core/v1/units/${poznan.id}/members?cursor=${nonUuidCursor}`, ownerToken),
+    ]) {
+      expect(invalid.statusCode).toBe(422);
+      expect(invalid.json().error.code).toBe("VALIDATION_FAILED");
+      expect(invalid.json().error.details.length).toBeGreaterThan(0);
+    }
+  });
+
   it("odcina konto po dezaktywacji, nawet z ważnym tokenem", async () => {
     const bearer = await token(globex);
     expect((await get("/core/v1/me", bearer)).statusCode).toBe(200);
