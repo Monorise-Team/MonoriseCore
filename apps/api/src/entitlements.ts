@@ -98,7 +98,6 @@ async function resolveOrganizationId(tx: Tx, organization: string): Promise<stri
 
   await tx.$executeRaw`SELECT set_config('app.organization_id', ${organizationId}, true)`;
   const found = await tx.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
-  await tx.$executeRaw`SELECT set_config('app.organization_id', '', true)`;
   if (!found) {
     throw new EntitlementCliError(`Nie znaleziono firmy "${trimmed}"`, "NOT_FOUND");
   }
@@ -142,8 +141,9 @@ export async function grantEntitlement(
 
     const organizationId = await resolveOrganizationId(tx, input.organization);
 
-    // Serializujemy równoległe operacje na (firma, produkt) w ścieżce operatora bez kontekstu firmy.
+    // Serializujemy równoległe operacje na (firma, produkt) i włączamy transakcyjną flagę zapisu operatora.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('entitlement:' || ${organizationId}::uuid::text || ':' || ${product.id}::uuid::text, 0))`;
+    await tx.$executeRaw`SELECT set_config('app.entitlement_write', 'on', true)`;
 
     const existing = await tx.entitlement.findFirst({
       where: { organizationId, productId: product.id, status: { not: "ENDED" } },
@@ -183,8 +183,6 @@ export async function grantEntitlement(
       });
     }
 
-    // Przełączamy transakcję na kontekst firmy, żeby podbić authzRevision kont, zapisać outbox i audyt przez RLS.
-    await tx.$executeRaw`SELECT set_config('app.organization_id', ${organizationId}, true)`;
     const bumped = await bumpAuthzRevisions(tx, organizationId, { organizationId });
 
     await tx.auditLog.create({
@@ -242,6 +240,7 @@ export async function endEntitlement(db: PrismaClient, input: EndEntitlementInpu
     const organizationId = await resolveOrganizationId(tx, input.organization);
 
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('entitlement:' || ${organizationId}::uuid::text || ':' || ${product.id}::uuid::text, 0))`;
+    await tx.$executeRaw`SELECT set_config('app.entitlement_write', 'on', true)`;
 
     const existing = await tx.entitlement.findFirst({
       where: { organizationId, productId: product.id, status: { not: "ENDED" } },
@@ -269,7 +268,6 @@ export async function endEntitlement(db: PrismaClient, input: EndEntitlementInpu
       },
     });
 
-    await tx.$executeRaw`SELECT set_config('app.organization_id', ${organizationId}, true)`;
     const bumped = await bumpAuthzRevisions(tx, organizationId, { organizationId });
 
     await tx.auditLog.create({

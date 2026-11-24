@@ -24,21 +24,38 @@ ALTER TABLE "public"."entitlements"
 ALTER TABLE "public"."entitlements" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."entitlements" FORCE ROW LEVEL SECURITY;
 
--- Firma (kontekst withOrganization) czyta wyłącznie własne dostępy. Zapisy działają wyłącznie poza
--- kontekstem firmy (ścieżka operatora Core / CLI); SELECT dopuszcza brak kontekstu, żeby CLI mogło
--- odczytywać istniejące wpisy i żeby INSERT/UPDATE ... RETURNING w Prismie przechodziło politykę.
+-- Ścisła izolacja odczytu: firma (withOrganization) widzi wyłącznie własne wpisy, a bez kontekstu firmy
+-- rola core_app nie widzi żadnych wierszy. Zapisy (INSERT/UPDATE) wymagają jednocześnie kontekstu tej
+-- firmy oraz jawnej flagi transakcyjnej app.entitlement_write = 'on' (ścieżka operatora Core / CLI).
+-- PostgreSQL stosuje politykę SELECT również do UPDATE ... WHERE ..., dlatego zapis musi działać w
+-- kontekście docelowej firmy (z osobną flagą blokującą zapisy z normalnych wywołań withOrganization).
 CREATE POLICY entitlements_select ON "public"."entitlements"
   FOR SELECT
-  USING ("public"."current_organization_id"() IS NULL OR "organizationId" = "public"."current_organization_id"());
+  TO core_app
+  USING ("organizationId" = "public"."current_organization_id"());
+
+CREATE POLICY entitlements_owner_select ON "public"."entitlements"
+  FOR SELECT
+  TO core_owner
+  USING (true);
 
 CREATE POLICY entitlements_insert ON "public"."entitlements"
   FOR INSERT
-  WITH CHECK ("public"."current_organization_id"() IS NULL);
+  WITH CHECK (
+    "organizationId" = "public"."current_organization_id"()
+    AND current_setting('app.entitlement_write', true) = 'on'
+  );
 
 CREATE POLICY entitlements_update ON "public"."entitlements"
   FOR UPDATE
-  USING ("public"."current_organization_id"() IS NULL)
-  WITH CHECK ("public"."current_organization_id"() IS NULL);
+  USING (
+    "organizationId" = "public"."current_organization_id"()
+    AND current_setting('app.entitlement_write', true) = 'on'
+  )
+  WITH CHECK (
+    "organizationId" = "public"."current_organization_id"()
+    AND current_setting('app.entitlement_write', true) = 'on'
+  );
 
 CREATE POLICY entitlements_owner_delete ON "public"."entitlements"
   FOR DELETE

@@ -994,7 +994,7 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
     }
   });
 
-  it("izoluje entitlements między firmami, dopuszcza zapis tylko bez kontekstu firmy oraz egzekwuje unikalność i CHECKi", async () => {
+  it("izoluje entitlements między firmami (brak widoczności bez kontekstu), chroni zapisy i egzekwuje unikalność oraz CHECKi", async () => {
     const suffix = uuidv7().replaceAll("-", "").slice(-6);
     const productKey = `entprod${suffix}`;
     const productId = uuidv7();
@@ -1004,8 +1004,17 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
 
     await db.product.create({ data: { id: productId, key: productKey, name: "Produkt Entitlement" } });
 
+    const withEntitlementWrite = <T>(
+      organizationId: string,
+      fn: (tx: Parameters<Parameters<typeof withOrganization>[2]>[0]) => Promise<T>,
+    ) =>
+      withOrganization(db, organizationId, async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.entitlement_write', 'on', true)`;
+        return fn(tx);
+      });
+
     try {
-      // Zapis w kontekście firmy jest zablokowany przez RLS
+      // Zapis bez flagi operatora jest zablokowany zarówno w zwykłym withOrganization, jak i bez kontekstu firmy
       await expect(
         withOrganization(db, acme.id, (tx) =>
           tx.entitlement.create({
@@ -1020,27 +1029,62 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
         ),
       ).rejects.toThrow(/row-level security|violates/i);
 
-      // Zapis bez kontekstu firmy (ścieżka operatora Core) działa (w tym Prisma RETURNING)
-      const createdAcme = await db.entitlement.create({
-        data: {
-          id: acmeEntId,
-          organizationId: acme.id,
-          productId,
-          sourceType: "MANUAL",
-          status: "ACTIVE",
-        },
-      });
+      await expect(
+        db.entitlement.create({
+          data: {
+            id: uuidv7(),
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ACTIVE",
+          },
+        }),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // Ścieżka operatora Core (kontekst firmy + transakcyjna flaga app.entitlement_write) zapisuje wyłącznie tę firmę
+      const createdAcme = await withEntitlementWrite(acme.id, (tx) =>
+        tx.entitlement.create({
+          data: {
+            id: acmeEntId,
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ACTIVE",
+          },
+        }),
+      );
       expect(createdAcme.id).toBe(acmeEntId);
 
-      await db.entitlement.create({
-        data: {
-          id: globexEntId,
-          organizationId: globex.id,
-          productId,
-          sourceType: "MANUAL",
-          status: "ACTIVE",
-        },
-      });
+      // Nawet z flagą operatora nie można zapisać wiersza innej firmy
+      await expect(
+        withEntitlementWrite(acme.id, (tx) =>
+          tx.entitlement.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              productId,
+              sourceType: "MANUAL",
+              status: "ACTIVE",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      await withEntitlementWrite(globex.id, (tx) =>
+        tx.entitlement.create({
+          data: {
+            id: globexEntId,
+            organizationId: globex.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ACTIVE",
+          },
+        }),
+      );
+
+      // Bez kontekstu firmy core_app nie widzi żadnych wierszy entitlements (ścisła izolacja firm)
+      expect(await db.entitlement.findMany({ where: { productId } })).toEqual([]);
+      expect(await db.entitlement.findMany()).toEqual([]);
 
       // Firma widzi wyłącznie własny entitlement
       const acmeVisible = await withOrganization(db, acme.id, (tx) =>
@@ -1053,67 +1097,79 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
       );
       expect(globexVisible.map((e) => e.id)).toEqual([globexEntId]);
 
-      // Firma nie może zaktualizować nawet własnego entitlementu ani usunąć żadnego
+      // Zwykły kontekst firmy nie może zaktualizować nawet własnego entitlementu, a core_app nie ma DELETE
       const updatedInTenant = await withOrganization(db, acme.id, (tx) =>
         tx.entitlement.updateMany({ where: { id: acmeEntId }, data: { status: "ENDED" } }),
       );
       expect(updatedInTenant.count).toBe(0);
 
-      await expect(db.entitlement.delete({ where: { id: acmeEntId } })).rejects.toThrow(/permission denied/i);
+      await expect(
+        withEntitlementWrite(acme.id, (tx) => tx.entitlement.delete({ where: { id: acmeEntId } })),
+      ).rejects.toThrow(/permission denied/i);
 
       // Drugi nie-ENDED entitlement dla tej samej pary (firma, produkt) odrzucony indeksem częściowym
       await expect(
-        db.entitlement.create({
-          data: {
-            id: uuidv7(),
-            organizationId: acme.id,
-            productId,
-            sourceType: "MANUAL",
-            status: "SUSPENDED",
-            suspendedReason: "OVERDUE",
-          },
-        }),
+        withEntitlementWrite(acme.id, (tx) =>
+          tx.entitlement.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              productId,
+              sourceType: "MANUAL",
+              status: "SUSPENDED",
+              suspendedReason: "OVERDUE",
+            },
+          }),
+        ),
       ).rejects.toThrow(/entitlements_organizationId_productId_open_key|unique|duplicate/i);
 
       // CHECKi: endsAt <= startsAt oraz suspendedReason przy statusie innym niż SUSPENDED
       await expect(
-        db.entitlement.create({
-          data: {
-            id: uuidv7(),
-            organizationId: acme.id,
-            productId,
-            sourceType: "MANUAL",
-            status: "ENDED",
-            startsAt: new Date("2026-12-10T00:00:00.000Z"),
-            endsAt: new Date("2026-12-01T00:00:00.000Z"),
-          },
-        }),
+        withEntitlementWrite(acme.id, (tx) =>
+          tx.entitlement.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              productId,
+              sourceType: "MANUAL",
+              status: "ENDED",
+              startsAt: new Date("2026-12-10T00:00:00.000Z"),
+              endsAt: new Date("2026-12-01T00:00:00.000Z"),
+            },
+          }),
+        ),
       ).rejects.toThrow(/entitlements_period_range|check constraint|violates/i);
 
       await expect(
-        db.entitlement.create({
-          data: {
-            id: uuidv7(),
-            organizationId: acme.id,
-            productId,
-            sourceType: "MANUAL",
-            status: "ENDED",
-            suspendedReason: "OVERDUE",
-          },
-        }),
+        withEntitlementWrite(acme.id, (tx) =>
+          tx.entitlement.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              productId,
+              sourceType: "MANUAL",
+              status: "ENDED",
+              suspendedReason: "OVERDUE",
+            },
+          }),
+        ),
       ).rejects.toThrow(/entitlements_suspended_reason_consistency|check constraint|violates/i);
 
       // Po zakończeniu pierwszego (ENDED) można dodać nowy ACTIVE dla tej samej pary (firma, produkt)
-      await db.entitlement.update({ where: { id: acmeEntId }, data: { status: "ENDED" } });
-      const second = await db.entitlement.create({
-        data: {
-          id: secondAcmeEntId,
-          organizationId: acme.id,
-          productId,
-          sourceType: "MANUAL",
-          status: "ACTIVE",
-        },
-      });
+      await withEntitlementWrite(acme.id, (tx) =>
+        tx.entitlement.update({ where: { id: acmeEntId }, data: { status: "ENDED" } }),
+      );
+      const second = await withEntitlementWrite(acme.id, (tx) =>
+        tx.entitlement.create({
+          data: {
+            id: secondAcmeEntId,
+            organizationId: acme.id,
+            productId,
+            sourceType: "MANUAL",
+            status: "ACTIVE",
+          },
+        }),
+      );
       expect(second.id).toBe(secondAcmeEntId);
     } finally {
       await ownerDb.entitlement.deleteMany({ where: { id: { in: [acmeEntId, globexEntId, secondAcmeEntId] } } });
@@ -1186,7 +1242,7 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
         withOrganization(db, acme.id, (tx) => tx.appAccess.delete({ where: { id: acmeAccessId } })),
       ).rejects.toThrow(/permission denied/i);
 
-      // Klucz złożony odrzuca konto z innej firmy
+      // Klucz złożony odrzuca konto z innej firmy (używamy status: REVOKED, żeby ominąć częściowy indeks ACTIVE)
       await expect(
         withOrganization(db, acme.id, (tx) =>
           tx.appAccess.create({
@@ -1195,12 +1251,13 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
               organizationId: acme.id,
               accountId: globex.accountId,
               productId,
-              status: "ACTIVE",
+              status: "REVOKED",
+              revokedAt: new Date(),
               grantedByAccountId: acme.accountId,
             },
           }),
         ),
-      ).rejects.toThrow(/foreign key|violates/i);
+      ).rejects.toThrow(/app_access_organizationId_accountId_fkey|foreign key/i);
 
       // Drugi wiersz ACTIVE dla tego samego (accountId, productId) odrzucony
       await expect(
