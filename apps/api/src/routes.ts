@@ -1,6 +1,8 @@
 import {
   API_PREFIX,
   CreateEmployee,
+  CreateRole,
+  CreateRoleAssignment,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
   Employee,
@@ -8,6 +10,7 @@ import {
   MAX_PAGE_LIMIT,
   Me,
   Organization,
+  OrganizationOwner,
   PageCursor,
   PageLimit,
   Permission,
@@ -16,9 +19,15 @@ import {
   PutUnitMember,
   RegisterPermissionsRequest,
   RegisterPermissionsResult,
+  RegisterRoleTemplatesRequest,
+  RegisterRoleTemplatesResult,
+  Role,
+  RoleAssignment,
+  TransferOrganizationOwner,
   Unit,
   UnitMember,
   UnitStatus,
+  UpdateRole,
   UpdateUnit,
   type ErrorCode,
 } from "@core/contracts";
@@ -26,7 +35,7 @@ import { z } from "zod";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions";
+export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -38,9 +47,13 @@ export interface TagDefinition {
 export const TAGS: readonly TagDefinition[] = [
   { name: "System", description: "Stan usługi i opis OpenAPI." },
   { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
-  { name: "Organization", description: "Firma zalogowanego użytkownika." },
+  { name: "Organization", description: "Firma zalogowanego użytkownika oraz przekazanie roli Ownera." },
   { name: "Structure", description: "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie." },
   { name: "Permissions", description: "Rejestr uprawnień platformy Core i produktów (ADR-0036)." },
+  {
+    name: "Roles",
+    description: "Role firmowe, gotowe szablony ról i przypisania ról z zakresem (ADR-0033, ADR-0035).",
+  },
 ];
 
 export type SuccessStatus = 200 | 201 | 204;
@@ -101,9 +114,29 @@ export const EmployeeList = z.array(Employee);
 export const UnitList = z.array(Unit);
 export const UnitMemberList = z.array(UnitMember);
 export const PermissionList = z.array(Permission);
+export const RoleList = z.array(Role);
+export const RoleAssignmentList = z.array(RoleAssignment);
 
 const UuidParam = z.uuid();
 const IncludeDeprecatedParam = z.boolean().default(false);
+const IncludeTemplatesParam = z.boolean().default(true);
+const IncludeArchivedParam = z.boolean().default(false);
+
+const ROLE_ID_PARAM: ParameterDefinition = {
+  name: "roleId",
+  in: "path",
+  required: true,
+  description: "Identyfikator roli lub gotowego szablonu roli (UUID v7).",
+  schema: UuidParam,
+};
+
+const ASSIGNMENT_ID_PARAM: ParameterDefinition = {
+  name: "assignmentId",
+  in: "path",
+  required: true,
+  description: "Identyfikator przypisania roli (UUID v7).",
+  schema: UuidParam,
+};
 
 const PRODUCT_KEY_PARAM: ParameterDefinition = {
   name: "productKey",
@@ -237,6 +270,34 @@ export const ROUTES = {
       500: ["INTERNAL"],
     },
   },
+  transferOrganizationOwner: {
+    method: "PUT",
+    path: `${API_PREFIX}/organization/owner`,
+    operationId: "transferOrganizationOwner",
+    tag: "Organization",
+    summary: "Przekaż rolę Ownera firmy innemu aktywnemu kontu",
+    description:
+      "Operacja wyłącznie dla bieżącego Ownera firmy. Docelowe konto musi być aktywnym kontem tej samej firmy " +
+      "i nie może być już Ownerem. Poprzedni Owner zachowuje wyłącznie uprawnienia wynikające z nadanych ról.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    requestBodySchemaName: "TransferOrganizationOwner",
+    requestBodySchema: TransferOrganizationOwner,
+    requestBodyDescription: "Identyfikator docelowego konta nowego Ownera.",
+    dataSchemaName: "OrganizationOwner",
+    dataSchema: OrganizationOwner,
+    responseSchemaName: "OrganizationOwnerResponse",
+    responseDescription: "Identyfikator nowego Ownera firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
   listEmployees: {
     method: "GET",
     path: `${API_PREFIX}/employees`,
@@ -265,7 +326,9 @@ export const ROUTES = {
     operationId: "createEmployee",
     tag: "People",
     summary: "Dodaj pracownika",
-    description: "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga roli Ownera firmy.",
+    description:
+      "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` " +
+      "w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 201,
     envelope: true,
@@ -321,7 +384,9 @@ export const ROUTES = {
     operationId: "createUnit",
     tag: "Structure",
     summary: "Utwórz jednostkę organizacyjną",
-    description: "Dodaje oddział, dział lub zespół do drzewa struktury firmy (ADR-0032). Wymaga roli Ownera firmy.",
+    description:
+      "Dodaje oddział, dział lub zespół do drzewa struktury firmy (ADR-0032). Wymaga uprawnienia " +
+      "`core.structure.manage` na jednostce nadrzędnej (albo w zakresie całej firmy dla jednostki głównej) lub roli Ownera.",
     auth: "bearer",
     successStatus: 201,
     envelope: true,
@@ -349,7 +414,8 @@ export const ROUTES = {
     summary: "Zmień jednostkę organizacyjną",
     description:
       "Zmienia nazwę, przenosi jednostkę w drzewie (z kontrolą cykli) albo zmienia jej status " +
-      "(archiwizacja tylko bez aktywnych jednostek podrzędnych). Wymaga roli Ownera firmy.",
+      "(archiwizacja tylko bez aktywnych jednostek podrzędnych). Wymaga uprawnienia `core.structure.manage` " +
+      "na jednostce oraz — przy przenoszeniu — również na nowej jednostce nadrzędnej (lub całej firmie).",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -402,7 +468,7 @@ export const ROUTES = {
     summary: "Przypisz pracownika do jednostki lub zmień jego rolę",
     description:
       "Operacja idempotentna: przypisuje pracownika do jednostki albo aktualizuje jego rolę (`MEMBER`/`LEADER`). " +
-      "Wymaga roli Ownera firmy.",
+      "Wymaga uprawnienia `core.structure.manage` na wskazanej jednostce albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -429,7 +495,9 @@ export const ROUTES = {
     operationId: "deleteUnitMember",
     tag: "Structure",
     summary: "Usuń pracownika z jednostki organizacyjnej",
-    description: "Usuwa przypisanie pracownika do wskazanej jednostki. Wymaga roli Ownera firmy.",
+    description:
+      "Usuwa przypisanie pracownika do wskazanej jednostki. Wymaga uprawnienia `core.structure.manage` " +
+      "na tej jednostce albo roli Ownera.",
     auth: "bearer",
     successStatus: 204,
     envelope: false,
@@ -506,6 +574,275 @@ export const ROUTES = {
     responseDescription: "Podsumowanie zmian w rejestrze uprawnień produktu.",
     errors: {
       401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  registerProductRoleTemplates: {
+    method: "PUT",
+    path: `${API_PREFIX}/products/{productKey}/role-templates`,
+    operationId: "registerProductRoleTemplates",
+    tag: "Roles",
+    summary: "Zarejestruj gotowe role (szablony) produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:permissions.register`). Idempotentnie dodaje i aktualizuje szablony ról produktu, archiwizuje " +
+      "brakujące i przywraca ponownie obecne.",
+    auth: { scheme: "productOAuth", scopes: [PERMISSIONS_REGISTER_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    parameters: [PRODUCT_KEY_PARAM],
+    requestBodySchemaName: "RegisterRoleTemplatesRequest",
+    requestBodySchema: RegisterRoleTemplatesRequest,
+    requestBodyDescription: "Manifest gotowych ról produktu (klucze z prefiksem `<productKey>.`).",
+    dataSchemaName: "RegisterRoleTemplatesResult",
+    dataSchema: RegisterRoleTemplatesResult,
+    responseSchemaName: "RegisterRoleTemplatesResponse",
+    responseDescription: "Podsumowanie zmian w gotowych rolach produktu.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listRoles: {
+    method: "GET",
+    path: `${API_PREFIX}/roles`,
+    operationId: "listRoles",
+    tag: "Roles",
+    summary: "Lista ról firmy i gotowych szablonów",
+    description:
+      "Zwraca stronicowaną listę ról firmy wraz z gotowymi szablonami (domyślnie bez ról zarchiwizowanych). " +
+      "Dostępna dla każdego aktywnego konta firmy.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "product",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po kluczu produktu (np. `timotime`) albo `core` dla ról platformowych.",
+        schema: ProductKey,
+      },
+      {
+        name: "includeTemplates",
+        in: "query",
+        required: false,
+        description: "Czy uwzględnić gotowe role (szablony) — domyślnie `true`.",
+        schema: IncludeTemplatesParam,
+      },
+      {
+        name: "includeArchived",
+        in: "query",
+        required: false,
+        description: "Czy uwzględnić zarchiwizowane role — domyślnie `false`.",
+        schema: IncludeArchivedParam,
+      },
+    ],
+    dataSchemaName: "RoleList",
+    dataSchema: RoleList,
+    responseSchemaName: "RoleListResponse",
+    responseDescription: "Strona listy ról.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  getRole: {
+    method: "GET",
+    path: `${API_PREFIX}/roles/{roleId}`,
+    operationId: "getRole",
+    tag: "Roles",
+    summary: "Pobierz szczegóły roli wraz z kluczami uprawnień",
+    description: "Zwraca rolę firmy albo gotowy szablon roli wraz z listą jej kluczy uprawnień.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [ROLE_ID_PARAM],
+    dataSchemaName: "Role",
+    dataSchema: Role,
+    responseSchemaName: "RoleResponse",
+    responseDescription: "Szczegóły roli.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  createRole: {
+    method: "POST",
+    path: `${API_PREFIX}/roles`,
+    operationId: "createRole",
+    tag: "Roles",
+    summary: "Utwórz rolę firmy lub skopiuj istniejącą rolę",
+    description:
+      "Tworzy własną rolę firmy od zera albo kopiuje gotowy szablon lub istniejącą rolę firmy (`copyFromRoleId`). " +
+      "Wymaga uprawnienia `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 201,
+    envelope: true,
+    requestBodySchemaName: "CreateRole",
+    requestBodySchema: CreateRole,
+    requestBodyDescription: "Dane nowej roli firmy albo identyfikator kopiowanej roli.",
+    dataSchemaName: "Role",
+    dataSchema: Role,
+    responseSchemaName: "RoleResponse",
+    responseDescription: "Utworzona rola firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  updateRole: {
+    method: "PATCH",
+    path: `${API_PREFIX}/roles/{roleId}`,
+    operationId: "updateRole",
+    tag: "Roles",
+    summary: "Zmień nazwę, opis lub uprawnienia roli firmy",
+    description:
+      "Aktualizuje aktywną rolę firmy (szablony zwracają `403`). Zmiana listy uprawnień podbija `authzRevision` " +
+      "wszystkich kont z przypisaną tą rolą. Wymaga `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [ROLE_ID_PARAM],
+    requestBodySchemaName: "UpdateRole",
+    requestBodySchema: UpdateRole,
+    requestBodyDescription: "Pola roli firmy do aktualizacji.",
+    dataSchemaName: "Role",
+    dataSchema: Role,
+    responseSchemaName: "RoleResponse",
+    responseDescription: "Zaktualizowana rola firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  archiveRole: {
+    method: "DELETE",
+    path: `${API_PREFIX}/roles/{roleId}`,
+    operationId: "archiveRole",
+    tag: "Roles",
+    summary: "Zarchiwizuj rolę firmy",
+    description:
+      "Archiwizuje rolę firmy (ustawia `archivedAt`). Zwraca `409 CONFLICT`, dopóki rola ma jakiekolwiek " +
+      "przypisania, oraz `403` dla szablonów. Wymaga `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 204,
+    envelope: false,
+    parameters: [ROLE_ID_PARAM],
+    responseDescription: "Rola firmy została zarchiwizowana.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listRoleAssignments: {
+    method: "GET",
+    path: `${API_PREFIX}/role-assignments`,
+    operationId: "listRoleAssignments",
+    tag: "Roles",
+    summary: "Lista przypisań ról w firmie",
+    description:
+      "Owner oraz konta z uprawnieniem `core.roles.assign` lub `core.roles.manage` (w dowolnym zakresie) widzą " +
+      "wszystkie przypisania firmy; pozostałe konta widzą wyłącznie własne przypisania.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "accountId",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po identyfikatorze konta (UUID v7).",
+        schema: UuidParam,
+      },
+      {
+        name: "roleId",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po identyfikatorze roli (UUID v7).",
+        schema: UuidParam,
+      },
+    ],
+    dataSchemaName: "RoleAssignmentList",
+    dataSchema: RoleAssignmentList,
+    responseSchemaName: "RoleAssignmentListResponse",
+    responseDescription: "Strona listy przypisań ról.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  createRoleAssignment: {
+    method: "POST",
+    path: `${API_PREFIX}/role-assignments`,
+    operationId: "createRoleAssignment",
+    tag: "Roles",
+    summary: "Nadaj rolę kontu w firmie z zakresem i opcjonalnym terminem",
+    description:
+      "Przypisuje aktywną rolę (firmową albo gotowy szablon) kontu w zakresie `ORGANIZATION`, `UNIT` lub `RESOURCE`. " +
+      "Wymaga roli Ownera albo `core.roles.assign` obejmującego docelowy zakres oraz posiadania każdego uprawnienia " +
+      "roli w tym zakresie (ADR-0035).",
+    auth: "bearer",
+    successStatus: 201,
+    envelope: true,
+    requestBodySchemaName: "CreateRoleAssignment",
+    requestBodySchema: CreateRoleAssignment,
+    requestBodyDescription: "Dane nowego przypisania roli.",
+    dataSchemaName: "RoleAssignment",
+    dataSchema: RoleAssignment,
+    responseSchemaName: "RoleAssignmentResponse",
+    responseDescription: "Utworzone przypisanie roli.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  deleteRoleAssignment: {
+    method: "DELETE",
+    path: `${API_PREFIX}/role-assignments/{assignmentId}`,
+    operationId: "deleteRoleAssignment",
+    tag: "Roles",
+    summary: "Odbierz przypisanie roli",
+    description:
+      "Usuwa przypisanie roli i podbija `authzRevision` konta (historia trafia do dziennika zdarzeń). " +
+      "Wymaga tych samych uprawnień co nadanie tego przypisania albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 204,
+    envelope: false,
+    parameters: [ASSIGNMENT_ID_PARAM],
+    responseDescription: "Przypisanie roli zostało odebrane.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
