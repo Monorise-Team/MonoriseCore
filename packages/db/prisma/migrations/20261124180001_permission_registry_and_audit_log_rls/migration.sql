@@ -89,11 +89,13 @@ CREATE TRIGGER "products_prevent_key_change_with_permissions"
 ALTER TABLE "public"."audit_log" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."audit_log" FORCE ROW LEVEL SECURITY;
 
--- Firma widzi wyłącznie swoje wpisy; wpisy platformy (organizationId IS NULL) i innych firm są ukryte.
+-- Firma (kontekst withOrganization) widzi wyłącznie swoje wpisy; wpisy platformy (organizationId IS NULL)
+-- i innych firm są dla niej ukryte. Bez kontekstu firmy (Core sam rejestruje uprawnienia) widać tylko wpisy
+-- platformy: zapis z RETURNING musi przejść także tę regułę odczytu.
 CREATE POLICY audit_log_tenant_select ON "public"."audit_log"
   FOR SELECT
   TO core_app
-  USING ("organizationId" = "public"."current_organization_id"());
+  USING ("organizationId" IS NOT DISTINCT FROM "public"."current_organization_id"());
 
 -- Właściciel tabel (core_owner) zachowuje odczyt i usuwanie dla retencji i operacji serwisowych (ADR-0041).
 CREATE POLICY audit_log_owner_select ON "public"."audit_log"

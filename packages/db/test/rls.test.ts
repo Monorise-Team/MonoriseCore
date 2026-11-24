@@ -458,8 +458,10 @@ describe("dziennik zdarzeń i rejestr uprawnień", () => {
       expect(acmeEntries.map((entry) => entry.id)).not.toContain(platformEntryId);
       expect(acmeEntries.every((entry) => entry.organizationId === acme.id)).toBe(true);
 
-      // Bez kontekstu firmy core_app nie widzi żadnych wpisów (ani firmowych, ani platformowych)
-      expect(await db.auditLog.findMany()).toEqual([]);
+      // Bez kontekstu firmy core_app widzi tylko wpisy platformy, nigdy wpisów firm
+      const platformEntries = await db.auditLog.findMany();
+      expect(platformEntries.map((entry) => entry.id)).toContain(platformEntryId);
+      expect(platformEntries.every((entry) => entry.organizationId === null)).toBe(true);
 
       // Nie można zapisać wpisu cudzej firmy ani wpisu platformowego w kontekście firmy
       await expect(
@@ -577,7 +579,9 @@ describe("dziennik zdarzeń i rejestr uprawnień", () => {
         db.permission.create({
           data: { id: uuidv7(), key: `core.bad_${suffix}.write`, productId, description: "Core z produktem" },
         }),
-      ).rejects.toThrow(/permissions_core_product_consistency|check constraint|violates/i);
+      ).rejects.toThrow(
+        /permissions_core_product_consistency|permissions_product_prefix|must start with|does not match product key|check constraint|violates/i,
+      );
 
       // Klucz produktu bez productId -> odrzucony przez CHECK
       await expect(
@@ -589,7 +593,9 @@ describe("dziennik zdarzeń i rejestr uprawnień", () => {
             description: "Produkt bez productId",
           },
         }),
-      ).rejects.toThrow(/permissions_core_product_consistency|check constraint|violates/i);
+      ).rejects.toThrow(
+        /permissions_core_product_consistency|permissions_product_prefix|must start with|does not match product key|check constraint|violates/i,
+      );
 
       // Niepoprawny format klucza -> odrzucony przez CHECK
       await expect(
