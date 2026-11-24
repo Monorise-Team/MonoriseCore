@@ -2,9 +2,19 @@
  * Kontrakt Core API (`https://api.monorise.studio/core/v1`) i serwera logowania (`https://auth.monorise.studio`).
  * Format odpowiedzi jak w standardzie API Monorise (ADR-0044): `{ data, meta, error }`.
  */
+import {
+  permissionKeySchema,
+  permissionManifestEntrySchema,
+  permissionManifestSchema,
+  productNameSchema,
+} from "@monorise-team/permissions";
 import { z } from "zod";
 
+export { CORE_PERMISSIONS, type CorePermissionKey } from "./permissions.js";
+
 export const API_PREFIX = "/core/v1";
+export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
+export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
@@ -123,6 +133,22 @@ export const AccessTokenClaims = z.object({
 });
 export type AccessTokenClaims = z.infer<typeof AccessTokenClaims>;
 
+/**
+ * Pola tokenu maszynowego (OAuth 2.1 `client_credentials`) wydawanego poufnym klientom produktów.
+ * Taki token nie należy do żadnego użytkownika ani firmy, więc nigdy nie ma `org_id`.
+ */
+export const MachineTokenClaims = z.object({
+  iss: z.string(),
+  sub: z.string().min(1).optional(),
+  aud: z.union([z.string(), z.array(z.string())]),
+  client_id: z.string().min(1),
+  scope: z.string().default(""),
+  org_id: z.never().optional(),
+  iat: z.number(),
+  exp: z.number(),
+});
+export type MachineTokenClaims = z.infer<typeof MachineTokenClaims>;
+
 // ── Firmy ───────────────────────────────────────────────────────────────────────────────────────
 
 export const OrganizationStatus = z.enum(["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED", "OFFBOARDING", "DELETED"]);
@@ -238,6 +264,37 @@ export const PutUnitMember = z.object({
   role: UnitMembershipRole,
 });
 export type PutUnitMember = z.infer<typeof PutUnitMember>;
+
+// ── Rejestr uprawnień produktów (ADR-0036) ──────────────────────────────────────────────────────
+
+export const ProductKey = productNameSchema;
+export type ProductKey = z.infer<typeof ProductKey>;
+
+export const PermissionManifestEntry = permissionManifestEntrySchema;
+export type PermissionManifestEntry = z.infer<typeof PermissionManifestEntry>;
+
+export const RegisterPermissionsRequest = permissionManifestSchema.max(
+  MAX_PERMISSION_MANIFEST_ENTRIES,
+  `Manifest uprawnień może zawierać co najwyżej ${MAX_PERMISSION_MANIFEST_ENTRIES} pozycji`,
+);
+export type RegisterPermissionsRequest = z.infer<typeof RegisterPermissionsRequest>;
+
+export const RegisterPermissionsResult = z.object({
+  added: z.array(z.string()),
+  updated: z.array(z.string()),
+  deprecated: z.array(z.string()),
+  restored: z.array(z.string()),
+  unchanged: z.number().int().nonnegative(),
+});
+export type RegisterPermissionsResult = z.infer<typeof RegisterPermissionsResult>;
+
+export const Permission = z.object({
+  key: permissionKeySchema,
+  product: z.string().nullable(),
+  description: z.string(),
+  deprecated: z.boolean(),
+});
+export type Permission = z.infer<typeof Permission>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

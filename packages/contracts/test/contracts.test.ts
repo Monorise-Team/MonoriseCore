@@ -8,17 +8,25 @@ import {
   ApiMeta,
   apiErrorSchema,
   apiSuccessSchema,
+  CORE_PERMISSIONS,
   CreateEmployee,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
   emailDomain,
   Health,
   isFreeEmailDomain,
+  MachineTokenClaims,
   MAX_PAGE_LIMIT,
+  MAX_PERMISSION_MANIFEST_ENTRIES,
   Me,
   normalizeEmail,
   PageQuery,
+  Permission,
+  PERMISSIONS_REGISTER_SCOPE,
+  ProductKey,
   PutUnitMember,
+  RegisterPermissionsRequest,
+  RegisterPermissionsResult,
   SignUpRequest,
   Unit,
   UnitMember,
@@ -179,5 +187,73 @@ describe("kontrakty", () => {
         error: null,
       }).meta.nextCursor,
     ).toBeNull();
+  });
+
+  it("definiuje uprawnienia Core i waliduje schematy rejestru oraz tokenu maszynowego", () => {
+    expect(CORE_PERMISSIONS.product).toBe("core");
+    expect(CORE_PERMISSIONS.manifest.map((entry) => entry.key)).toEqual([
+      "core.structure.manage",
+      "core.employees.manage",
+      "core.roles.manage",
+      "core.roles.assign",
+      "core.audit.read",
+    ]);
+    expect(RegisterPermissionsRequest.parse(CORE_PERMISSIONS.manifest)).toHaveLength(5);
+
+    expect(ProductKey.safeParse("timotime").success).toBe(true);
+    expect(ProductKey.safeParse("TimoTime").success).toBe(false);
+    expect(ProductKey.safeParse("timo_time").success).toBe(false);
+
+    expect(RegisterPermissionsRequest.safeParse([]).success).toBe(false);
+    const tooMany = Array.from({ length: MAX_PERMISSION_MANIFEST_ENTRIES + 1 }, (_, i) => ({
+      key: `timotime.item_${i}.read`,
+      description: `Pozycja ${i}`,
+    }));
+    expect(RegisterPermissionsRequest.safeParse(tooMany).success).toBe(false);
+
+    expect(
+      RegisterPermissionsResult.parse({
+        added: ["timotime.leave.approve"],
+        updated: [],
+        deprecated: [],
+        restored: [],
+        unchanged: 2,
+      }).unchanged,
+    ).toBe(2);
+
+    expect(
+      Permission.parse({
+        key: "core.roles.manage",
+        product: null,
+        description: "Tworzenie i zmiana ról firmy",
+        deprecated: false,
+      }).product,
+    ).toBeNull();
+
+    const machine = MachineTokenClaims.parse({
+      iss: "https://auth.monorise.studio",
+      sub: "timotime-web",
+      aud: "https://api.monorise.studio",
+      client_id: "timotime-web",
+      scope: PERMISSIONS_REGISTER_SCOPE,
+      iat: 1,
+      exp: 2,
+    });
+    expect(machine.client_id).toBe("timotime-web");
+    expect(machine.scope).toBe("core:permissions.register");
+
+    // Token użytkownika z org_id nie przechodzi walidacji tokenu maszynowego
+    expect(
+      MachineTokenClaims.safeParse({
+        iss: "https://auth.monorise.studio",
+        sub: UUID_1,
+        aud: "https://api.monorise.studio",
+        client_id: "timotime-web",
+        org_id: UUID_2,
+        scope: PERMISSIONS_REGISTER_SCOPE,
+        iat: 1,
+        exp: 2,
+      }).success,
+    ).toBe(false);
   });
 });
