@@ -1,10 +1,10 @@
 /**
- * Kontrakt Core API (`https://api.monorise.studio/v1`) i serwera logowania (`https://auth.monorise.studio`).
+ * Kontrakt Core API (`https://api.monorise.studio/core/v1`) i serwera logowania (`https://auth.monorise.studio`).
  * Format odpowiedzi jak w standardzie API Monorise (ADR-0044): `{ data, meta, error }`.
  */
 import { z } from "zod";
 
-export const API_PREFIX = "/v1";
+export const API_PREFIX = "/core/v1";
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 

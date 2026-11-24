@@ -224,7 +224,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
       description:
         "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy " +
         "dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` " +
-        "i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /v1/openapi.json`, który zwraca " +
+        "i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /core/v1/openapi.json`, który zwraca " +
         "czysty dokument OpenAPI JSON. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
       license: {
         name: "Proprietary, all rights reserved",

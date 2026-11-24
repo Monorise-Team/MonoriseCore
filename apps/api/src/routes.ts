@@ -38,7 +38,7 @@ export interface RouteDefinition {
   errors: RouteErrors;
 }
 
-/** Dokument OpenAPI 3.1 zwracany przez `GET /v1/openapi.json` bez koperty `{ data, meta, error }`. */
+/** Dokument OpenAPI 3.1 zwracany przez `GET /core/v1/openapi.json` bez koperty `{ data, meta, error }`. */
 export const OpenApiDocument = z
   .object({
     openapi: z.string(),

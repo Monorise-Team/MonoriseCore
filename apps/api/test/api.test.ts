@@ -77,30 +77,30 @@ afterAll(async () => {
 });
 
 describe("Core API", () => {
-  it("działa bez logowania tylko dla /v1/health", async () => {
-    const health = await get("/v1/health");
+  it("działa bez logowania tylko dla /core/v1/health", async () => {
+    const health = await get("/core/v1/health");
     expect(health.statusCode).toBe(200);
     expect(health.json()).toMatchObject({ data: { status: "ok" }, error: null });
 
-    const me = await get("/v1/me");
+    const me = await get("/core/v1/me");
     expect(me.statusCode).toBe(401);
     expect(me.json()).toMatchObject({ data: null, error: { code: "UNAUTHENTICATED" } });
   });
 
   it("zwraca dane zalogowanego pracownika i jego firmy", async () => {
-    const response = await get("/v1/me", await token(acme));
+    const response = await get("/core/v1/me", await token(acme));
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({
       account: { id: acme.accountId, status: "ACTIVE" },
       employee: { id: acme.employeeId, firstName: "Anna", lastName: "acme" },
       organization: { id: acme.id, name: "acme", status: "ACTIVE" },
     });
-    const organization = await get("/v1/organization", await token(globex));
+    const organization = await get("/core/v1/organization", await token(globex));
     expect(organization.json().data).toMatchObject({ id: globex.id, name: "globex" });
   });
 
   it("odrzuca obcy podpis, zły odbiorcę, wygasły token i podmienioną firmę", async () => {
-    expect((await get("/v1/me", await token(acme, {}, otherKey))).statusCode).toBe(401);
+    expect((await get("/core/v1/me", await token(acme, {}, otherKey))).statusCode).toBe(401);
     const wrongAudience = await new SignJWT({ org_id: acme.id, employee_id: acme.employeeId, authz_rev: 0 })
       .setProtectedHeader({ alg: "EdDSA" })
       .setIssuer(ISSUER)
@@ -109,19 +109,19 @@ describe("Core API", () => {
       .setIssuedAt()
       .setExpirationTime("5m")
       .sign(signingKey);
-    expect((await get("/v1/me", wrongAudience)).statusCode).toBe(401);
-    expect((await get("/v1/me", await token(acme, {}, signingKey, "-1m"))).statusCode).toBe(401);
+    expect((await get("/core/v1/me", wrongAudience)).statusCode).toBe(401);
+    expect((await get("/core/v1/me", await token(acme, {}, signingKey, "-1m"))).statusCode).toBe(401);
     // Token Anny z Acme z podmienioną firmą: konto nie istnieje w Globex, więc RLS nie zwraca wiersza
-    expect((await get("/v1/me", await token(acme, { org_id: globex.id }))).statusCode).toBe(401);
+    expect((await get("/core/v1/me", await token(acme, { org_id: globex.id }))).statusCode).toBe(401);
   });
 
   it("odcina konto po dezaktywacji, nawet z ważnym tokenem", async () => {
     const bearer = await token(globex);
-    expect((await get("/v1/me", bearer)).statusCode).toBe(200);
+    expect((await get("/core/v1/me", bearer)).statusCode).toBe(200);
     await withOrganization(db, globex.id, (tx) =>
       tx.account.update({ where: { id: globex.accountId }, data: { status: "DEACTIVATED" } }),
     );
-    const response = await get("/v1/me", bearer);
+    const response = await get("/core/v1/me", bearer);
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("ACCOUNT_DEACTIVATED");
   });

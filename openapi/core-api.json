@@ -4,7 +4,7 @@
     "title": "Monorise Core API",
     "version": "0.0.0",
     "summary": "Core API platformy Monorise: tożsamość, firma i stan usługi.",
-    "description": "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /v1/openapi.json`, który zwraca czysty dokument OpenAPI JSON. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
+    "description": "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /core/v1/openapi.json`, który zwraca czysty dokument OpenAPI JSON. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
     "license": {
       "name": "Proprietary, all rights reserved",
       "identifier": "LicenseRef-Proprietary"
@@ -35,7 +35,7 @@
     }
   ],
   "paths": {
-    "/v1/health": {
+    "/core/v1/health": {
       "get": {
         "tags": [
           "System"
@@ -67,7 +67,7 @@
         }
       }
     },
-    "/v1/me": {
+    "/core/v1/me": {
       "get": {
         "tags": [
           "People"
@@ -114,7 +114,7 @@
         }
       }
     },
-    "/v1/openapi.json": {
+    "/core/v1/openapi.json": {
       "get": {
         "tags": [
           "System"
@@ -146,7 +146,7 @@
         }
       }
     },
-    "/v1/organization": {
+    "/core/v1/organization": {
       "get": {
         "tags": [
           "Organization"
