@@ -1,22 +1,40 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  AccountStatus,
   ApiErrorBody,
   ApiErrorDetail,
   ApiErrorResponse,
   ApiMeta,
   apiSuccessSchema,
+  CreateEmployee,
+  CreateUnit,
   DomainStatus,
   Employee,
+  EmployeeStatus,
   ErrorCode,
   Health,
   Me,
   Organization,
   OrganizationDomain,
   OrganizationStatus,
+  PutUnitMember,
+  Unit,
+  UnitMember,
+  UnitMembershipRole,
+  UnitStatus,
+  UnitType,
+  UpdateUnit,
 } from "@core/contracts";
 import { z } from "zod";
-import { OpenApiDocument, ROUTE_LIST, TAGS, type ErrorStatus, type RouteDefinition } from "./routes.js";
+import {
+  OpenApiDocument,
+  ROUTE_LIST,
+  TAGS,
+  type ErrorStatus,
+  type ParameterDefinition,
+  type RouteDefinition,
+} from "./routes.js";
 
 const ROOT_PACKAGE_JSON_PATH = resolve(import.meta.dirname, "../../../package.json");
 
@@ -61,9 +79,27 @@ export interface OpenApiSpec {
   };
 }
 
+export interface OpenApiParameterObject {
+  name: string;
+  in: "path" | "query";
+  required: boolean;
+  description: string;
+  schema: Record<string, unknown>;
+}
+
+export interface OpenApiRequestBodyObject {
+  required: true;
+  description?: string;
+  content: {
+    "application/json": {
+      schema: { $ref: string };
+    };
+  };
+}
+
 export interface OpenApiResponseObject {
   description: string;
-  content: {
+  content?: {
     "application/json": {
       schema: { $ref: string };
     };
@@ -76,6 +112,8 @@ export interface OpenApiOperation {
   summary: string;
   description?: string;
   security?: { bearerAuth: string[] }[];
+  parameters?: OpenApiParameterObject[];
+  requestBody?: OpenApiRequestBodyObject;
   responses: Record<string, OpenApiResponseObject>;
 }
 
@@ -97,10 +135,14 @@ function stripSchemaMeta(schema: Record<string, unknown>): Record<string, unknow
   return result;
 }
 
-function buildComponentSchemas(routes: readonly RouteDefinition[]): Record<string, Record<string, unknown>> {
+function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   const registry = z.registry<{ id: string }>();
+  const idBySchema = new Map<z.ZodType, string>();
   const register = (id: string, schema: z.ZodType) => {
-    if (!registry.has(schema)) registry.add(schema, { id });
+    if (!registry.has(schema)) {
+      registry.add(schema, { id });
+      idBySchema.set(schema, id);
+    }
   };
 
   register("ErrorCode", ErrorCode);
@@ -114,16 +156,36 @@ function buildComponentSchemas(routes: readonly RouteDefinition[]): Record<strin
   register("DomainStatus", DomainStatus);
   register("OrganizationDomain", OrganizationDomain);
   register("Organization", Organization);
+  register("EmployeeStatus", EmployeeStatus);
   register("Employee", Employee);
+  register("CreateEmployee", CreateEmployee);
+  register("AccountStatus", AccountStatus);
   register("Me", Me);
+  register("UnitType", UnitType);
+  register("UnitStatus", UnitStatus);
+  register("UnitMembershipRole", UnitMembershipRole);
+  register("Unit", Unit);
+  register("CreateUnit", CreateUnit);
+  register("UpdateUnit", UpdateUnit);
+  register("UnitMember", UnitMember);
+  register("PutUnitMember", PutUnitMember);
 
   for (const route of routes) {
-    register(route.dataSchemaName, route.dataSchema);
-    if (route.envelope && route.responseSchemaName) {
-      register(route.responseSchemaName, apiSuccessSchema(route.dataSchema));
+    if (route.requestBodySchemaName && route.requestBodySchema) {
+      register(route.requestBodySchemaName, route.requestBodySchema);
+    }
+    if (route.dataSchemaName && route.dataSchema) {
+      register(route.dataSchemaName, route.dataSchema);
+      if (route.envelope && route.responseSchemaName) {
+        register(route.responseSchemaName, apiSuccessSchema(route.dataSchema));
+      }
     }
   }
 
+  return { registry, idBySchema };
+}
+
+function buildComponentSchemas(registry: ReturnType<typeof buildSchemaRegistry>["registry"]) {
   const generated = z.toJSONSchema(registry, {
     target: "draft-2020-12",
     uri: (id) => `#/components/schemas/${id}`,
@@ -137,24 +199,50 @@ function buildComponentSchemas(routes: readonly RouteDefinition[]): Record<strin
   return sorted;
 }
 
+function buildParameter(
+  param: ParameterDefinition,
+  idBySchema: ReadonlyMap<z.ZodType, string>,
+): OpenApiParameterObject {
+  const registeredId = idBySchema.get(param.schema);
+  const schema = registeredId
+    ? { $ref: `#/components/schemas/${registeredId}` }
+    : stripSchemaMeta(z.toJSONSchema(param.schema, { target: "draft-2020-12" }) as Record<string, unknown>);
+  return {
+    name: param.name,
+    in: param.in,
+    required: param.required,
+    description: param.description,
+    schema,
+  };
+}
+
 function describeError(status: ErrorStatus, codes: readonly string[]): string {
   const base = ERROR_STATUS_SUMMARY[status];
   return codes.length > 0 ? `${base} (${codes.join(", ")}).` : `${base}.`;
 }
 
-function buildOperation(route: RouteDefinition): OpenApiOperation {
-  const successSchemaName =
-    route.envelope && route.responseSchemaName ? route.responseSchemaName : route.dataSchemaName;
-  const responses: Record<string, OpenApiResponseObject> = {
-    "200": {
+function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodType, string>): OpenApiOperation {
+  const responses: Record<string, OpenApiResponseObject> = {};
+
+  if (route.successStatus === 204) {
+    responses["204"] = {
+      description: route.responseDescription,
+    };
+  } else {
+    const successSchemaName =
+      route.envelope && route.responseSchemaName ? route.responseSchemaName : route.dataSchemaName;
+    if (!successSchemaName) {
+      throw new Error(`Brak schematu odpowiedzi dla operacji ${route.operationId}`);
+    }
+    responses[String(route.successStatus)] = {
       description: route.responseDescription,
       content: {
         "application/json": {
           schema: { $ref: `#/components/schemas/${successSchemaName}` },
         },
       },
-    },
-  };
+    };
+  }
 
   const errorStatuses = Object.keys(route.errors)
     .map(Number)
@@ -173,24 +261,46 @@ function buildOperation(route: RouteDefinition): OpenApiOperation {
     };
   }
 
+  const parameters =
+    route.parameters && route.parameters.length > 0
+      ? route.parameters.map((param) => buildParameter(param, idBySchema))
+      : undefined;
+
+  const requestBody: OpenApiRequestBodyObject | undefined = route.requestBodySchemaName
+    ? {
+        required: true,
+        ...(route.requestBodyDescription ? { description: route.requestBodyDescription } : {}),
+        content: {
+          "application/json": {
+            schema: { $ref: `#/components/schemas/${route.requestBodySchemaName}` },
+          },
+        },
+      }
+    : undefined;
+
   const operation: OpenApiOperation = {
     tags: [route.tag],
     operationId: route.operationId,
     summary: route.summary,
     ...(route.description ? { description: route.description } : {}),
     ...(route.auth ? { security: [{ bearerAuth: [] }] } : {}),
+    ...(parameters ? { parameters } : {}),
+    ...(requestBody ? { requestBody } : {}),
     responses,
   };
 
   return operation;
 }
 
-function buildPaths(routes: readonly RouteDefinition[]): Record<string, Record<string, OpenApiOperation>> {
+function buildPaths(
+  routes: readonly RouteDefinition[],
+  idBySchema: ReadonlyMap<z.ZodType, string>,
+): Record<string, Record<string, OpenApiOperation>> {
   const grouped = new Map<string, Map<string, OpenApiOperation>>();
   for (const route of routes) {
     const method = route.method.toLowerCase();
     const methods = grouped.get(route.path) ?? new Map<string, OpenApiOperation>();
-    methods.set(method, buildOperation(route));
+    methods.set(method, buildOperation(route, idBySchema));
     grouped.set(route.path, methods);
   }
 
@@ -214,18 +324,20 @@ function buildPaths(routes: readonly RouteDefinition[]): Record<string, Record<s
  */
 export function buildOpenApiDocument(): OpenApiSpec {
   const usedTags = new Set(ROUTE_LIST.map((route) => route.tag));
+  const { registry, idBySchema } = buildSchemaRegistry(ROUTE_LIST);
 
   return {
     openapi: "3.1.0",
     info: {
       title: "Monorise Core API",
       version: readRootVersion(),
-      summary: "Core API platformy Monorise: tożsamość, firma i stan usługi.",
+      summary: "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura i stan usługi.",
       description:
         "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy " +
         "dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` " +
         "i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /core/v1/openapi.json`, który zwraca " +
-        "czysty dokument OpenAPI JSON. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
+        "czysty dokument OpenAPI JSON, oraz odpowiedzi `204 No Content`. Nieznane ścieżki zwracają status `404` z kodem " +
+        "`NOT_FOUND` w kopercie błędu.",
       license: {
         name: "Proprietary, all rights reserved",
         identifier: "LicenseRef-Proprietary",
@@ -239,7 +351,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
       name: tag.name,
       description: tag.description,
     })),
-    paths: buildPaths(ROUTE_LIST),
+    paths: buildPaths(ROUTE_LIST, idBySchema),
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -249,7 +361,7 @@ export function buildOpenApiDocument(): OpenApiSpec {
           description: "Token dostępu JWT (EdDSA) z auth.monorise.studio, ważny 5 minut (ADR-0023).",
         },
       },
-      schemas: buildComponentSchemas(ROUTE_LIST),
+      schemas: buildComponentSchemas(registry),
     },
   };
 }

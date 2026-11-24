@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { PrismaClient } from "@core/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildOpenApiDocument, serializeOpenApiDocument, type OpenApiSpec } from "../src/openapi.js";
-import { ROUTE_LIST } from "../src/routes.js";
+import { ROUTE_LIST, toOpenApiPath } from "../src/routes.js";
 import { buildServer } from "../src/server.js";
 
 const COMMITTED_OPENAPI_PATH = resolve(import.meta.dirname, "../../../openapi/core-api.json");
@@ -11,6 +11,21 @@ const COMMITTED_OPENAPI_PATH = resolve(import.meta.dirname, "../../../openapi/co
 const registeredRoutes: { method: string; path: string }[] = [];
 let app: ReturnType<typeof buildServer>;
 let document: OpenApiSpec;
+
+function collectSchemaRefs(value: unknown, refs: Set<string>): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectSchemaRefs(item, refs);
+    return;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "$ref" && typeof entry === "string") {
+      refs.add(entry);
+    } else {
+      collectSchemaRefs(entry, refs);
+    }
+  }
+}
 
 beforeAll(() => {
   document = buildOpenApiDocument();
@@ -24,7 +39,7 @@ beforeAll(() => {
       for (const method of methods) {
         const upper = method.toUpperCase();
         if (upper === "HEAD" || upper === "OPTIONS") continue;
-        registeredRoutes.push({ method: upper, path: route.url });
+        registeredRoutes.push({ method: upper, path: toOpenApiPath(route.url) });
       }
     },
   });
@@ -60,6 +75,37 @@ describe("OpenAPI Core API", () => {
       } else {
         expect(operation?.security).toBeUndefined();
         expect(operation?.responses["401"]).toBeUndefined();
+      }
+    }
+  });
+
+  it("opisuje parametry ścieżek, treści żądań, kody 201/204 i ma poprawne referencje bez nieużywanych schematów", () => {
+    const schemaNames = new Set(Object.keys(document.components.schemas));
+    const usedRefs = new Set<string>();
+    collectSchemaRefs(document.paths, usedRefs);
+    collectSchemaRefs(document.components.schemas, usedRefs);
+
+    for (const ref of usedRefs) {
+      expect(ref.startsWith("#/components/schemas/")).toBe(true);
+      const name = ref.slice("#/components/schemas/".length);
+      expect(schemaNames.has(name), `Brakujący schemat ${name}`).toBe(true);
+    }
+
+    for (const name of schemaNames) {
+      expect(usedRefs.has(`#/components/schemas/${name}`), `Nieużywany schemat ${name}`).toBe(true);
+    }
+
+    for (const [path, methods] of Object.entries(document.paths)) {
+      const pathParams = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]!);
+      for (const [method, operation] of Object.entries(methods)) {
+        for (const paramName of pathParams) {
+          const declared = operation.parameters?.find((p) => p.in === "path" && p.name === paramName);
+          expect(declared, `Brak parametru ścieżki ${paramName} w ${method.toUpperCase()} ${path}`).toBeDefined();
+          expect(declared?.required).toBe(true);
+        }
+        if (operation.responses["204"]) {
+          expect(operation.responses["204"].content).toBeUndefined();
+        }
       }
     }
   });

@@ -6,12 +6,23 @@ import {
   ApiMeta,
   apiErrorSchema,
   apiSuccessSchema,
+  CreateEmployee,
+  CreateUnit,
   emailDomain,
   Health,
   isFreeEmailDomain,
+  Me,
   normalizeEmail,
+  PutUnitMember,
   SignUpRequest,
+  Unit,
+  UnitMember,
+  UpdateUnit,
 } from "../src/index.js";
+
+const UUID_1 = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7b";
+const UUID_2 = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7c";
+const UUID_3 = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7d";
 
 describe("adresy e-mail", () => {
   it("rozpoznaje domenę i normalizuje adres", () => {
@@ -37,10 +48,10 @@ describe("kontrakty", () => {
   it("token zawiera firmę, pracownika i rewizję uprawnień", () => {
     const claims = AccessTokenClaims.parse({
       iss: "https://auth.monorise.studio",
-      sub: "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7b",
+      sub: UUID_1,
       aud: "https://api.monorise.studio",
-      org_id: "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7c",
-      employee_id: "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7d",
+      org_id: UUID_2,
+      employee_id: UUID_3,
       authz_rev: 0,
       iat: 1,
       exp: 2,
@@ -70,5 +81,79 @@ describe("kontrakty", () => {
     };
     expect(ApiErrorResponse.parse(err)).toEqual(err);
     expect(apiErrorSchema().safeParse({ ...err, error: { ...err.error, code: "UNKNOWN_CODE" } }).success).toBe(false);
+  });
+
+  it("waliduje schematy pracowników, jednostek, członkostw i Me z isOwner", () => {
+    expect(
+      CreateEmployee.parse({
+        firstName: " Anna ",
+        lastName: " Nowak ",
+        workEmail: "anna@acme.test",
+        jobTitle: "Magazyn",
+      }),
+    ).toEqual({ firstName: "Anna", lastName: "Nowak", workEmail: "anna@acme.test", jobTitle: "Magazyn" });
+    expect(CreateEmployee.safeParse({ firstName: "   ", lastName: "Nowak" }).success).toBe(false);
+
+    expect(CreateUnit.parse({ name: " Kraków ", type: "BRANCH" })).toEqual({ name: "Kraków", type: "BRANCH" });
+    expect(CreateUnit.parse({ name: "Magazyn", type: "TEAM", parentId: UUID_1 })).toEqual({
+      name: "Magazyn",
+      type: "TEAM",
+      parentId: UUID_1,
+    });
+    expect(CreateUnit.safeParse({ name: "Kraków", type: "OFFICE" }).success).toBe(false);
+
+    expect(UpdateUnit.safeParse({}).success).toBe(false);
+    expect(UpdateUnit.parse({ parentId: null })).toEqual({ parentId: null });
+    expect(UpdateUnit.parse({ name: "Oddział Kraków", status: "ARCHIVED" })).toEqual({
+      name: "Oddział Kraków",
+      status: "ARCHIVED",
+    });
+
+    expect(PutUnitMember.parse({ role: "LEADER" })).toEqual({ role: "LEADER" });
+    expect(PutUnitMember.safeParse({ role: "OWNER" }).success).toBe(false);
+
+    expect(
+      Unit.parse({
+        id: UUID_1,
+        parentId: null,
+        name: "Kraków",
+        type: "BRANCH",
+        status: "ACTIVE",
+        createdAt: "2026-11-24T12:00:00.000Z",
+        updatedAt: "2026-11-24T12:00:00.000Z",
+      }).parentId,
+    ).toBeNull();
+
+    expect(
+      UnitMember.parse({
+        unitId: UUID_1,
+        employeeId: UUID_2,
+        role: "MEMBER",
+        joinedAt: "2026-11-24T12:00:00.000Z",
+        employee: {
+          id: UUID_2,
+          firstName: "Anna",
+          lastName: "Nowak",
+          workEmail: "anna@acme.test",
+          jobTitle: null,
+          status: "ACTIVE",
+        },
+      }).role,
+    ).toBe("MEMBER");
+
+    expect(
+      Me.parse({
+        account: { id: UUID_1, email: "anna@acme.test", status: "ACTIVE", isOwner: true },
+        employee: {
+          id: UUID_2,
+          firstName: "Anna",
+          lastName: "Nowak",
+          workEmail: "anna@acme.test",
+          jobTitle: null,
+          status: "ACTIVE",
+        },
+        organization: { id: UUID_3, name: "Acme", status: "ACTIVE" },
+      }).account.isOwner,
+    ).toBe(true);
   });
 });
