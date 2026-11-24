@@ -69,12 +69,12 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                                                  |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy (Owner), domeny, JWT/JWKS, OAuth 2.1 (`authorization_code` + PKCE, `client_credentials` dla M2M) |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; `/me`, `/organization`, `/employees`, `/units`, `/permissions`, `/roles`, `/role-assignments`       |
-| `packages/db`        | Prisma (`OrganizationUnit`, `UnitMembership`, `Product`, `Permission`, `Role`, `RoleAssignment`, `AuditLog`), migracje (RLS), `withOrganization`.   |
-| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, lista darmowych domen pocztowych                                |
+| Gdzie                | Co                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, domeny, JWT/JWKS, OAuth 2.1 (PKCE, `client_credentials` M2M)    |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; firmy, pracownicy, jednostki, role, `app-access`, migawka produktu  |
+| `packages/db`        | Prisma (struktura, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `AuditLog`), migracje (RLS), `withOrganization` |
+| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe         |
 
 ## Zasady kodu
 
@@ -82,7 +82,7 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez właściciela tabel i `BYPASSRLS`).
 3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
 4. **Każda tabela z danymi firmy** ma w migracji `ENABLE` + `FORCE` RLS i testy izolacji. `audit_log` jest niezmienny (tylko `SELECT`/`INSERT` dla `core_app`, wyzwalacz blokujący `UPDATE` także dla `core_owner`).
-5. **Tokeny** (ADR-0023): JWT EdDSA ważne 5 min. Token użytkownika ma `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień; `amr` uzupełnimy z MFA). Token maszynowy (`client_credentials`, zakres `core:permissions.register`) nie ma `org_id` i działa tylko na rejestracji manifestów.
+5. **Tokeny** (ADR-0023): JWT EdDSA (5 min). Użytkownik: `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień). Maszynowy (`client_credentials`, zakresy `core:permissions.register`, `core:permissions.read`) bez `org_id`: manifesty i migawki produktów.
 6. **Klienci OAuth tylko z kodu**: `ensureFirstPartyClients` (`pnpm oauth:seed`) rejestruje klientów (z PKCE) i produkty (`avenmail`, `timotime`). Rejestracja HTTP wyłączona; zmiany klientów/adresów powrotu opisz w PR.
 7. **Komunikaty logowania** nie zdradzają, czy konto istnieje. Darmowe skrzynki (Gmail, WP, Onet…) nie zakładają firm (ADR-0019).
 8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /core/v1/openapi.json` zwraca czysty dokument OpenAPI). Listy przyjmują `?limit=` (1–100, domyślnie 50) i `?cursor=` oraz zwracają `meta.nextCursor`.
@@ -95,6 +95,7 @@ Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, prac
 pnpm install && pnpm setup:env && pnpm db:up && pnpm db:migrate
 pnpm dev                 # logowanie: localhost:3100, Core API: localhost:3200, poczta (Mailpit): localhost:8125
 pnpm oauth:seed          # lokalni klienci OAuth AvenMail i TimoTime (sekrety w apps/auth/.data/)
+pnpm entitlement:grant   # przyznaje firmie dostęp do produktu (-- --organization <id|domena> --product <klucz>)
 pnpm openapi             # generuje openapi/core-api.json z kodu (pnpm openapi:check sprawdza aktualność)
 pnpm check               # obowiązkowo przed pull requestem (wymaga bazy z pnpm db:up)
 ```
