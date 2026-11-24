@@ -41,7 +41,7 @@ Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `ap
 | `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback`                                          |
 | `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go) |
 
-Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) z zakresami `core:permissions.register` oraz `core:permissions.read` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tych zakresów.
+Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) z zakresami `core:permissions.register`, `core:permissions.read` oraz `core:directory.read` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tych zakresów.
 
 ## Struktura firmy i Owner (etap 1 dziedziny Core)
 
@@ -60,7 +60,7 @@ Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`, `/permissi
 
 Dostęp pracownika do produktu działa dwustopniowo (ADR-0035, ADR-0051, ADR-0052):
 
-- **Dostęp firmy do produktu (`Entitlement`)**: tabela `entitlements` (RLS: firma czyta wyłącznie własne wpisy przez `GET /core/v1/entitlements`; zapis wyłącznie poza kontekstem firmy ścieżką operatora Core). Aktywny dostęp oznacza `status = ACTIVE` oraz `startsAt <= teraz` i brak albo przyszłe `endsAt`. Do czasu powstania MonoriseAdmin dostępy przyznaje i kończy CLI Core (audyt z aktorem `SYSTEM` i `metadata.source = "cli"`):
+- **Dostęp firmy do produktu (`Entitlement`)**: tabela `entitlements` (ścisła izolacja odczytu RLS: firma czyta wyłącznie własne wpisy przez `GET /core/v1/entitlements`, a bez kontekstu firmy `core_app` nie widzi żadnych wierszy; zapis wymaga kontekstu firmy i transakcyjnej flagi operatora Core). Aktywny dostęp oznacza `status = ACTIVE` oraz `startsAt <= teraz` i brak albo przyszłe `endsAt`. Do czasu powstania MonoriseAdmin dostępy przyznaje i kończy CLI Core (audyt z aktorem `SYSTEM` i `metadata.source = "cli"`):
 
 ```bash
 pnpm entitlement:grant -- --organization acme.com --product timotime --ends-at 2027-12-31T23:59:59Z
@@ -89,6 +89,10 @@ const permissions = createPermissionCache({
 const snapshot = await permissions.get({ organizationId, accountId, authzRevision });
 const allowed = can(snapshot, "timotime.entries.approve", { unitIds: [employeeUnitId] });
 ```
+
+- **Katalog pracowników i jednostek dla serwerów produktów**: endpointy maszynowe wymagające tokenu `client_credentials` z zakresem `core:directory.read`, zgodności klienta produktu (`registrationClientId`) oraz aktywnego dostępu firmy (`Entitlement`, inaczej `403`, a dla nieznanej firmy `404`), działające przez RLS ze standardowym stronicowaniem kursorowym:
+  - `GET /core/v1/products/{productKey}/directory/unit-members?organizationId=<uuid>&unitId=<uuid>` (powtarzalny parametr `unitId`, maks. 100; brak = wszystkie jednostki) — zwraca `{ unitId, employeeId, accountId, role }`,
+  - `GET /core/v1/products/{productKey}/directory/employees?organizationId=<uuid>&employeeId=<uuid>` (powtarzalny parametr `employeeId`, maks. 100; brak = wszyscy pracownicy) — zwraca minimalne dane `{ id, accountId, firstName, lastName, status }` (bez służbowego e-maila i stanowiska).
 
 - **Zdarzenia outbox (`outbox_events`, ADR-0045)**: każde podbicie `accounts.authzRevision` (nadanie/odebranie roli, zmiana uprawnień roli firmowej, archiwizacja roli, przekazanie Ownera, włączenie/wyłączenie `AppAccess` oraz zmiana `Entitlement`) w tej samej transakcji zapisuje zdarzenie `organization.permissions.changed` (budowane przez `@monorise-team/events`) w tabeli `outbox_events` (`resourceType = "account"`, `resourceId = accountId`, `resourceVersion = authzRevision`, `publishedAt = null`). Na tym etapie nie ma jeszcze procesu wysyłkowego (relay) ani szyny zdarzeń — wiersze czekają w tabeli `outbox_events` do czasu wdrożenia transportu.
 
