@@ -314,6 +314,8 @@ model Organization {
   accounts             Account[]              @relation("OrganizationAccounts")
   units                OrganizationUnit[]
   unitMemberships      UnitMembership[]
+  roles                Role[]
+  roleAssignments      RoleAssignment[]
   auditLogs            AuditLog[]
 
   @@map("organizations")
@@ -407,8 +409,9 @@ model Account {
   authzRevision     Int           @default(0)
   lastLoginAt       DateTime?     @db.Timestamptz(3)
   createdAt         DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
-  deactivatedAt     DateTime?     @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+  deactivatedAt     DateTime?        @db.Timestamptz(3)
+  roleAssignments   RoleAssignment[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -494,6 +497,7 @@ model Product {
   createdAt            DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime     @updatedAt @db.Timestamptz(3)
   permissions          Permission[]
+  roles                Role[]
   auditLogs            AuditLog[]
 
   @@map("products")
@@ -503,17 +507,93 @@ model Product {
 /// Uprawnienie zadeklarowane przez produkt lub platformę Core (ADR-0036).
 /// Brak productId oznacza uprawnienie platformy (`core.*`). Uprawnień nie usuwamy — wycofane mają deprecatedAt.
 model Permission {
-  id           String    @id @db.Uuid
-  key          String    @unique
-  productId    String?   @db.Uuid
-  product      Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  description  String
-  deprecatedAt DateTime? @db.Timestamptz(3)
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  id              String           @id @db.Uuid
+  key             String           @unique
+  productId       String?          @db.Uuid
+  product         Product?         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  description     String
+  deprecatedAt    DateTime?        @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(3)
+  rolePermissions RolePermission[]
 
   @@index([productId])
   @@map("permissions")
+  @@schema("public")
+}
+
+// ── Role i przypisania ról (ADR-0033, ADR-0034, ADR-0035) ─────────────────────────────────────────
+
+enum ScopeType {
+  ORGANIZATION
+  UNIT
+  RESOURCE
+
+  @@schema("public")
+}
+
+/// Rola: zestaw uprawnień platformy lub jednego produktu (ADR-0035).
+/// Brak organizationId oznacza gotową rolę (szablon) współdzieloną przez firmy; brak productId — rolę platformową (core.*).
+model Role {
+  id               String           @id @db.Uuid
+  organizationId   String?          @db.Uuid
+  organization     Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId        String?          @db.Uuid
+  product          Product?         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  key              String?          @unique
+  name             String
+  description      String?
+  copiedFromRoleId String?          @db.Uuid
+  copiedFromRole   Role?            @relation("RoleCopy", fields: [copiedFromRoleId], references: [id], onDelete: SetNull)
+  copies           Role[]           @relation("RoleCopy")
+  archivedAt       DateTime?        @db.Timestamptz(3)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+  permissions      RolePermission[]
+  assignments      RoleAssignment[]
+
+  @@index([organizationId])
+  @@index([productId])
+  @@map("roles")
+  @@schema("public")
+}
+
+/// Powiązanie roli z uprawnieniem. Pole organizationId kopiuje wyzwalacz z roli, aby egzekwować RLS.
+model RolePermission {
+  roleId         String     @db.Uuid
+  role           Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId   String     @db.Uuid
+  permission     Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  organizationId String?    @db.Uuid
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@index([organizationId])
+  @@map("role_permissions")
+  @@schema("public")
+}
+
+/// Przypisanie roli kontu w firmie z zakresem i opcjonalnym okresem ważności (ADR-0033, ADR-0035).
+model RoleAssignment {
+  id                 String       @id @db.Uuid
+  organizationId     String       @db.Uuid
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId          String       @db.Uuid
+  account            Account      @relation(fields: [organizationId, accountId], references: [organizationId, id], onDelete: Cascade)
+  roleId             String       @db.Uuid
+  role               Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scopeType          ScopeType
+  scopeId            String?
+  validFrom          DateTime?    @db.Timestamptz(3)
+  validUntil         DateTime?    @db.Timestamptz(3)
+  grantedByAccountId String       @db.Uuid
+  createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId])
+  @@index([organizationId, accountId])
+  @@index([organizationId, roleId])
+  @@index([roleId])
+  @@map("role_assignments")
   @@schema("public")
 }
 

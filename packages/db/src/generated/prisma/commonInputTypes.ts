@@ -422,6 +422,23 @@ export type EnumUnitMembershipRoleWithAggregatesFilter<$PrismaModel = never> = {
   _max?: Prisma.NestedEnumUnitMembershipRoleFilter<$PrismaModel>
 }
 
+export type EnumScopeTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.ScopeType | Prisma.EnumScopeTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel> | $Enums.ScopeType
+}
+
+export type EnumScopeTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.ScopeType | Prisma.EnumScopeTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumScopeTypeWithAggregatesFilter<$PrismaModel> | $Enums.ScopeType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel>
+}
+
 export type EnumAuditActorTypeFilter<$PrismaModel = never> = {
   equals?: $Enums.AuditActorType | Prisma.EnumAuditActorTypeFieldRefInput<$PrismaModel>
   in?: $Enums.AuditActorType[] | Prisma.ListEnumAuditActorTypeFieldRefInput<$PrismaModel>
@@ -905,6 +922,23 @@ export type NestedEnumUnitMembershipRoleWithAggregatesFilter<$PrismaModel = neve
   _count?: Prisma.NestedIntFilter<$PrismaModel>
   _min?: Prisma.NestedEnumUnitMembershipRoleFilter<$PrismaModel>
   _max?: Prisma.NestedEnumUnitMembershipRoleFilter<$PrismaModel>
+}
+
+export type NestedEnumScopeTypeFilter<$PrismaModel = never> = {
+  equals?: $Enums.ScopeType | Prisma.EnumScopeTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel> | $Enums.ScopeType
+}
+
+export type NestedEnumScopeTypeWithAggregatesFilter<$PrismaModel = never> = {
+  equals?: $Enums.ScopeType | Prisma.EnumScopeTypeFieldRefInput<$PrismaModel>
+  in?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  notIn?: $Enums.ScopeType[] | Prisma.ListEnumScopeTypeFieldRefInput<$PrismaModel>
+  not?: Prisma.NestedEnumScopeTypeWithAggregatesFilter<$PrismaModel> | $Enums.ScopeType
+  _count?: Prisma.NestedIntFilter<$PrismaModel>
+  _min?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel>
+  _max?: Prisma.NestedEnumScopeTypeFilter<$PrismaModel>
 }
 
 export type NestedEnumAuditActorTypeFilter<$PrismaModel = never> = {

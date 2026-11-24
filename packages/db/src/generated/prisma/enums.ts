@@ -89,6 +89,15 @@ export const UnitMembershipRole = {
 export type UnitMembershipRole = (typeof UnitMembershipRole)[keyof typeof UnitMembershipRole]
 
 
+export const ScopeType = {
+  ORGANIZATION: 'ORGANIZATION',
+  UNIT: 'UNIT',
+  RESOURCE: 'RESOURCE'
+} as const
+
+export type ScopeType = (typeof ScopeType)[keyof typeof ScopeType]
+
+
 export const AuditActorType = {
   ACCOUNT: 'ACCOUNT',
   OPERATOR: 'OPERATOR',
