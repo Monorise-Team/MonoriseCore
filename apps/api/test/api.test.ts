@@ -1517,4 +1517,67 @@ describe("Core API", () => {
       }
     }
   });
+
+  it("nieistniejąca jednostka daje 404 przed sprawdzeniem uprawnień, a zarchiwizowana gotowa rola nie daje uprawnień", async () => {
+    await registerCorePermissions(db);
+    await registerCoreRoleTemplates(db);
+
+    const suffix = uuidv7().replaceAll("-", "").slice(-6);
+    const company = await createCompany(`archived-${suffix}`);
+    const jan = await createMember(company, "Jan", "Administrator");
+    const missingUnitId = uuidv7();
+    const companyAdmin = await db.role.findFirstOrThrow({ where: { key: "core.company_admin" } });
+
+    try {
+      const ownerToken = await token(company);
+      const janToken = await token(jan);
+
+      // Jan bez żadnej roli: nieistniejąca jednostka to 404, a nie 403
+      expect(
+        (await request("POST", "/core/v1/units", janToken, { name: "X", type: "TEAM", parentId: missingUnitId }))
+          .statusCode,
+      ).toBe(404);
+      expect((await request("PATCH", `/core/v1/units/${missingUnitId}`, janToken, { name: "Y" })).statusCode).toBe(404);
+      expect(
+        (
+          await request("PUT", `/core/v1/units/${missingUnitId}/members/${jan.employeeId}`, janToken, {
+            role: "MEMBER",
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (await request("DELETE", `/core/v1/units/${missingUnitId}/members/${jan.employeeId}`, janToken)).statusCode,
+      ).toBe(404);
+      // Istniejąca jednostka bez uprawnień: 403
+      const unit = (await request("POST", "/core/v1/units", ownerToken, { name: "Oddział", type: "BRANCH" })).json()
+        .data;
+      expect((await request("PATCH", `/core/v1/units/${unit.id}`, janToken, { name: "Z" })).statusCode).toBe(403);
+
+      // Gotowa rola „Administrator firmy” w całej firmie pozwala Janowi tworzyć jednostki
+      expect(
+        (
+          await request("POST", "/core/v1/role-assignments", ownerToken, {
+            accountId: jan.accountId,
+            roleId: companyAdmin.id,
+            scopeType: "ORGANIZATION",
+          })
+        ).statusCode,
+      ).toBe(201);
+      expect((await request("POST", "/core/v1/units", janToken, { name: "Zespół A", type: "TEAM" })).statusCode).toBe(
+        201,
+      );
+
+      // Po archiwizacji gotowej roli (np. wycofanej przez produkt) przypisanie przestaje działać
+      await db.role.update({ where: { id: companyAdmin.id }, data: { archivedAt: new Date() } });
+      expect((await request("POST", "/core/v1/units", janToken, { name: "Zespół B", type: "TEAM" })).statusCode).toBe(
+        403,
+      );
+    } finally {
+      await db.role.update({ where: { id: companyAdmin.id }, data: { archivedAt: null } });
+      await withOrganization(db, company.id, (tx) => tx.organization.delete({ where: { id: company.id } }));
+      for (const accountId of [company.accountId, ...company.extraAccountIds]) {
+        await db.authUser.deleteMany({ where: { id: accountId } });
+      }
+    }
+  });
 });

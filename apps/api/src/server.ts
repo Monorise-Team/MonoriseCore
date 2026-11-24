@@ -376,6 +376,15 @@ async function createsUnitCycle(tx: Tx, unitId: string, candidateParentId: strin
   return false;
 }
 
+/**
+ * Najpierw istnienie jednostki (404), potem uprawnienie (403): jednostka innej firmy albo nieistniejąca
+ * zawsze daje NOT_FOUND, zgodnie ze standardem API, a osoba bez uprawnień nie dostaje mylącego 403.
+ */
+async function assertUnitExists(tx: Tx, unitId: string, message: string): Promise<void> {
+  const unit = await tx.organizationUnit.findUnique({ where: { id: unitId }, select: { id: true } });
+  if (!unit) throw new ApiFailure(404, "NOT_FOUND", message);
+}
+
 /** Core API: format `{ data, meta, error }` (ADR-0044), firma zawsze z tokenu, dane przez RLS (ADR-0037). */
 export function buildServer({
   db,
@@ -692,6 +701,7 @@ export function buildServer({
       const body = parseInput(CreateUnit, request.body);
       const unit = await withOrganization(db, who.organizationId, async (tx) => {
         await lockOrganizationUnits(tx, who.organizationId);
+        if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
         const snapshot = await loadPermissionSnapshot(tx, who);
         assertCorePermission(
           snapshot,
@@ -743,12 +753,13 @@ export function buildServer({
       try {
         const updated = await withOrganization(db, who.organizationId, async (tx) => {
           await lockOrganizationUnits(tx, who.organizationId);
-          const snapshot = await loadPermissionSnapshot(tx, who);
-          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
           const unit = await tx.organizationUnit.findUnique({ where: { id: params.unitId } });
           if (!unit) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
 
           if (body.parentId !== undefined && body.parentId !== unit.parentId) {
+            if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
             assertCorePermission(
               snapshot,
               CORE_PERMISSIONS.keys["structure.manage"],
@@ -876,6 +887,7 @@ export function buildServer({
       const body = parseInput(PutUnitMember, request.body);
       const membership = await withOrganization(db, who.organizationId, async (tx) => {
         await lockOrganizationUnits(tx, who.organizationId);
+        await assertUnitExists(tx, params.unitId, "Nie znaleziono jednostki organizacyjnej");
         const snapshot = await loadPermissionSnapshot(tx, who);
         assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
         const unit = await tx.organizationUnit.findUnique({
@@ -926,6 +938,7 @@ export function buildServer({
       const who = await caller(request);
       const params = parseInput(UnitMemberParams, request.params);
       await withOrganization(db, who.organizationId, async (tx) => {
+        await assertUnitExists(tx, params.unitId, "Nie znaleziono jednostki organizacyjnej");
         const snapshot = await loadPermissionSnapshot(tx, who);
         assertCorePermission(snapshot, CORE_PERMISSIONS.keys["structure.manage"], { unitIds: [params.unitId] });
         const unit = await tx.organizationUnit.findUnique({

@@ -45,6 +45,7 @@ export async function loadPermissionSnapshot(tx: Tx, who: AuthzSubject): Promise
       validUntil: true,
       role: {
         select: {
+          archivedAt: true,
           product: { select: { key: true } },
           permissions: {
             select: {
@@ -60,6 +61,8 @@ export async function loadPermissionSnapshot(tx: Tx, who: AuthzSubject): Promise
   const grants: PermissionGrant[] = [];
 
   for (const assignment of assignments) {
+    // Zarchiwizowana rola (np. gotowa rola wycofana przez produkt) nie daje już uprawnień.
+    if (assignment.role.archivedAt !== null) continue;
     const productKey = assignment.role.product?.key;
     if (productKey) {
       products.add(productKey);
