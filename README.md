@@ -50,11 +50,11 @@ Każda firma ma jednego Ownera (`Organization.ownerAccountId`, ustawianego przy 
 Dostępne endpointy Core API (`/core/v1`):
 
 - `GET /core/v1/me`, `GET /core/v1/organization` — konto (z `isOwner`), pracownik i firma,
-- `GET /core/v1/employees`, `POST /core/v1/employees` — lista i dodawanie pracowników,
-- `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
-- `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — członkowie jednostek.
+- `GET /core/v1/employees`, `POST /core/v1/employees` — stronicowana lista i dodawanie pracowników,
+- `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
+- `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
-Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
+Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor kursorowy po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
 
 ## Opis API (OpenAPI)
 
