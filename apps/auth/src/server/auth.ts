@@ -1,6 +1,5 @@
 import "server-only";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { PERMISSIONS_REGISTER_SCOPE } from "@core/contracts";
 import { accountClaims, uuidv7, withOrganization } from "@core/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -9,7 +8,7 @@ import { jwt } from "better-auth/plugins";
 import { config } from "./config";
 import { db } from "./db";
 import { linkMail, sendMail } from "./mail";
-import { hashClientSecret, PRODUCT_SCOPES } from "./oauth-clients";
+import { hashClientSecret, PRODUCT_MACHINE_SCOPES, PRODUCT_SCOPES } from "./oauth-clients";
 
 /** Firmy w tych stanach nie logują się (wstrzymanie, usunięcie). */
 const BLOCKED_ORGANIZATIONS = new Set(["SUSPENDED", "DELETED"]);
@@ -100,8 +99,8 @@ export const auth = betterAuth({
     oauthProvider({
       loginPage: "/sign-in",
       consentPage: "/consent",
-      // core:permissions.register działa wyłącznie w przepływie client_credentials (nie jest w client.scopes ani w metadanych).
-      scopes: [...PRODUCT_SCOPES, PERMISSIONS_REGISTER_SCOPE],
+      // Zakresy maszynowe (core:permissions.*) działają wyłącznie w przepływie client_credentials (nie ma ich w client.scopes ani w metadanych).
+      scopes: [...PRODUCT_SCOPES, ...PRODUCT_MACHINE_SCOPES],
       advertisedMetadata: { scopes_supported: PRODUCT_SCOPES },
       // Token dostępu (także maszynowy M2M) ważny 5 minut (ADR-0023), odświeżanie do 30 dni
       accessTokenExpiresIn: 300,
