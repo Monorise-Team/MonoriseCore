@@ -1597,7 +1597,8 @@ describe("zaproszenia pracowników (RLS, jeden PENDING na konto i wyszukiwanie p
               email: globexInvitedEmail,
               normalizedEmail: globexInvitedEmail,
               tokenHash: hashToken("cross-account-fk"),
-              status: "PENDING",
+              // REVOKED, żeby indeks „jedno PENDING na konto” nie zadziałał przed kluczem obcym
+              status: "REVOKED",
               expiresAt,
             },
           }),
