@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "entitlement:grant": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts grant",
-    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end"
+    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end",
+    "invitation:create": "tsx --env-file-if-exists=.env.local scripts/invitation.ts create"
   },
   "dependencies": {
     "@core/contracts": "workspace:*",

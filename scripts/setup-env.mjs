@@ -25,7 +25,10 @@ const files = {
     `CORE_DATABASE_URL=${appUrl}`,
     "CORE_AUTH_ISSUER=http://localhost:3100",
     "CORE_AUTH_JWKS_URL=http://localhost:3100/api/auth/jwks",
+    "CORE_AUTH_URL=http://localhost:3100",
     "CORE_API_AUDIENCE=http://localhost:3200",
+    "CORE_SMTP_URL=smtp://localhost:1125",
+    "CORE_MAIL_FROM=Monorise <no-reply@monorise.studio>",
   ],
 };
 for (const [rel, lines] of Object.entries(files)) {

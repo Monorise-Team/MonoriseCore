@@ -2,11 +2,13 @@ import {
   CORE_PERMISSIONS,
   CreateAppAccess,
   CreateEmployee,
+  CreateInvitation,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
   DIRECTORY_READ_SCOPE,
   EntitlementStatus,
+  InvitationStatus,
   MAX_DIRECTORY_FILTER_IDS,
   PageQuery,
   PERMISSIONS_READ_SCOPE,
@@ -56,6 +58,15 @@ import {
   toGrantScope,
 } from "./authorization.js";
 import { isEntitlementActive } from "./entitlements.js";
+import {
+  createInvitation,
+  InvitationError,
+  resendInvitation,
+  revokeInvitation,
+  serializeInvitation,
+  type InvitationActor,
+} from "./invitations.js";
+import type { MailSender } from "./mail.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
@@ -79,6 +90,12 @@ export interface ServerOptions {
   verifyToken: TokenVerifier;
   verifyMachineToken: MachineTokenVerifier;
   logger?: boolean;
+  /** Adres serwera logowania używany do budowania linków zaproszeń (`CORE_AUTH_URL`). */
+  authUrl?: string | undefined;
+  /** Nadpisanie nadawcy wiadomości e-mail (np. w testach). */
+  mailer?: MailSender | undefined;
+  /** Nadpisanie bieżącego czasu (do deterministycznych testów wygasania zaproszeń). */
+  now?: (() => Date) | undefined;
   /** Opcjonalny hook wywoływany przy rejestracji każdej ścieżki Fastify (używany w testach OpenAPI). */
   onRoute?: (route: RouteOptions) => void;
 }
@@ -102,6 +119,8 @@ const ProductKeyParams = z.object({ productKey: ProductKey });
 const RoleIdParams = z.object({ roleId: z.uuid() });
 const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
 const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
+const InvitationIdParams = z.object({ invitationId: z.uuid() });
+const ListInvitationsFilter = z.object({ status: InvitationStatus.optional() });
 const PermissionSnapshotQuery = z.object({
   organizationId: z.uuid(),
   accountId: z.uuid(),
@@ -477,6 +496,9 @@ export function buildServer({
   verifyToken,
   verifyMachineToken,
   logger = false,
+  authUrl,
+  mailer,
+  now: getNow = () => new Date(),
   onRoute,
 }: ServerOptions): FastifyInstance {
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
@@ -503,13 +525,15 @@ export function buildServer({
     const failure =
       error instanceof ApiFailure
         ? error
-        : error instanceof PermissionError
-          ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
-          : statusCode === 404
-            ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-            : statusCode === 400
-              ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-              : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
+        : error instanceof InvitationError
+          ? new ApiFailure(error.status, error.code, error.message, error.details)
+          : error instanceof PermissionError
+            ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+            : statusCode === 404
+              ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+              : statusCode === 400
+                ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+                : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -751,6 +775,138 @@ export function buildServer({
         return created;
       });
       return reply.status(201).send(send(request, serializeEmployee({ ...employee, account: null })));
+    },
+  });
+
+  function invitationActorFromRequest(request: FastifyRequest, who: Caller): InvitationActor {
+    const header = request.headers["user-agent"];
+    return {
+      type: "ACCOUNT",
+      accountId: who.accountId,
+      ipAddress: request.ip || null,
+      userAgent: typeof header === "string" && header.length > 0 ? header : null,
+      requestId: request.id,
+    };
+  }
+
+  app.route({
+    method: ROUTES.listInvitations.method,
+    url: toFastifyPath(ROUTES.listInvitations.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const page = parsePageQuery(request.query, ListInvitationsFilter);
+      const currentTime = getNow();
+
+      const statusWhere =
+        page.status === "PENDING"
+          ? { status: "PENDING" as const, expiresAt: { gt: currentTime } }
+          : page.status === "EXPIRED"
+            ? {
+                OR: [{ status: "EXPIRED" as const }, { status: "PENDING" as const, expiresAt: { lte: currentTime } }],
+              }
+            : page.status !== undefined
+              ? { status: page.status }
+              : {};
+
+      const where = {
+        ...statusWhere,
+        ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+      };
+
+      const rows = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+        return tx.invitation.findMany({
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          include: { account: { select: { employeeId: true } } },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        });
+      });
+
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(
+        request,
+        items.map((item) => serializeInvitation(item, currentTime)),
+        nextCursor,
+      );
+    },
+  });
+
+  app.route({
+    method: ROUTES.createInvitation.method,
+    url: toFastifyPath(ROUTES.createInvitation.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const body = parseInput(CreateInvitation, request.body);
+      const currentTime = getNow();
+
+      const result = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+        return createInvitation(tx, {
+          organizationId: who.organizationId,
+          email: body.email,
+          firstName: body.firstName,
+          lastName: body.lastName,
+          employeeId: body.employeeId,
+          invitedBy: who.accountId,
+          actor: invitationActorFromRequest(request, who),
+          now: currentTime,
+          authUrl,
+          mailer,
+        });
+      });
+
+      return reply.status(201).send(send(request, result.invitation));
+    },
+  });
+
+  app.route({
+    method: ROUTES.resendInvitation.method,
+    url: toFastifyPath(ROUTES.resendInvitation.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const params = parseInput(InvitationIdParams, request.params);
+      const currentTime = getNow();
+
+      const result = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+        return resendInvitation(tx, {
+          organizationId: who.organizationId,
+          invitationId: params.invitationId,
+          actor: invitationActorFromRequest(request, who),
+          now: currentTime,
+          authUrl,
+          mailer,
+        });
+      });
+
+      return send(request, result.invitation);
+    },
+  });
+
+  app.route({
+    method: ROUTES.revokeInvitation.method,
+    url: toFastifyPath(ROUTES.revokeInvitation.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const params = parseInput(InvitationIdParams, request.params);
+      const currentTime = getNow();
+
+      await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+        await revokeInvitation(tx, {
+          organizationId: who.organizationId,
+          invitationId: params.invitationId,
+          actor: invitationActorFromRequest(request, who),
+          now: currentTime,
+        });
+      });
+
+      return reply.status(204).send();
     },
   });
 
