@@ -19,6 +19,12 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
+    },
+    "@core/db#typecheck": {
+      "dependsOn": ["^build", "build"]
+    },
+    "@core/db#lint": {
+      "dependsOn": ["^build", "build"]
     }
   }
 }

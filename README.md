@@ -43,6 +43,19 @@ Sekrety nowych klientów poufnych (serwery AvenMail i TimoTime) trafiają do `ap
 
 Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Rejestrowanie aplikacji przez HTTP jest wyłączone.
 
+## Struktura firmy i Owner (etap 1 dziedziny Core)
+
+Każda firma ma jednego Ownera (`Organization.ownerAccountId`, ustawianego przy samorejestracji; `GET /core/v1/me` zwraca `account.isOwner`). Drzewo jednostek organizacyjnych (`OrganizationUnit`: `BRANCH`, `DEPARTMENT`, `TEAM`) i przypisania pracowników (`UnitMembership`: `MEMBER`, `LEADER`) są chronione przez RLS, klucze złożone wewnątrz firmy i wyzwalacz blokujący cykle.
+
+Dostępne endpointy Core API (`/core/v1`):
+
+- `GET /core/v1/me`, `GET /core/v1/organization` — konto (z `isOwner`), pracownik i firma,
+- `GET /core/v1/employees`, `POST /core/v1/employees` — stronicowana lista i dodawanie pracowników,
+- `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
+- `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
+
+Endpointy listowe (`/employees`, `/units`, `/units/{unitId}/members`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor kursorowy po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty działają dla każdego aktywnego konta firmy; operacje zapisu wymagają roli Ownera do czasu wdrożenia ról i uprawnień (etap 2).
+
 ## Opis API (OpenAPI)
 
 Opis Core API w standardzie OpenAPI 3.1 znajduje się w [openapi/core-api.json](openapi/core-api.json) i jest serwowany na żywo pod `GET /core/v1/openapi.json` (bez tokenu, jako czysty dokument JSON — wyjątek od koperty `{ data, meta, error }`). Plik powstaje automatycznie z katalogu ścieżek (`apps/api/src/routes.ts`) oraz schematów Zod (`@core/contracts`) i stanowi jedyne źródło prawdy do generowania typowanego klienta `@monorise-team/sdk`.

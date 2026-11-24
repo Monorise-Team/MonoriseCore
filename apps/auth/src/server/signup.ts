@@ -61,6 +61,10 @@ export async function signUpOrganization(input: SignUpRequest): Promise<{ organi
       await tx.account.create({
         data: { id: user.id, organizationId, employeeId, email, normalizedEmail: email, status: "ACTIVE" },
       });
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { ownerAccountId: user.id },
+      });
     });
   } catch (error) {
     // Bez firmy konto logowania nie ma sensu: cofamy je

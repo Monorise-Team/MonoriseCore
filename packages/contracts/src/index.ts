@@ -42,11 +42,37 @@ export const ApiMeta = z.object({
 });
 export type ApiMeta = z.infer<typeof ApiMeta>;
 
+export const DEFAULT_PAGE_LIMIT = 50;
+export const MAX_PAGE_LIMIT = 100;
+
+export const PageLimit = z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT);
+export const PageCursor = z.string().min(1).max(256);
+
+export const PageQuery = z.object({
+  limit: PageLimit,
+  cursor: PageCursor.optional(),
+});
+export type PageQuery = z.infer<typeof PageQuery>;
+
+export const ApiListMeta = ApiMeta.extend({
+  nextCursor: z.string().nullable(),
+});
+export type ApiListMeta = z.infer<typeof ApiListMeta>;
+
 /** Koperta udanej odpowiedzi Core API: `{ data, meta, error: null }` (ADR-0044). */
 export function apiSuccessSchema<T extends z.ZodType>(data: T) {
   return z.object({
     data,
     meta: ApiMeta,
+    error: z.null(),
+  });
+}
+
+/** Koperta udanej odpowiedzi listy Core API ze stronicowaniem kursorowym (`meta.nextCursor`). */
+export function apiListSuccessSchema<T extends z.ZodType>(data: T) {
+  return z.object({
+    data,
+    meta: ApiListMeta,
     error: z.null(),
   });
 }
@@ -67,6 +93,12 @@ export interface ApiResponse<T> {
   data: T | null;
   meta: { requestId?: string; [key: string]: unknown };
   error: ApiErrorBody | null;
+}
+
+export interface ApiListResponse<T> {
+  data: T[];
+  meta: { requestId: string; nextCursor: string | null };
+  error: null;
 }
 
 export const Health = z.object({
@@ -116,23 +148,96 @@ export const Organization = z.object({
 });
 export type Organization = z.infer<typeof Organization>;
 
+export const EmployeeStatus = z.enum(["ACTIVE", "FORMER", "ANONYMIZED"]);
+export type EmployeeStatus = z.infer<typeof EmployeeStatus>;
+
 export const Employee = z.object({
   id: z.uuid(),
   firstName: z.string(),
   lastName: z.string(),
   workEmail: z.string().nullable(),
   jobTitle: z.string().nullable(),
-  status: z.enum(["ACTIVE", "FORMER", "ANONYMIZED"]),
+  status: EmployeeStatus,
 });
 export type Employee = z.infer<typeof Employee>;
 
+export const CreateEmployee = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  lastName: z.string().trim().min(1).max(80),
+  workEmail: z.email().max(254).optional(),
+  jobTitle: z.string().trim().min(1).max(120).optional(),
+});
+export type CreateEmployee = z.infer<typeof CreateEmployee>;
+
+export const AccountStatus = z.enum(["INVITED", "ACTIVE", "DEACTIVATED"]);
+export type AccountStatus = z.infer<typeof AccountStatus>;
+
 /** Kim jestem: konto, pracownik i firma z tokenu. */
 export const Me = z.object({
-  account: z.object({ id: z.uuid(), email: z.string(), status: z.enum(["INVITED", "ACTIVE", "DEACTIVATED"]) }),
+  account: z.object({
+    id: z.uuid(),
+    email: z.string(),
+    status: AccountStatus,
+    isOwner: z.boolean(),
+  }),
   employee: Employee,
   organization: Organization.pick({ id: true, name: true, status: true }),
 });
 export type Me = z.infer<typeof Me>;
+
+// ── Struktura firmy (ADR-0032) ──────────────────────────────────────────────────────────────────
+
+export const UnitType = z.enum(["BRANCH", "DEPARTMENT", "TEAM"]);
+export type UnitType = z.infer<typeof UnitType>;
+
+export const UnitStatus = z.enum(["ACTIVE", "ARCHIVED"]);
+export type UnitStatus = z.infer<typeof UnitStatus>;
+
+export const Unit = z.object({
+  id: z.uuid(),
+  parentId: z.uuid().nullable(),
+  name: z.string(),
+  type: UnitType,
+  status: UnitStatus,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Unit = z.infer<typeof Unit>;
+
+export const CreateUnit = z.object({
+  name: z.string().trim().min(1).max(120),
+  type: UnitType,
+  parentId: z.uuid().nullable().optional(),
+});
+export type CreateUnit = z.infer<typeof CreateUnit>;
+
+export const UpdateUnit = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    parentId: z.uuid().nullable().optional(),
+    status: UnitStatus.optional(),
+  })
+  .refine((data) => data.name !== undefined || data.parentId !== undefined || data.status !== undefined, {
+    message: "Podaj co najmniej jedno pole do zmiany",
+  });
+export type UpdateUnit = z.infer<typeof UpdateUnit>;
+
+export const UnitMembershipRole = z.enum(["MEMBER", "LEADER"]);
+export type UnitMembershipRole = z.infer<typeof UnitMembershipRole>;
+
+export const UnitMember = z.object({
+  unitId: z.uuid(),
+  employeeId: z.uuid(),
+  role: UnitMembershipRole,
+  joinedAt: z.string(),
+  employee: Employee,
+});
+export type UnitMember = z.infer<typeof UnitMember>;
+
+export const PutUnitMember = z.object({
+  role: UnitMembershipRole,
+});
+export type PutUnitMember = z.infer<typeof PutUnitMember>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

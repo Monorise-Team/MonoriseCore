@@ -66,7 +66,9 @@ export const ModelName = {
   Organization: 'Organization',
   OrganizationDomain: 'OrganizationDomain',
   Employee: 'Employee',
-  Account: 'Account'
+  Account: 'Account',
+  OrganizationUnit: 'OrganizationUnit',
+  UnitMembership: 'UnitMembership'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -303,6 +305,7 @@ export const OrganizationScalarFieldEnum = {
   name: 'name',
   status: 'status',
   createdVia: 'createdVia',
+  ownerAccountId: 'ownerAccountId',
   mfaRequiredForAll: 'mfaRequiredForAll',
   suspendedAt: 'suspendedAt',
   offboardingStartedAt: 'offboardingStartedAt',
@@ -360,6 +363,33 @@ export const AccountScalarFieldEnum = {
 } as const
 
 export type AccountScalarFieldEnum = (typeof AccountScalarFieldEnum)[keyof typeof AccountScalarFieldEnum]
+
+
+export const OrganizationUnitScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  parentId: 'parentId',
+  name: 'name',
+  type: 'type',
+  status: 'status',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type OrganizationUnitScalarFieldEnum = (typeof OrganizationUnitScalarFieldEnum)[keyof typeof OrganizationUnitScalarFieldEnum]
+
+
+export const UnitMembershipScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  unitId: 'unitId',
+  employeeId: 'employeeId',
+  role: 'role',
+  joinedAt: 'joinedAt',
+  createdAt: 'createdAt'
+} as const
+
+export type UnitMembershipScalarFieldEnum = (typeof UnitMembershipScalarFieldEnum)[keyof typeof UnitMembershipScalarFieldEnum]
 
 
 export const SortOrder = {

@@ -29,6 +29,7 @@ export type OrganizationMinAggregateOutputType = {
   name: string | null
   status: $Enums.OrganizationStatus | null
   createdVia: $Enums.OrganizationCreatedVia | null
+  ownerAccountId: string | null
   mfaRequiredForAll: boolean | null
   suspendedAt: Date | null
   offboardingStartedAt: Date | null
@@ -41,6 +42,7 @@ export type OrganizationMaxAggregateOutputType = {
   name: string | null
   status: $Enums.OrganizationStatus | null
   createdVia: $Enums.OrganizationCreatedVia | null
+  ownerAccountId: string | null
   mfaRequiredForAll: boolean | null
   suspendedAt: Date | null
   offboardingStartedAt: Date | null
@@ -53,6 +55,7 @@ export type OrganizationCountAggregateOutputType = {
   name: number
   status: number
   createdVia: number
+  ownerAccountId: number
   mfaRequiredForAll: number
   suspendedAt: number
   offboardingStartedAt: number
@@ -67,6 +70,7 @@ export type OrganizationMinAggregateInputType = {
   name?: true
   status?: true
   createdVia?: true
+  ownerAccountId?: true
   mfaRequiredForAll?: true
   suspendedAt?: true
   offboardingStartedAt?: true
@@ -79,6 +83,7 @@ export type OrganizationMaxAggregateInputType = {
   name?: true
   status?: true
   createdVia?: true
+  ownerAccountId?: true
   mfaRequiredForAll?: true
   suspendedAt?: true
   offboardingStartedAt?: true
@@ -91,6 +96,7 @@ export type OrganizationCountAggregateInputType = {
   name?: true
   status?: true
   createdVia?: true
+  ownerAccountId?: true
   mfaRequiredForAll?: true
   suspendedAt?: true
   offboardingStartedAt?: true
@@ -176,6 +182,7 @@ export type OrganizationGroupByOutputType = {
   name: string
   status: $Enums.OrganizationStatus
   createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId: string | null
   mfaRequiredForAll: boolean
   suspendedAt: Date | null
   offboardingStartedAt: Date | null
@@ -209,14 +216,18 @@ export type OrganizationWhereInput = {
   name?: Prisma.StringFilter<"Organization"> | string
   status?: Prisma.EnumOrganizationStatusFilter<"Organization"> | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFilter<"Organization"> | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.UuidNullableFilter<"Organization"> | string | null
   mfaRequiredForAll?: Prisma.BoolFilter<"Organization"> | boolean
   suspendedAt?: Prisma.DateTimeNullableFilter<"Organization"> | Date | string | null
   offboardingStartedAt?: Prisma.DateTimeNullableFilter<"Organization"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Organization"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Organization"> | Date | string
+  ownerAccount?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
   domains?: Prisma.OrganizationDomainListRelationFilter
   employees?: Prisma.EmployeeListRelationFilter
   accounts?: Prisma.AccountListRelationFilter
+  units?: Prisma.OrganizationUnitListRelationFilter
+  unitMemberships?: Prisma.UnitMembershipListRelationFilter
 }
 
 export type OrganizationOrderByWithRelationInput = {
@@ -224,18 +235,23 @@ export type OrganizationOrderByWithRelationInput = {
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
+  ownerAccountId?: Prisma.SortOrderInput | Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
   suspendedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   offboardingStartedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  ownerAccount?: Prisma.AccountOrderByWithRelationInput
   domains?: Prisma.OrganizationDomainOrderByRelationAggregateInput
   employees?: Prisma.EmployeeOrderByRelationAggregateInput
   accounts?: Prisma.AccountOrderByRelationAggregateInput
+  units?: Prisma.OrganizationUnitOrderByRelationAggregateInput
+  unitMemberships?: Prisma.UnitMembershipOrderByRelationAggregateInput
 }
 
 export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  ownerAccountId?: string
   AND?: Prisma.OrganizationWhereInput | Prisma.OrganizationWhereInput[]
   OR?: Prisma.OrganizationWhereInput[]
   NOT?: Prisma.OrganizationWhereInput | Prisma.OrganizationWhereInput[]
@@ -247,16 +263,20 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   offboardingStartedAt?: Prisma.DateTimeNullableFilter<"Organization"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Organization"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Organization"> | Date | string
+  ownerAccount?: Prisma.XOR<Prisma.AccountNullableScalarRelationFilter, Prisma.AccountWhereInput> | null
   domains?: Prisma.OrganizationDomainListRelationFilter
   employees?: Prisma.EmployeeListRelationFilter
   accounts?: Prisma.AccountListRelationFilter
-}, "id">
+  units?: Prisma.OrganizationUnitListRelationFilter
+  unitMemberships?: Prisma.UnitMembershipListRelationFilter
+}, "id" | "ownerAccountId">
 
 export type OrganizationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
+  ownerAccountId?: Prisma.SortOrderInput | Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
   suspendedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   offboardingStartedAt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -275,6 +295,7 @@ export type OrganizationScalarWhereWithAggregatesInput = {
   name?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   status?: Prisma.EnumOrganizationStatusWithAggregatesFilter<"Organization"> | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaWithAggregatesFilter<"Organization"> | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.UuidNullableWithAggregatesFilter<"Organization"> | string | null
   mfaRequiredForAll?: Prisma.BoolWithAggregatesFilter<"Organization"> | boolean
   suspendedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Organization"> | Date | string | null
   offboardingStartedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Organization"> | Date | string | null
@@ -292,9 +313,12 @@ export type OrganizationCreateInput = {
   offboardingStartedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateInput = {
@@ -302,6 +326,7 @@ export type OrganizationUncheckedCreateInput = {
   name: string
   status?: $Enums.OrganizationStatus
   createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
   offboardingStartedAt?: Date | string | null
@@ -310,6 +335,8 @@ export type OrganizationUncheckedCreateInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUpdateInput = {
@@ -322,9 +349,12 @@ export type OrganizationUpdateInput = {
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateInput = {
@@ -332,6 +362,7 @@ export type OrganizationUncheckedUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -340,6 +371,8 @@ export type OrganizationUncheckedUpdateInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateManyInput = {
@@ -347,6 +380,7 @@ export type OrganizationCreateManyInput = {
   name: string
   status?: $Enums.OrganizationStatus
   createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
   offboardingStartedAt?: Date | string | null
@@ -371,6 +405,7 @@ export type OrganizationUncheckedUpdateManyInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -383,6 +418,7 @@ export type OrganizationCountOrderByAggregateInput = {
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
+  ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
   suspendedAt?: Prisma.SortOrder
   offboardingStartedAt?: Prisma.SortOrder
@@ -395,6 +431,7 @@ export type OrganizationMaxOrderByAggregateInput = {
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
+  ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
   suspendedAt?: Prisma.SortOrder
   offboardingStartedAt?: Prisma.SortOrder
@@ -407,6 +444,7 @@ export type OrganizationMinOrderByAggregateInput = {
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
+  ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
   suspendedAt?: Prisma.SortOrder
   offboardingStartedAt?: Prisma.SortOrder
@@ -417,6 +455,11 @@ export type OrganizationMinOrderByAggregateInput = {
 export type OrganizationScalarRelationFilter = {
   is?: Prisma.OrganizationWhereInput
   isNot?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationNullableScalarRelationFilter = {
+  is?: Prisma.OrganizationWhereInput | null
+  isNot?: Prisma.OrganizationWhereInput | null
 }
 
 export type EnumOrganizationStatusFieldUpdateOperationsInput = {
@@ -461,12 +504,72 @@ export type OrganizationCreateNestedOneWithoutAccountsInput = {
   connect?: Prisma.OrganizationWhereUniqueInput
 }
 
+export type OrganizationCreateNestedOneWithoutOwnerAccountInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutOwnerAccountInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutOwnerAccountInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
 export type OrganizationUpdateOneRequiredWithoutAccountsNestedInput = {
   create?: Prisma.XOR<Prisma.OrganizationCreateWithoutAccountsInput, Prisma.OrganizationUncheckedCreateWithoutAccountsInput>
   connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutAccountsInput
   upsert?: Prisma.OrganizationUpsertWithoutAccountsInput
   connect?: Prisma.OrganizationWhereUniqueInput
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutAccountsInput, Prisma.OrganizationUpdateWithoutAccountsInput>, Prisma.OrganizationUncheckedUpdateWithoutAccountsInput>
+}
+
+export type OrganizationUpdateOneWithoutOwnerAccountNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutOwnerAccountInput
+  upsert?: Prisma.OrganizationUpsertWithoutOwnerAccountInput
+  disconnect?: Prisma.OrganizationWhereInput | boolean
+  delete?: Prisma.OrganizationWhereInput | boolean
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutOwnerAccountInput, Prisma.OrganizationUpdateWithoutOwnerAccountInput>, Prisma.OrganizationUncheckedUpdateWithoutOwnerAccountInput>
+}
+
+export type OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutOwnerAccountInput
+  upsert?: Prisma.OrganizationUpsertWithoutOwnerAccountInput
+  disconnect?: Prisma.OrganizationWhereInput | boolean
+  delete?: Prisma.OrganizationWhereInput | boolean
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutOwnerAccountInput, Prisma.OrganizationUpdateWithoutOwnerAccountInput>, Prisma.OrganizationUncheckedUpdateWithoutOwnerAccountInput>
+}
+
+export type OrganizationCreateNestedOneWithoutUnitsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitsInput, Prisma.OrganizationUncheckedCreateWithoutUnitsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutUnitsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutUnitsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitsInput, Prisma.OrganizationUncheckedCreateWithoutUnitsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutUnitsInput
+  upsert?: Prisma.OrganizationUpsertWithoutUnitsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutUnitsInput, Prisma.OrganizationUpdateWithoutUnitsInput>, Prisma.OrganizationUncheckedUpdateWithoutUnitsInput>
+}
+
+export type OrganizationCreateNestedOneWithoutUnitMembershipsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutUnitMembershipsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutUnitMembershipsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutUnitMembershipsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutUnitMembershipsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutUnitMembershipsInput
+  upsert?: Prisma.OrganizationUpsertWithoutUnitMembershipsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutUnitMembershipsInput, Prisma.OrganizationUpdateWithoutUnitMembershipsInput>, Prisma.OrganizationUncheckedUpdateWithoutUnitMembershipsInput>
 }
 
 export type OrganizationCreateWithoutDomainsInput = {
@@ -479,8 +582,11 @@ export type OrganizationCreateWithoutDomainsInput = {
   offboardingStartedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutDomainsInput = {
@@ -488,6 +594,7 @@ export type OrganizationUncheckedCreateWithoutDomainsInput = {
   name: string
   status?: $Enums.OrganizationStatus
   createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
   offboardingStartedAt?: Date | string | null
@@ -495,6 +602,8 @@ export type OrganizationUncheckedCreateWithoutDomainsInput = {
   updatedAt?: Date | string
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutDomainsInput = {
@@ -523,8 +632,11 @@ export type OrganizationUpdateWithoutDomainsInput = {
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutDomainsInput = {
@@ -532,6 +644,7 @@ export type OrganizationUncheckedUpdateWithoutDomainsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -539,6 +652,8 @@ export type OrganizationUncheckedUpdateWithoutDomainsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutEmployeesInput = {
@@ -551,8 +666,11 @@ export type OrganizationCreateWithoutEmployeesInput = {
   offboardingStartedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutEmployeesInput = {
@@ -560,6 +678,7 @@ export type OrganizationUncheckedCreateWithoutEmployeesInput = {
   name: string
   status?: $Enums.OrganizationStatus
   createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
   offboardingStartedAt?: Date | string | null
@@ -567,6 +686,8 @@ export type OrganizationUncheckedCreateWithoutEmployeesInput = {
   updatedAt?: Date | string
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutEmployeesInput = {
@@ -595,8 +716,11 @@ export type OrganizationUpdateWithoutEmployeesInput = {
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
@@ -604,6 +728,7 @@ export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -611,6 +736,8 @@ export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAccountsInput = {
@@ -623,11 +750,53 @@ export type OrganizationCreateWithoutAccountsInput = {
   offboardingStartedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAccountsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutAccountsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccountsInput, Prisma.OrganizationUncheckedCreateWithoutAccountsInput>
+}
+
+export type OrganizationCreateWithoutOwnerAccountInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutOwnerAccountInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
@@ -639,11 +808,14 @@ export type OrganizationUncheckedCreateWithoutAccountsInput = {
   updatedAt?: Date | string
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
-export type OrganizationCreateOrConnectWithoutAccountsInput = {
+export type OrganizationCreateOrConnectWithoutOwnerAccountInput = {
   where: Prisma.OrganizationWhereUniqueInput
-  create: Prisma.XOR<Prisma.OrganizationCreateWithoutAccountsInput, Prisma.OrganizationUncheckedCreateWithoutAccountsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
 }
 
 export type OrganizationUpsertWithoutAccountsInput = {
@@ -667,11 +839,59 @@ export type OrganizationUpdateWithoutAccountsInput = {
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAccountsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUpsertWithoutOwnerAccountInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedUpdateWithoutOwnerAccountInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedCreateWithoutOwnerAccountInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutOwnerAccountInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutOwnerAccountInput, Prisma.OrganizationUncheckedUpdateWithoutOwnerAccountInput>
+}
+
+export type OrganizationUpdateWithoutOwnerAccountInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutOwnerAccountInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
@@ -683,6 +903,177 @@ export type OrganizationUncheckedUpdateWithoutAccountsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutUnitsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
+  domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutUnitsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutUnitsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitsInput, Prisma.OrganizationUncheckedCreateWithoutUnitsInput>
+}
+
+export type OrganizationUpsertWithoutUnitsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutUnitsInput, Prisma.OrganizationUncheckedUpdateWithoutUnitsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitsInput, Prisma.OrganizationUncheckedCreateWithoutUnitsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutUnitsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutUnitsInput, Prisma.OrganizationUncheckedUpdateWithoutUnitsInput>
+}
+
+export type OrganizationUpdateWithoutUnitsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
+  domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutUnitsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutUnitMembershipsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
+  domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutUnitMembershipsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutUnitMembershipsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutUnitMembershipsInput>
+}
+
+export type OrganizationUpsertWithoutUnitMembershipsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedUpdateWithoutUnitMembershipsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedCreateWithoutUnitMembershipsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutUnitMembershipsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutUnitMembershipsInput, Prisma.OrganizationUncheckedUpdateWithoutUnitMembershipsInput>
+}
+
+export type OrganizationUpdateWithoutUnitMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
+  domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutUnitMembershipsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 
@@ -694,12 +1085,16 @@ export type OrganizationCountOutputType = {
   domains: number
   employees: number
   accounts: number
+  units: number
+  unitMemberships: number
 }
 
 export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   domains?: boolean | OrganizationCountOutputTypeCountDomainsArgs
   employees?: boolean | OrganizationCountOutputTypeCountEmployeesArgs
   accounts?: boolean | OrganizationCountOutputTypeCountAccountsArgs
+  units?: boolean | OrganizationCountOutputTypeCountUnitsArgs
+  unitMemberships?: boolean | OrganizationCountOutputTypeCountUnitMembershipsArgs
 }
 
 /**
@@ -733,20 +1128,38 @@ export type OrganizationCountOutputTypeCountAccountsArgs<ExtArgs extends runtime
   where?: Prisma.AccountWhereInput
 }
 
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountUnitsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.OrganizationUnitWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountUnitMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.UnitMembershipWhereInput
+}
+
 
 export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
   name?: boolean
   status?: boolean
   createdVia?: boolean
+  ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
   suspendedAt?: boolean
   offboardingStartedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
   domains?: boolean | Prisma.Organization$domainsArgs<ExtArgs>
   employees?: boolean | Prisma.Organization$employeesArgs<ExtArgs>
   accounts?: boolean | Prisma.Organization$accountsArgs<ExtArgs>
+  units?: boolean | Prisma.Organization$unitsArgs<ExtArgs>
+  unitMemberships?: boolean | Prisma.Organization$unitMembershipsArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
@@ -755,11 +1168,13 @@ export type OrganizationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   name?: boolean
   status?: boolean
   createdVia?: boolean
+  ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
   suspendedAt?: boolean
   offboardingStartedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
 export type OrganizationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -767,11 +1182,13 @@ export type OrganizationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   name?: boolean
   status?: boolean
   createdVia?: boolean
+  ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
   suspendedAt?: boolean
   offboardingStartedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
 export type OrganizationSelectScalar = {
@@ -779,6 +1196,7 @@ export type OrganizationSelectScalar = {
   name?: boolean
   status?: boolean
   createdVia?: boolean
+  ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
   suspendedAt?: boolean
   offboardingStartedAt?: boolean
@@ -786,28 +1204,39 @@ export type OrganizationSelectScalar = {
   updatedAt?: boolean
 }
 
-export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "status" | "createdVia" | "mfaRequiredForAll" | "suspendedAt" | "offboardingStartedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
+export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "status" | "createdVia" | "ownerAccountId" | "mfaRequiredForAll" | "suspendedAt" | "offboardingStartedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
 export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
   domains?: boolean | Prisma.Organization$domainsArgs<ExtArgs>
   employees?: boolean | Prisma.Organization$employeesArgs<ExtArgs>
   accounts?: boolean | Prisma.Organization$accountsArgs<ExtArgs>
+  units?: boolean | Prisma.Organization$unitsArgs<ExtArgs>
+  unitMemberships?: boolean | Prisma.Organization$unitMembershipsArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }
-export type OrganizationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
-export type OrganizationIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
+export type OrganizationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
+}
+export type OrganizationIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
+}
 
 export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Organization"
   objects: {
+    ownerAccount: Prisma.$AccountPayload<ExtArgs> | null
     domains: Prisma.$OrganizationDomainPayload<ExtArgs>[]
     employees: Prisma.$EmployeePayload<ExtArgs>[]
     accounts: Prisma.$AccountPayload<ExtArgs>[]
+    units: Prisma.$OrganizationUnitPayload<ExtArgs>[]
+    unitMemberships: Prisma.$UnitMembershipPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
     name: string
     status: $Enums.OrganizationStatus
     createdVia: $Enums.OrganizationCreatedVia
+    ownerAccountId: string | null
     mfaRequiredForAll: boolean
     suspendedAt: Date | null
     offboardingStartedAt: Date | null
@@ -1207,9 +1636,12 @@ readonly fields: OrganizationFieldRefs;
  */
 export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  ownerAccount<T extends Prisma.Organization$ownerAccountArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$ownerAccountArgs<ExtArgs>>): Prisma.Prisma__AccountClient<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   domains<T extends Prisma.Organization$domainsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$domainsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationDomainPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   employees<T extends Prisma.Organization$employeesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$employeesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EmployeePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   accounts<T extends Prisma.Organization$accountsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$accountsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  units<T extends Prisma.Organization$unitsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$unitsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationUnitPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  unitMemberships<T extends Prisma.Organization$unitMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$unitMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UnitMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1243,6 +1675,7 @@ export interface OrganizationFieldRefs {
   readonly name: Prisma.FieldRef<"Organization", 'String'>
   readonly status: Prisma.FieldRef<"Organization", 'OrganizationStatus'>
   readonly createdVia: Prisma.FieldRef<"Organization", 'OrganizationCreatedVia'>
+  readonly ownerAccountId: Prisma.FieldRef<"Organization", 'String'>
   readonly mfaRequiredForAll: Prisma.FieldRef<"Organization", 'Boolean'>
   readonly suspendedAt: Prisma.FieldRef<"Organization", 'DateTime'>
   readonly offboardingStartedAt: Prisma.FieldRef<"Organization", 'DateTime'>
@@ -1502,6 +1935,10 @@ export type OrganizationCreateManyAndReturnArgs<ExtArgs extends runtime.Types.Ex
    */
   data: Prisma.OrganizationCreateManyInput | Prisma.OrganizationCreateManyInput[]
   skipDuplicates?: boolean
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.OrganizationIncludeCreateManyAndReturn<ExtArgs> | null
 }
 
 /**
@@ -1572,6 +2009,10 @@ export type OrganizationUpdateManyAndReturnArgs<ExtArgs extends runtime.Types.Ex
    * Limit how many Organizations to update.
    */
   limit?: number
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.OrganizationIncludeUpdateManyAndReturn<ExtArgs> | null
 }
 
 /**
@@ -1638,6 +2079,25 @@ export type OrganizationDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.
    * Limit how many Organizations to delete.
    */
   limit?: number
+}
+
+/**
+ * Organization.ownerAccount
+ */
+export type Organization$ownerAccountArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Account
+   */
+  select?: Prisma.AccountSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Account
+   */
+  omit?: Prisma.AccountOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AccountInclude<ExtArgs> | null
+  where?: Prisma.AccountWhereInput
 }
 
 /**
@@ -1710,6 +2170,54 @@ export type Organization$accountsArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   distinct?: Prisma.AccountScalarFieldEnum | Prisma.AccountScalarFieldEnum[]
+}
+
+/**
+ * Organization.units
+ */
+export type Organization$unitsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the OrganizationUnit
+   */
+  select?: Prisma.OrganizationUnitSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the OrganizationUnit
+   */
+  omit?: Prisma.OrganizationUnitOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.OrganizationUnitInclude<ExtArgs> | null
+  where?: Prisma.OrganizationUnitWhereInput
+  orderBy?: Prisma.OrganizationUnitOrderByWithRelationInput | Prisma.OrganizationUnitOrderByWithRelationInput[]
+  cursor?: Prisma.OrganizationUnitWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.OrganizationUnitScalarFieldEnum | Prisma.OrganizationUnitScalarFieldEnum[]
+}
+
+/**
+ * Organization.unitMemberships
+ */
+export type Organization$unitMembershipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the UnitMembership
+   */
+  select?: Prisma.UnitMembershipSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the UnitMembership
+   */
+  omit?: Prisma.UnitMembershipOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UnitMembershipInclude<ExtArgs> | null
+  where?: Prisma.UnitMembershipWhereInput
+  orderBy?: Prisma.UnitMembershipOrderByWithRelationInput | Prisma.UnitMembershipOrderByWithRelationInput[]
+  cursor?: Prisma.UnitMembershipWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.UnitMembershipScalarFieldEnum | Prisma.UnitMembershipScalarFieldEnum[]
 }
 
 /**
