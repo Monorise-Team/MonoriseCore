@@ -1,11 +1,15 @@
 import {
   API_PREFIX,
+  AppAccess,
+  CreateAppAccess,
   CreateEmployee,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
   Employee,
+  Entitlement,
+  EntitlementStatus,
   Health,
   MAX_PAGE_LIMIT,
   Me,
@@ -14,7 +18,9 @@ import {
   PageCursor,
   PageLimit,
   Permission,
+  PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
+  PermissionSnapshot,
   ProductKey,
   PutUnitMember,
   RegisterPermissionsRequest,
@@ -35,7 +41,7 @@ import { z } from "zod";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles";
+export type RouteTag = "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles" | "AppAccess";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -49,10 +55,14 @@ export const TAGS: readonly TagDefinition[] = [
   { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
   { name: "Organization", description: "Firma zalogowanego użytkownika oraz przekazanie roli Ownera." },
   { name: "Structure", description: "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie." },
-  { name: "Permissions", description: "Rejestr uprawnień platformy Core i produktów (ADR-0036)." },
+  { name: "Permissions", description: "Rejestr uprawnień oraz migawka uprawnień dla produktów (ADR-0036)." },
   {
     name: "Roles",
     description: "Role firmowe, gotowe szablony ról i przypisania ról z zakresem (ADR-0033, ADR-0035).",
+  },
+  {
+    name: "AppAccess",
+    description: "Dostęp firm do produktów (Entitlements) oraz włączanie aplikacji pracownikom (AppAccess, ADR-0035).",
   },
 ];
 
@@ -116,11 +126,22 @@ export const UnitMemberList = z.array(UnitMember);
 export const PermissionList = z.array(Permission);
 export const RoleList = z.array(Role);
 export const RoleAssignmentList = z.array(RoleAssignment);
+export const EntitlementList = z.array(Entitlement);
+export const AppAccessList = z.array(AppAccess);
 
 const UuidParam = z.uuid();
 const IncludeDeprecatedParam = z.boolean().default(false);
 const IncludeTemplatesParam = z.boolean().default(true);
 const IncludeArchivedParam = z.boolean().default(false);
+const IncludeRevokedParam = z.boolean().default(false);
+
+const APP_ACCESS_ID_PARAM: ParameterDefinition = {
+  name: "appAccessId",
+  in: "path",
+  required: true,
+  description: "Identyfikator wpisu dostępu konta do aplikacji (UUID v7).",
+  schema: UuidParam,
+};
 
 const ROLE_ID_PARAM: ParameterDefinition = {
   name: "roleId",
@@ -845,6 +866,182 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  getProductPermissionSnapshot: {
+    method: "GET",
+    path: `${API_PREFIX}/products/{productKey}/permission-snapshot`,
+    operationId: "getProductPermissionSnapshot",
+    tag: "Permissions",
+    summary: "Pobierz migawkę uprawnień konta dla produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:permissions.read`). Zwraca migawkę uprawnień zgodną ze schematem `permissionSnapshotSchema` " +
+      "z `@monorise-team/permissions`: aktywność produktu dla firmy i konta, wyłącznie nadania uprawnień tego produktu " +
+      "(nigdy `core.*`) oraz pełne drzewo jednostek firmy (łącznie z `ARCHIVED`).",
+    auth: { scheme: "productOAuth", scopes: [PERMISSIONS_READ_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    parameters: [
+      PRODUCT_KEY_PARAM,
+      {
+        name: "organizationId",
+        in: "query",
+        required: true,
+        description: "Identyfikator firmy (UUID v7), w której kontekście pobierana jest migawka.",
+        schema: UuidParam,
+      },
+      {
+        name: "accountId",
+        in: "query",
+        required: true,
+        description: "Identyfikator konta pracownika (UUID v7).",
+        schema: UuidParam,
+      },
+    ],
+    dataSchemaName: "PermissionSnapshot",
+    dataSchema: PermissionSnapshot,
+    responseSchemaName: "PermissionSnapshotResponse",
+    responseDescription: "Migawka uprawnień konta dla wskazanego produktu.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listEntitlements: {
+    method: "GET",
+    path: `${API_PREFIX}/entitlements`,
+    operationId: "listEntitlements",
+    tag: "AppAccess",
+    summary: "Lista dostępów firmy do produktów",
+    description:
+      "Zwraca stronicowaną, wyłącznie do odczytu listę dostępów firmy do produktów (Entitlements), " +
+      "dostępną dla każdego aktywnego konta firmy.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "status",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr statusu dostępu (`ACTIVE`, `SUSPENDED` albo `ENDED`).",
+        schema: EntitlementStatus,
+      },
+    ],
+    dataSchemaName: "EntitlementList",
+    dataSchema: EntitlementList,
+    responseSchemaName: "EntitlementListResponse",
+    responseDescription: "Strona listy dostępów firmy do produktów.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listAppAccess: {
+    method: "GET",
+    path: `${API_PREFIX}/app-access`,
+    operationId: "listAppAccess",
+    tag: "AppAccess",
+    summary: "Lista wpisów dostępu kont do aplikacji",
+    description:
+      "Owner oraz konta z uprawnieniem `core.app_access.manage` (w dowolnym zakresie) widzą wszystkie wpisy firmy; " +
+      "pozostałe aktywne konta widzą wyłącznie własne wpisy. Domyślnie zwraca tylko aktywne dostępy.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "accountId",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po identyfikatorze konta (UUID v7).",
+        schema: UuidParam,
+      },
+      {
+        name: "product",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po kluczu produktu (np. `timotime`).",
+        schema: ProductKey,
+      },
+      {
+        name: "includeRevoked",
+        in: "query",
+        required: false,
+        description: "Czy uwzględnić wyłączone dostępy (`REVOKED`) — domyślnie `false`.",
+        schema: IncludeRevokedParam,
+      },
+    ],
+    dataSchemaName: "AppAccessList",
+    dataSchema: AppAccessList,
+    responseSchemaName: "AppAccessListResponse",
+    responseDescription: "Strona listy dostępów kont do aplikacji.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  grantAppAccess: {
+    method: "POST",
+    path: `${API_PREFIX}/app-access`,
+    operationId: "grantAppAccess",
+    tag: "AppAccess",
+    summary: "Włącz aplikację pracownikowi",
+    description:
+      "Włącza aktywnemu kontu dostęp do produktu, do którego firma ma aktywny `Entitlement` (ADR-0035). " +
+      "Wymaga roli Ownera albo uprawnienia `core.app_access.manage` obejmującego jednostki pracownika " +
+      "(dla pracownika bez jednostek — w zakresie całej firmy).",
+    auth: "bearer",
+    successStatus: 201,
+    envelope: true,
+    requestBodySchemaName: "CreateAppAccess",
+    requestBodySchema: CreateAppAccess,
+    requestBodyDescription: "Identyfikator konta i klucz produktu.",
+    dataSchemaName: "AppAccess",
+    dataSchema: AppAccess,
+    responseSchemaName: "AppAccessResponse",
+    responseDescription: "Utworzony wpis dostępu konta do aplikacji.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  revokeAppAccess: {
+    method: "DELETE",
+    path: `${API_PREFIX}/app-access/{appAccessId}`,
+    operationId: "revokeAppAccess",
+    tag: "AppAccess",
+    summary: "Wyłącz aplikację pracownikowi",
+    description:
+      "Oznacza dostęp konta do aplikacji jako `REVOKED` (z zachowaniem historii), podbija `authzRevision` " +
+      "i zapisuje zdarzenie `organization.permissions.changed`. Wymaga roli Ownera albo `core.app_access.manage` " +
+      "obejmującego jednostki pracownika.",
+    auth: "bearer",
+    successStatus: 204,
+    envelope: false,
+    parameters: [APP_ACCESS_ID_PARAM],
+    responseDescription: "Dostęp konta do aplikacji został wyłączony.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
       500: ["INTERNAL"],
     },

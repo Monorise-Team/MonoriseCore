@@ -11,7 +11,9 @@
     "start": "node dist/index.js",
     "lint": "eslint --max-warnings=0 .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "entitlement:grant": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts grant",
+    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end"
   },
   "dependencies": {
     "@core/contracts": "workspace:*",

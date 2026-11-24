@@ -1,14 +1,20 @@
 import { CORE_PERMISSIONS } from "@core/contracts";
+import { coreEvents, fromOutboxRecord } from "@monorise-team/events";
 import { PermissionError, type PermissionSnapshot } from "@monorise-team/permissions";
 import { describe, expect, it } from "vitest";
 import {
   assertCanAssignInScope,
   assertCanDelegateRole,
+  assertCanManageAppAccessForUnits,
   assertCorePermission,
+  canViewAllAppAccess,
   canViewAllRoleAssignments,
+  hasAnyAppAccessManagePermission,
   hasAnyRoleAssignPermission,
   toGrantScope,
 } from "../src/authorization.js";
+import { isEntitlementActive } from "../src/entitlements.js";
+import { buildPermissionsChangedRecord } from "../src/outbox.js";
 
 const ORG_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a00";
 const ACC_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a01";
@@ -133,5 +139,88 @@ describe("authorization (reguły Core oparte na @monorise-team/permissions)", ()
     const resourceScope = toGrantScope("RESOURCE", "proj_42");
     expect(() => assertCanAssignInScope(orgAdmin, resourceScope)).not.toThrow();
     expect(() => assertCanDelegateRole(orgAdmin, ["timotime.entries.read"], resourceScope)).not.toThrow();
+  });
+
+  it("egzekwuje core.app_access.manage po jednostkach pracownika (brak jednostek wymaga ORGANIZATION)", () => {
+    const owner = makeSnapshot({ isOwner: true });
+    expect(() => assertCanManageAppAccessForUnits(owner, [])).not.toThrow();
+    expect(() => assertCanManageAppAccessForUnits(owner, [WARSZAWA_ID])).not.toThrow();
+    expect(canViewAllAppAccess(owner)).toBe(true);
+    expect(hasAnyAppAccessManagePermission(owner)).toBe(true);
+
+    const krakowManager = makeSnapshot({
+      grants: [{ permission: CORE_PERMISSIONS.keys["app_access.manage"], scope: { type: "UNIT", unitId: KRAKOW_ID } }],
+    });
+    expect(() => assertCanManageAppAccessForUnits(krakowManager, [KRAKOW_ID])).not.toThrow();
+    expect(() => assertCanManageAppAccessForUnits(krakowManager, [MAGAZYN_ID])).not.toThrow();
+    expect(() => assertCanManageAppAccessForUnits(krakowManager, [WARSZAWA_ID, MAGAZYN_ID])).not.toThrow();
+    expect(() => assertCanManageAppAccessForUnits(krakowManager, [WARSZAWA_ID])).toThrow(PermissionError);
+    expect(() => assertCanManageAppAccessForUnits(krakowManager, [])).toThrow(PermissionError);
+    expect(canViewAllAppAccess(krakowManager)).toBe(true);
+    expect(hasAnyAppAccessManagePermission(krakowManager)).toBe(true);
+
+    const orgAdmin = makeSnapshot({
+      grants: [{ permission: CORE_PERMISSIONS.keys["app_access.manage"], scope: { type: "ORGANIZATION" } }],
+    });
+    expect(() => assertCanManageAppAccessForUnits(orgAdmin, [])).not.toThrow();
+    expect(() => assertCanManageAppAccessForUnits(orgAdmin, [WARSZAWA_ID])).not.toThrow();
+
+    const regular = makeSnapshot();
+    expect(() => assertCanManageAppAccessForUnits(regular, [KRAKOW_ID])).toThrow(PermissionError);
+    expect(canViewAllAppAccess(regular)).toBe(false);
+    expect(hasAnyAppAccessManagePermission(regular)).toBe(false);
+  });
+
+  it("wyznacza aktywność Entitlement na podstawie statusu oraz przedziału [startsAt, endsAt)", () => {
+    const now = new Date("2026-11-24T12:00:00.000Z");
+    const past = new Date("2026-11-24T11:00:00.000Z");
+    const future = new Date("2026-11-24T13:00:00.000Z");
+
+    expect(isEntitlementActive({ status: "ACTIVE", startsAt: past, endsAt: null }, now)).toBe(true);
+    expect(isEntitlementActive({ status: "ACTIVE", startsAt: now, endsAt: future }, now)).toBe(true);
+    expect(isEntitlementActive({ status: "ACTIVE", startsAt: future, endsAt: null }, now)).toBe(false);
+    expect(isEntitlementActive({ status: "ACTIVE", startsAt: past, endsAt: now }, now)).toBe(false);
+    expect(isEntitlementActive({ status: "SUSPENDED", startsAt: past, endsAt: future }, now)).toBe(false);
+    expect(isEntitlementActive({ status: "ENDED", startsAt: past, endsAt: future }, now)).toBe(false);
+  });
+
+  it("buduje poprawny rekord outbox dla organization.permissions.changed zgodny z katalogiem coreEvents", () => {
+    const record = buildPermissionsChangedRecord({
+      organizationId: ORG_ID,
+      accountId: ACC_ID,
+      authzRevision: 7,
+    });
+    expect(record).toMatchObject({
+      organizationId: ORG_ID,
+      type: "organization.permissions.changed",
+      version: 1,
+      resourceType: "account",
+      resourceId: ACC_ID,
+      resourceVersion: 7,
+      payload: { authzRevision: 7 },
+      publishedAt: null,
+    });
+
+    const envelope = fromOutboxRecord(
+      {
+        id: record.id,
+        organizationId: record.organizationId ?? null,
+        type: record.type,
+        version: record.version,
+        resourceType: record.resourceType,
+        resourceId: record.resourceId,
+        resourceVersion: record.resourceVersion,
+        payload: record.payload as Record<string, unknown>,
+        occurredAt: record.occurredAt as Date,
+        publishedAt: null,
+      },
+      { source: "core" },
+    );
+    const parsed = coreEvents.parse(envelope);
+    expect(parsed.status).toBe("known");
+    if (parsed.status === "known") {
+      expect(parsed.event.type).toBe("organization.permissions.changed");
+      expect(parsed.event.data).toEqual({ authzRevision: 7 });
+    }
   });
 });

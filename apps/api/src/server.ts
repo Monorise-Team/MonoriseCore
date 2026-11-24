@@ -1,10 +1,13 @@
 import {
   CORE_PERMISSIONS,
+  CreateAppAccess,
   CreateEmployee,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
+  EntitlementStatus,
   PageQuery,
+  PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
   ProductKey,
   PutUnitMember,
@@ -15,7 +18,9 @@ import {
   type ApiErrorBody,
   type ApiListResponse,
   type ApiResponse,
+  type AppAccess,
   type Employee,
+  type Entitlement,
   type ErrorCode,
   type Health,
   type MachineTokenClaims,
@@ -37,13 +42,18 @@ import { writeAudit } from "./audit.js";
 import {
   assertCanAssignInScope,
   assertCanDelegateRole,
+  assertCanManageAppAccessForUnits,
   assertCorePermission,
+  canViewAllAppAccess,
   canViewAllRoleAssignments,
+  hasAnyAppAccessManagePermission,
   hasAnyRoleAssignPermission,
   loadPermissionSnapshot,
   toGrantScope,
 } from "./authorization.js";
+import { isEntitlementActive } from "./entitlements.js";
 import { buildOpenApiDocument } from "./openapi.js";
+import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
 import { registerRoleTemplates } from "./role-templates-registry.js";
 import { ROUTES, toFastifyPath } from "./routes.js";
@@ -87,7 +97,13 @@ const UnitMemberParams = z.object({ unitId: z.uuid(), employeeId: z.uuid() });
 const ProductKeyParams = z.object({ productKey: ProductKey });
 const RoleIdParams = z.object({ roleId: z.uuid() });
 const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
+const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
+const PermissionSnapshotQuery = z.object({
+  organizationId: z.uuid(),
+  accountId: z.uuid(),
+});
 const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
+const ListEntitlementsFilter = z.object({ status: EntitlementStatus.optional() });
 const QueryBoolean = z
   .union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")])
   .default(false);
@@ -106,6 +122,11 @@ const ListRolesFilter = z.object({
 const ListRoleAssignmentsFilter = z.object({
   accountId: z.uuid().optional(),
   roleId: z.uuid().optional(),
+});
+const ListAppAccessFilter = z.object({
+  accountId: z.uuid().optional(),
+  product: ProductKey.optional(),
+  includeRevoked: QueryBoolean,
 });
 const CursorUuid = z.uuid();
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
@@ -315,6 +336,56 @@ function serializeRoleAssignment(assignment: {
     validUntil: assignment.validUntil ? assignment.validUntil.toISOString() : null,
     grantedByAccountId: assignment.grantedByAccountId,
     createdAt: assignment.createdAt.toISOString(),
+  };
+}
+
+function serializeEntitlement(
+  entitlement: {
+    id: string;
+    planId: string | null;
+    sourceType: Entitlement["sourceType"];
+    status: Entitlement["status"];
+    startsAt: Date;
+    endsAt: Date | null;
+    suspendedReason: Entitlement["suspendedReason"];
+    createdAt: Date;
+    updatedAt: Date;
+    product: { key: string };
+  },
+  now: Date = new Date(),
+): Entitlement {
+  return {
+    id: entitlement.id,
+    product: entitlement.product.key,
+    planId: entitlement.planId,
+    sourceType: entitlement.sourceType,
+    status: entitlement.status,
+    isActive: isEntitlementActive(entitlement, now),
+    startsAt: entitlement.startsAt.toISOString(),
+    endsAt: entitlement.endsAt ? entitlement.endsAt.toISOString() : null,
+    suspendedReason: entitlement.suspendedReason,
+    createdAt: entitlement.createdAt.toISOString(),
+    updatedAt: entitlement.updatedAt.toISOString(),
+  };
+}
+
+function serializeAppAccess(access: {
+  id: string;
+  accountId: string;
+  status: AppAccess["status"];
+  grantedByAccountId: string;
+  createdAt: Date;
+  revokedAt: Date | null;
+  product: { key: string };
+}): AppAccess {
+  return {
+    id: access.id,
+    accountId: access.accountId,
+    product: access.product.key,
+    status: access.status,
+    grantedByAccountId: access.grantedByAccountId,
+    createdAt: access.createdAt.toISOString(),
+    revokedAt: access.revokedAt ? access.revokedAt.toISOString() : null,
   };
 }
 
@@ -605,10 +676,7 @@ export function buildServer({
           where: { id: who.organizationId },
           data: { ownerAccountId: target.id },
         });
-        await tx.account.updateMany({
-          where: { id: { in: [who.accountId, target.id] } },
-          data: { authzRevision: { increment: 1 } },
-        });
+        await bumpAuthzRevisions(tx, who.organizationId, { id: { in: [who.accountId, target.id] } });
         await writeAudit(tx, request, who, {
           action: "organization.owner.transferred",
           resourceType: "organization",
@@ -1328,10 +1396,7 @@ export function buildServer({
                   data: toAdd.map((permissionId) => ({ roleId: role.id, permissionId })),
                 });
               }
-              await tx.account.updateMany({
-                where: { roleAssignments: { some: { roleId: role.id } } },
-                data: { authzRevision: { increment: 1 } },
-              });
+              await bumpAuthzRevisions(tx, who.organizationId, { roleAssignments: { some: { roleId: role.id } } });
               changes.permissions = {
                 old: role.permissions.map((rp) => rp.permission.key).sort(),
                 new: resolvedPermissions.map((perm) => perm.key).sort(),
@@ -1412,10 +1477,7 @@ export function buildServer({
           where: { id: role.id },
           data: { archivedAt: new Date() },
         });
-        await tx.account.updateMany({
-          where: { roleAssignments: { some: { roleId: role.id } } },
-          data: { authzRevision: { increment: 1 } },
-        });
+        await bumpAuthzRevisions(tx, who.organizationId, { roleAssignments: { some: { roleId: role.id } } });
         await writeAudit(tx, request, who, {
           action: "role.archived",
           resourceType: "role",
@@ -1528,10 +1590,7 @@ export function buildServer({
             },
           });
 
-          await tx.account.update({
-            where: { id: body.accountId },
-            data: { authzRevision: { increment: 1 } },
-          });
+          await bumpAuthzRevisions(tx, who.organizationId, { id: body.accountId });
 
           await writeAudit(tx, request, who, {
             action: "role.assigned",
@@ -1594,10 +1653,7 @@ export function buildServer({
         assertCanDelegateRole(snapshot, activePermissionKeys, grantScope);
 
         await tx.roleAssignment.delete({ where: { id: assignment.id } });
-        await tx.account.update({
-          where: { id: assignment.accountId },
-          data: { authzRevision: { increment: 1 } },
-        });
+        await bumpAuthzRevisions(tx, who.organizationId, { id: assignment.accountId });
         await writeAudit(tx, request, who, {
           action: "role.revoked",
           resourceType: "role_assignment",
@@ -1607,6 +1663,281 @@ export function buildServer({
             roleId: assignment.roleId,
             scopeType: assignment.scopeType,
             scopeId: assignment.scopeId,
+          },
+        });
+      });
+
+      return reply.status(204).send();
+    },
+  });
+
+  app.route({
+    method: ROUTES.getProductPermissionSnapshot.method,
+    url: toFastifyPath(ROUTES.getProductPermissionSnapshot.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, PERMISSIONS_READ_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const query = parseInput(PermissionSnapshotQuery, request.query);
+
+      const product = await db.product.findUnique({
+        where: { key: params.productKey },
+        select: { id: true, key: true, registrationClientId: true },
+      });
+      if (!product) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+      }
+      if (!product.registrationClientId || product.registrationClientId !== machine.clientId) {
+        throw new ApiFailure(
+          403,
+          "PERMISSION_DENIED",
+          "Ten klient nie może odczytywać migawki uprawnień wskazanego produktu",
+        );
+      }
+
+      const snapshot = await withOrganization(db, query.organizationId, async (tx) => {
+        const account = await tx.account.findUnique({
+          where: { id: query.accountId },
+          select: {
+            id: true,
+            organizationId: true,
+            status: true,
+            authzRevision: true,
+            organization: { select: { ownerAccountId: true } },
+          },
+        });
+        if (!account) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta w firmie");
+        }
+        return loadPermissionSnapshot(tx, {
+          accountId: account.id,
+          organizationId: account.organizationId,
+          authzRevision: account.authzRevision,
+          isOwner: account.organization.ownerAccountId === account.id,
+          accountStatus: account.status,
+          product: { id: product.id, key: product.key },
+        });
+      });
+
+      return send(request, snapshot);
+    },
+  });
+
+  app.route({
+    method: ROUTES.listEntitlements.method,
+    url: toFastifyPath(ROUTES.listEntitlements.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const page = parsePageQuery(request.query, ListEntitlementsFilter);
+      const where = {
+        ...(page.status ? { status: page.status } : {}),
+        ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+      };
+      const rows = await withOrganization(db, who.organizationId, (tx) =>
+        tx.entitlement.findMany({
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          include: { product: { select: { key: true } } },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        }),
+      );
+      const now = new Date();
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(
+        request,
+        items.map((item) => serializeEntitlement(item, now)),
+        nextCursor,
+      );
+    },
+  });
+
+  app.route({
+    method: ROUTES.listAppAccess.method,
+    url: toFastifyPath(ROUTES.listAppAccess.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const page = parsePageQuery(request.query, ListAppAccessFilter);
+      const rows = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        const canViewAll = canViewAllAppAccess(snapshot);
+        if (!canViewAll && page.accountId && page.accountId !== who.accountId) {
+          return [];
+        }
+        const effectiveAccountId = canViewAll ? page.accountId : who.accountId;
+        const where = {
+          ...(effectiveAccountId ? { accountId: effectiveAccountId } : {}),
+          ...(page.product !== undefined ? { product: { is: { key: page.product } } } : {}),
+          ...(page.includeRevoked ? {} : { status: "ACTIVE" as const }),
+          ...(page.afterId ? { id: { gt: page.afterId } } : {}),
+        };
+        return tx.appAccess.findMany({
+          ...(Object.keys(where).length > 0 ? { where } : {}),
+          include: { product: { select: { key: true } } },
+          orderBy: { id: "asc" },
+          take: page.limit + 1,
+        });
+      });
+      const { items, nextCursor } = paginateRows(rows, page.limit);
+      return sendList(request, items.map(serializeAppAccess), nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.grantAppAccess.method,
+    url: toFastifyPath(ROUTES.grantAppAccess.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const body = parseInput(CreateAppAccess, request.body);
+
+      try {
+        const created = await withOrganization(db, who.organizationId, async (tx) => {
+          const snapshot = await loadPermissionSnapshot(tx, who);
+          if (!hasAnyAppAccessManagePermission(snapshot)) {
+            throw new PermissionError(CORE_PERMISSIONS.keys["app_access.manage"]);
+          }
+
+          const account = await tx.account.findUnique({
+            where: { id: body.accountId },
+            select: {
+              id: true,
+              status: true,
+              employee: {
+                select: { unitMemberships: { select: { unitId: true } } },
+              },
+            },
+          });
+          if (!account) {
+            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
+          }
+
+          const unitIds = account.employee.unitMemberships.map((m) => m.unitId);
+          assertCanManageAppAccessForUnits(snapshot, unitIds);
+
+          const product = await tx.product.findUnique({
+            where: { key: body.product },
+            select: { id: true, key: true },
+          });
+          if (!product) {
+            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+          }
+
+          if (account.status !== "ACTIVE") {
+            throw new ApiFailure(409, "CONFLICT", "Dostęp do aplikacji można włączyć wyłącznie aktywnemu kontu");
+          }
+
+          const now = new Date();
+          const entitlement = await tx.entitlement.findFirst({
+            where: {
+              productId: product.id,
+              status: "ACTIVE",
+              startsAt: { lte: now },
+              OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+            },
+            select: { id: true },
+          });
+          if (!entitlement) {
+            throw new ApiFailure(409, "CONFLICT", "Firma nie ma aktywnego dostępu do tego produktu");
+          }
+
+          const existing = await tx.appAccess.findFirst({
+            where: { accountId: account.id, productId: product.id, status: "ACTIVE" },
+            select: { id: true },
+          });
+          if (existing) {
+            throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
+          }
+
+          const access = await tx.appAccess.create({
+            data: {
+              id: uuidv7(),
+              organizationId: who.organizationId,
+              accountId: account.id,
+              productId: product.id,
+              status: "ACTIVE",
+              grantedByAccountId: who.accountId,
+              revokedAt: null,
+            },
+            include: { product: { select: { key: true } } },
+          });
+
+          await bumpAuthzRevisions(tx, who.organizationId, { id: account.id });
+
+          await writeAudit(tx, request, who, {
+            action: "app_access.granted",
+            resourceType: "app_access",
+            resourceId: access.id,
+            metadata: {
+              accountId: access.accountId,
+              product: product.key,
+            },
+          });
+
+          return access;
+        });
+
+        return reply.status(201).send(send(request, serializeAppAccess(created)));
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.revokeAppAccess.method,
+    url: toFastifyPath(ROUTES.revokeAppAccess.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const params = parseInput(AppAccessIdParams, request.params);
+
+      await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        if (!hasAnyAppAccessManagePermission(snapshot)) {
+          throw new PermissionError(CORE_PERMISSIONS.keys["app_access.manage"]);
+        }
+
+        const access = await tx.appAccess.findUnique({
+          where: { id: params.appAccessId },
+          select: {
+            id: true,
+            accountId: true,
+            status: true,
+            product: { select: { key: true } },
+            account: {
+              select: {
+                employee: {
+                  select: { unitMemberships: { select: { unitId: true } } },
+                },
+              },
+            },
+          },
+        });
+        if (!access) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono dostępu do aplikacji");
+        }
+
+        const unitIds = access.account.employee.unitMemberships.map((m) => m.unitId);
+        assertCanManageAppAccessForUnits(snapshot, unitIds);
+
+        if (access.status === "REVOKED") {
+          throw new ApiFailure(409, "CONFLICT", "Dostęp do aplikacji został już wyłączony");
+        }
+
+        await tx.appAccess.update({
+          where: { id: access.id },
+          data: { status: "REVOKED", revokedAt: new Date() },
+        });
+
+        await bumpAuthzRevisions(tx, who.organizationId, { id: access.accountId });
+
+        await writeAudit(tx, request, who, {
+          action: "app_access.revoked",
+          resourceType: "app_access",
+          resourceId: access.id,
+          metadata: {
+            accountId: access.accountId,
+            product: access.product.key,
           },
         });
       });
