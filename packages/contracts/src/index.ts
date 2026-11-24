@@ -10,11 +10,13 @@ import {
 } from "@monorise-team/permissions";
 import { z } from "zod";
 
-export { CORE_PERMISSIONS, type CorePermissionKey } from "./permissions.js";
+export { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, type CorePermissionKey } from "./permissions.js";
 
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
+export const MAX_ROLE_TEMPLATE_ENTRIES = 100;
+export const MAX_ROLE_PERMISSIONS = 200;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
@@ -174,11 +176,22 @@ export const Organization = z.object({
 });
 export type Organization = z.infer<typeof Organization>;
 
+export const OrganizationOwner = z.object({
+  ownerAccountId: z.uuid(),
+});
+export type OrganizationOwner = z.infer<typeof OrganizationOwner>;
+
+export const TransferOrganizationOwner = z.object({
+  accountId: z.uuid(),
+});
+export type TransferOrganizationOwner = z.infer<typeof TransferOrganizationOwner>;
+
 export const EmployeeStatus = z.enum(["ACTIVE", "FORMER", "ANONYMIZED"]);
 export type EmployeeStatus = z.infer<typeof EmployeeStatus>;
 
 export const Employee = z.object({
   id: z.uuid(),
+  accountId: z.uuid().nullable(),
   firstName: z.string(),
   lastName: z.string(),
   workEmail: z.string().nullable(),
@@ -295,6 +308,180 @@ export const Permission = z.object({
   deprecated: z.boolean(),
 });
 export type Permission = z.infer<typeof Permission>;
+
+// ── Role, gotowe szablony i przypisania ról (ADR-0033, ADR-0034, ADR-0035) ──────────────────────
+
+export const ROLE_TEMPLATE_KEY_REGEX = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$/;
+export const RoleTemplateKey = z.string().regex(ROLE_TEMPLATE_KEY_REGEX, "Nieprawidłowy klucz szablonu roli");
+export type RoleTemplateKey = z.infer<typeof RoleTemplateKey>;
+
+const UniqueRolePermissionKeys = z
+  .array(permissionKeySchema)
+  .min(1, "Rola musi zawierać co najmniej jedno uprawnienie")
+  .max(MAX_ROLE_PERMISSIONS, `Rola może zawierać co najwyżej ${MAX_ROLE_PERMISSIONS} uprawnień`)
+  .superRefine((keys, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [i],
+          message: `Zduplikowany klucz uprawnienia: "${key}"`,
+        });
+      } else {
+        seen.add(key);
+      }
+    }
+  });
+
+export const RoleTemplateManifestEntry = z.object({
+  key: RoleTemplateKey,
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(500).nullable().optional(),
+  permissions: UniqueRolePermissionKeys,
+});
+export type RoleTemplateManifestEntry = z.infer<typeof RoleTemplateManifestEntry>;
+
+export const RegisterRoleTemplatesRequest = z
+  .array(RoleTemplateManifestEntry)
+  .max(
+    MAX_ROLE_TEMPLATE_ENTRIES,
+    `Manifest szablonów ról może zawierać co najwyżej ${MAX_ROLE_TEMPLATE_ENTRIES} pozycji`,
+  )
+  .superRefine((entries, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      if (seen.has(entry.key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [i, "key"],
+          message: `Zduplikowany klucz szablonu roli: "${entry.key}"`,
+        });
+      } else {
+        seen.add(entry.key);
+      }
+    }
+  });
+export type RegisterRoleTemplatesRequest = z.infer<typeof RegisterRoleTemplatesRequest>;
+
+export const RegisterRoleTemplatesResult = z.object({
+  added: z.array(z.string()),
+  updated: z.array(z.string()),
+  archived: z.array(z.string()),
+  restored: z.array(z.string()),
+  unchanged: z.number().int().nonnegative(),
+});
+export type RegisterRoleTemplatesResult = z.infer<typeof RegisterRoleTemplatesResult>;
+
+export const Role = z.object({
+  id: z.uuid(),
+  key: z.string().nullable(),
+  product: z.string().nullable(),
+  name: z.string(),
+  description: z.string().nullable(),
+  isTemplate: z.boolean(),
+  copiedFromRoleId: z.uuid().nullable(),
+  archivedAt: z.string().nullable(),
+  permissions: z.array(permissionKeySchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Role = z.infer<typeof Role>;
+
+export const CreateRoleFromScratch = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().min(1).max(500).nullable().optional(),
+    product: ProductKey.nullable(),
+    permissions: UniqueRolePermissionKeys,
+  })
+  .strict();
+export type CreateRoleFromScratch = z.infer<typeof CreateRoleFromScratch>;
+
+export const CopyRole = z
+  .object({
+    copyFromRoleId: z.uuid(),
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .strict();
+export type CopyRole = z.infer<typeof CopyRole>;
+
+export const CreateRole = z.union([CreateRoleFromScratch, CopyRole]);
+export type CreateRole = z.infer<typeof CreateRole>;
+
+export const UpdateRole = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().min(1).max(500).nullable().optional(),
+    permissions: UniqueRolePermissionKeys.optional(),
+  })
+  .refine((data) => data.name !== undefined || data.description !== undefined || data.permissions !== undefined, {
+    message: "Podaj co najmniej jedno pole do zmiany",
+  });
+export type UpdateRole = z.infer<typeof UpdateRole>;
+
+export const ScopeType = z.enum(["ORGANIZATION", "UNIT", "RESOURCE"]);
+export type ScopeType = z.infer<typeof ScopeType>;
+
+export const RoleAssignment = z.object({
+  id: z.uuid(),
+  accountId: z.uuid(),
+  roleId: z.uuid(),
+  scopeType: ScopeType,
+  scopeId: z.string().nullable(),
+  validFrom: z.string().nullable(),
+  validUntil: z.string().nullable(),
+  grantedByAccountId: z.uuid(),
+  createdAt: z.string(),
+});
+export type RoleAssignment = z.infer<typeof RoleAssignment>;
+
+const IsoDatetime = z.iso.datetime({ offset: true });
+
+export const CreateRoleAssignment = z
+  .object({
+    accountId: z.uuid(),
+    roleId: z.uuid(),
+    scopeType: ScopeType,
+    scopeId: z.string().trim().min(1).max(256).nullable().optional(),
+    validFrom: IsoDatetime.nullable().optional(),
+    validUntil: IsoDatetime.nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.scopeType === "ORGANIZATION") {
+      if (data.scopeId !== undefined && data.scopeId !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["scopeId"],
+          message: "Zakres ORGANIZATION nie przyjmuje scopeId",
+        });
+      }
+    } else if (!data.scopeId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["scopeId"],
+        message: `Zakres ${data.scopeType} wymaga podania scopeId`,
+      });
+    } else if (data.scopeType === "UNIT" && !z.uuid().safeParse(data.scopeId).success) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["scopeId"],
+        message: "Dla zakresu UNIT pole scopeId musi być poprawnym identyfikatorem UUID",
+      });
+    }
+
+    if (data.validFrom && data.validUntil && Date.parse(data.validUntil) <= Date.parse(data.validFrom)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "Data validUntil musi być późniejsza niż validFrom",
+      });
+    }
+  });
+export type CreateRoleAssignment = z.infer<typeof CreateRoleAssignment>;
 
 // ── Samorejestracja firmy (ADR-0021) ────────────────────────────────────────────────────────────
 

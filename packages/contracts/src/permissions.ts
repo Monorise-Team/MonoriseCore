@@ -2,7 +2,7 @@ import { definePermissions, type PermissionKeyOf } from "@monorise-team/permissi
 
 /**
  * Własne uprawnienia platformy Core (ADR-0036). Rejestrowane automatycznie przy starcie Core API
- * z `productId = null` (prefiks `core.`). Do egzekwowania dostępu wejdą razem z rolami (etap 2b).
+ * z `productId = null` (prefiks `core.`).
  */
 export const CORE_PERMISSIONS = definePermissions("core", {
   "structure.manage": "Zarządzanie strukturą firmy: jednostki i członkowie",
@@ -13,3 +13,15 @@ export const CORE_PERMISSIONS = definePermissions("core", {
 });
 
 export type CorePermissionKey = PermissionKeyOf<typeof CORE_PERMISSIONS>;
+
+/**
+ * Gotowe role (szablony) platformy Core rejestrowane przy starcie Core API zaraz po uprawnieniach `core.*`.
+ */
+export const CORE_ROLE_TEMPLATES = [
+  {
+    key: "core.company_admin",
+    name: "Administrator firmy",
+    description: "Zarządza firmą, pracownikami, strukturą, rolami i dziennikiem zdarzeń",
+    permissions: CORE_PERMISSIONS.manifest.map((entry) => entry.key),
+  },
+] as const;

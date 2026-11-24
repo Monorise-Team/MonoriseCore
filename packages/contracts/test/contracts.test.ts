@@ -9,7 +9,12 @@ import {
   apiErrorSchema,
   apiSuccessSchema,
   CORE_PERMISSIONS,
+  CORE_ROLE_TEMPLATES,
+  CopyRole,
   CreateEmployee,
+  CreateRole,
+  CreateRoleAssignment,
+  CreateRoleFromScratch,
   CreateUnit,
   DEFAULT_PAGE_LIMIT,
   emailDomain,
@@ -20,6 +25,7 @@ import {
   MAX_PERMISSION_MANIFEST_ENTRIES,
   Me,
   normalizeEmail,
+  OrganizationOwner,
   PageQuery,
   Permission,
   PERMISSIONS_REGISTER_SCOPE,
@@ -27,9 +33,16 @@ import {
   PutUnitMember,
   RegisterPermissionsRequest,
   RegisterPermissionsResult,
+  RegisterRoleTemplatesRequest,
+  RegisterRoleTemplatesResult,
+  Role,
+  RoleAssignment,
+  RoleTemplateKey,
   SignUpRequest,
+  TransferOrganizationOwner,
   Unit,
   UnitMember,
+  UpdateRole,
   UpdateUnit,
 } from "../src/index.js";
 
@@ -145,6 +158,7 @@ describe("kontrakty", () => {
         joinedAt: "2026-11-24T12:00:00.000Z",
         employee: {
           id: UUID_2,
+          accountId: UUID_1,
           firstName: "Anna",
           lastName: "Nowak",
           workEmail: "anna@acme.test",
@@ -159,6 +173,7 @@ describe("kontrakty", () => {
         account: { id: UUID_1, email: "anna@acme.test", status: "ACTIVE", isOwner: true },
         employee: {
           id: UUID_2,
+          accountId: UUID_1,
           firstName: "Anna",
           lastName: "Nowak",
           workEmail: "anna@acme.test",
@@ -255,5 +270,148 @@ describe("kontrakty", () => {
         exp: 2,
       }).success,
     ).toBe(false);
+  });
+
+  it("waliduje schematy ról, szablonów, przypisań i przekazania Ownera", () => {
+    expect(CORE_ROLE_TEMPLATES).toHaveLength(1);
+    expect(CORE_ROLE_TEMPLATES[0]?.key).toBe("core.company_admin");
+    expect(CORE_ROLE_TEMPLATES[0]?.permissions).toEqual(CORE_PERMISSIONS.manifest.map((p) => p.key));
+
+    expect(RoleTemplateKey.safeParse("core.company_admin").success).toBe(true);
+    expect(RoleTemplateKey.safeParse("timotime.manager").success).toBe(true);
+    expect(RoleTemplateKey.safeParse("invalid").success).toBe(false);
+
+    expect(
+      RegisterRoleTemplatesRequest.parse([
+        {
+          key: "timotime.manager",
+          name: " Kierownik ",
+          description: " Zatwierdza czas ",
+          permissions: ["timotime.entries.read", "timotime.entries.approve"],
+        },
+      ])[0]?.name,
+    ).toBe("Kierownik");
+    expect(
+      RegisterRoleTemplatesRequest.safeParse([
+        { key: "timotime.dup", name: "A", permissions: ["timotime.entries.read"] },
+        { key: "timotime.dup", name: "B", permissions: ["timotime.entries.read"] },
+      ]).success,
+    ).toBe(false);
+    expect(
+      RegisterRoleTemplatesRequest.safeParse([
+        { key: "timotime.manager", name: "A", permissions: ["timotime.entries.read", "timotime.entries.read"] },
+      ]).success,
+    ).toBe(false);
+
+    expect(
+      RegisterRoleTemplatesResult.parse({
+        added: ["timotime.manager"],
+        updated: [],
+        archived: [],
+        restored: [],
+        unchanged: 0,
+      }).added,
+    ).toEqual(["timotime.manager"]);
+
+    expect(
+      CreateRoleFromScratch.parse({
+        name: " Kierownik ",
+        product: "timotime",
+        permissions: ["timotime.entries.read"],
+      }).name,
+    ).toBe("Kierownik");
+    expect(CopyRole.parse({ copyFromRoleId: UUID_1, name: "Moja rola" }).copyFromRoleId).toBe(UUID_1);
+    expect(
+      CreateRole.safeParse({
+        copyFromRoleId: UUID_1,
+        product: "timotime",
+        permissions: ["timotime.entries.read"],
+      }).success,
+    ).toBe(false);
+    expect(UpdateRole.safeParse({}).success).toBe(false);
+    expect(UpdateRole.parse({ name: "Nowa nazwa" }).name).toBe("Nowa nazwa");
+
+    expect(
+      Role.parse({
+        id: UUID_1,
+        key: "core.company_admin",
+        product: null,
+        name: "Administrator firmy",
+        description: null,
+        isTemplate: true,
+        copiedFromRoleId: null,
+        archivedAt: null,
+        permissions: ["core.roles.manage"],
+        createdAt: "2026-11-24T12:00:00.000Z",
+        updatedAt: "2026-11-24T12:00:00.000Z",
+      }).isTemplate,
+    ).toBe(true);
+
+    expect(
+      CreateRoleAssignment.parse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "ORGANIZATION",
+      }).scopeType,
+    ).toBe("ORGANIZATION");
+    expect(
+      CreateRoleAssignment.safeParse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "ORGANIZATION",
+        scopeId: UUID_3,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateRoleAssignment.safeParse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "UNIT",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateRoleAssignment.safeParse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "UNIT",
+        scopeId: "not-a-uuid",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateRoleAssignment.parse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "UNIT",
+        scopeId: UUID_3,
+        validFrom: "2026-11-24T00:00:00.000Z",
+        validUntil: "2026-12-01T00:00:00.000Z",
+      }).scopeId,
+    ).toBe(UUID_3);
+    expect(
+      CreateRoleAssignment.safeParse({
+        accountId: UUID_1,
+        roleId: UUID_2,
+        scopeType: "ORGANIZATION",
+        validFrom: "2026-12-10T00:00:00.000Z",
+        validUntil: "2026-12-01T00:00:00.000Z",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      RoleAssignment.parse({
+        id: UUID_1,
+        accountId: UUID_2,
+        roleId: UUID_3,
+        scopeType: "RESOURCE",
+        scopeId: "proj_1",
+        validFrom: null,
+        validUntil: null,
+        grantedByAccountId: UUID_2,
+        createdAt: "2026-11-24T12:00:00.000Z",
+      }).scopeId,
+    ).toBe("proj_1");
+
+    expect(TransferOrganizationOwner.parse({ accountId: UUID_1 }).accountId).toBe(UUID_1);
+    expect(OrganizationOwner.parse({ ownerAccountId: UUID_1 }).ownerAccountId).toBe(UUID_1);
   });
 });
