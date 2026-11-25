@@ -2,10 +2,17 @@ import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_TTL_MS, IDEMPOTENCY_REPLAYED_HE
 import type { PrismaClient } from "@core/db";
 import { describe, expect, it, vi } from "vitest";
 import {
+  accountPrincipal,
   canonicalJson,
   cleanupAllExpiredIdempotencyKeys,
+  clientPrincipal,
   computeRequestHash,
+  DEFAULT_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
+  executeWithIdempotency,
+  extractIdempotencyKeyHeader,
   IdempotencyError,
+  MAX_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
+  parseIdempotencyCleanupIntervalMs,
   parseIdempotencyKeyHeader,
   startIdempotencyCleanup,
 } from "../src/idempotency.js";
@@ -29,21 +36,61 @@ interface StoredKeyRow {
   expiresAt: Date;
 }
 
-/** Minimalny mock PrismaClient w pamięci do testów mechanizmu HTTP bez połączenia z bazą. */
-function createInMemoryIdempotencyDb() {
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/**
+ * Mock PrismaClient w pamięci z transakcyjną kolejką blokad `pg_advisory_xact_lock`,
+ * pozwalający deterministycznie testować współbieżność, kolejność `defer` i ścieżkę HTTP bez bazy.
+ */
+function createInMemoryIdempotencyDb(options?: { onUpsert?: () => void }) {
   const keys = new Map<string, StoredKeyRow>();
   const employees: { id: string; firstName: string; lastName: string }[] = [];
+  const lockQueues = new Map<string, Promise<void>>();
 
   const compositeKey = (k: { organizationId: string; principal: string; key: string }) =>
     `${k.organizationId}|${k.principal}|${k.key}`;
 
+  const acquireAdvisoryLock = async (lockName: string): Promise<() => void> => {
+    const previous = lockQueues.get(lockName) ?? Promise.resolve();
+    let release!: () => void;
+    const next = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => next);
+    lockQueues.set(lockName, tail);
+    await previous;
+    return () => {
+      release();
+      if (lockQueues.get(lockName) === tail) {
+        lockQueues.delete(lockName);
+      }
+    };
+  };
+
   const db = {
     $transaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> => {
-      const stagedKeys = new Map(keys);
-      const stagedEmployees = [...employees];
+      const releaseLocks: (() => void)[] = [];
+      const stagedDeletes = new Set<string>();
+      const stagedUpserts = new Map<string, StoredKeyRow>();
+      const stagedEmployees: { id: string; firstName: string; lastName: string }[] = [];
 
       const tx = {
-        $executeRaw: async () => 1,
+        $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+          const sql = strings.join(" ");
+          if (sql.includes("pg_advisory_xact_lock")) {
+            const lockName = String(values[0] ?? "");
+            releaseLocks.push(await acquireAdvisoryLock(lockName));
+          }
+          return 1;
+        },
         account: {
           findUnique: async () => ({
             status: "ACTIVE",
@@ -80,7 +127,13 @@ function createInMemoryIdempotencyDb() {
             where,
           }: {
             where: { organizationId_principal_key: { organizationId: string; principal: string; key: string } };
-          }) => stagedKeys.get(compositeKey(where.organizationId_principal_key)) ?? null,
+          }) => {
+            const mapKey = compositeKey(where.organizationId_principal_key);
+            if (stagedUpserts.has(mapKey)) return stagedUpserts.get(mapKey) ?? null;
+            if (stagedDeletes.has(mapKey)) return null;
+            // Odczyt pod READ COMMITTED: zawsze widzi aktualny zatwierdzony stan po zwolnieniu blokady.
+            return keys.get(mapKey) ?? null;
+          },
           upsert: async ({
             where,
             create,
@@ -90,21 +143,24 @@ function createInMemoryIdempotencyDb() {
             create: StoredKeyRow;
             update: Omit<StoredKeyRow, "id" | "organizationId" | "principal" | "key">;
           }) => {
+            options?.onUpsert?.();
             const mapKey = compositeKey(where.organizationId_principal_key);
-            const prev = stagedKeys.get(mapKey);
+            const prev = stagedUpserts.get(mapKey) ?? keys.get(mapKey);
             const next: StoredKeyRow = prev ? { ...prev, ...update } : create;
-            stagedKeys.set(mapKey, next);
+            stagedUpserts.set(mapKey, next);
             return next;
           },
         },
       };
 
-      const result = await fn(tx);
-      keys.clear();
-      for (const [k, v] of stagedKeys) keys.set(k, v);
-      employees.length = 0;
-      employees.push(...stagedEmployees);
-      return result;
+      try {
+        const result = await fn(tx);
+        for (const [k, v] of stagedUpserts) keys.set(k, v);
+        employees.push(...stagedEmployees);
+        return result;
+      } finally {
+        for (const release of releaseLocks) release();
+      }
     },
   } as unknown as PrismaClient;
 
@@ -112,6 +168,49 @@ function createInMemoryIdempotencyDb() {
 }
 
 describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
+  it("formatuje przestrzeń nazw principal oraz waliduje CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS", () => {
+    expect(accountPrincipal(ACC_ID)).toBe(`account:${ACC_ID}`);
+    expect(clientPrincipal("timotime-web")).toBe("client:timotime-web");
+
+    expect(parseIdempotencyCleanupIntervalMs(undefined)).toBe(DEFAULT_IDEMPOTENCY_CLEANUP_INTERVAL_MS);
+    expect(parseIdempotencyCleanupIntervalMs("0")).toBe(0);
+    expect(parseIdempotencyCleanupIntervalMs(" 60000 ")).toBe(60_000);
+    expect(parseIdempotencyCleanupIntervalMs(String(MAX_IDEMPOTENCY_CLEANUP_INTERVAL_MS))).toBe(
+      MAX_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
+    );
+
+    for (const bad of ["", "   ", "-1", "1.5", "01", "abc", "NaN", "Infinity", "2147483648", "99999999999999999"]) {
+      expect(() => parseIdempotencyCleanupIntervalMs(bad), `Wartość: ${JSON.stringify(bad)}`).toThrow(
+        /CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS/,
+      );
+    }
+  });
+
+  it("odczytuje nagłówek z headersDistinct (rozpakowuje 1 element, zachowuje duplikaty) z fallbackiem do headers", () => {
+    expect(
+      extractIdempotencyKeyHeader({
+        headers: { "idempotency-key": "k1, k2" },
+        raw: { headersDistinct: { "idempotency-key": ["k1", "k2"] } },
+      }),
+    ).toEqual(["k1", "k2"]);
+
+    expect(
+      extractIdempotencyKeyHeader({
+        headers: { "idempotency-key": "k1" },
+        raw: { headersDistinct: { "idempotency-key": ["k1"] } },
+      }),
+    ).toBe("k1");
+
+    expect(
+      extractIdempotencyKeyHeader({
+        headers: {},
+        raw: { headersDistinct: { "idempotency-key": [] } },
+      }),
+    ).toBeUndefined();
+
+    expect(extractIdempotencyKeyHeader({ headers: { "idempotency-key": "fallback-key" } })).toBe("fallback-key");
+  });
+
   it("waliduje nagłówek Idempotency-Key (brak -> null, poprawne -> wartość, błędne -> 400 VALIDATION_FAILED)", () => {
     expect(parseIdempotencyKeyHeader(undefined)).toBeNull();
     expect(parseIdempotencyKeyHeader("a")).toBe("a");
@@ -171,7 +270,6 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
 
-    // Zmiana ścieżki, metody, parametrów ścieżki albo treści daje inny skrót
     expect(h1).not.toBe(computeRequestHash("POST", "/core/v1/units", { firstName: "Anna", lastName: "Nowak" }));
     expect(h1).not.toBe(computeRequestHash("PUT", "/core/v1/employees", { firstName: "Anna", lastName: "Nowak" }));
     expect(h1).not.toBe(computeRequestHash("POST", "/core/v1/employees", { firstName: "Jan", lastName: "Nowak" }));
@@ -185,8 +283,182 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
     expect(r1).not.toBe(r2);
   });
 
-  it("obsługuje pełny cykl HTTP (400, 201, powtórka z Idempotency-Replayed, 409, wygasanie i brak zapisu błędu)", async () => {
-    const { db, employees } = createInMemoryIdempotencyDb();
+  it("uruchamia kroki defer po zapisaniu klucza Idempotency-Key, nigdy przy powtórce, a błąd w defer wycofuje zapis klucza", async () => {
+    const events: string[] = [];
+    const { db, keys } = createInMemoryIdempotencyDb({ onUpsert: () => events.push("upsert") });
+    const now = new Date("2026-11-25T12:00:00.000Z");
+
+    // 1. Błąd w defer wycofuje całą transakcję -> brak zapisanego klucza
+    await expect(
+      executeWithIdempotency({
+        db,
+        organizationId: ORG_ID,
+        principal: accountPrincipal(ACC_ID),
+        key: "defer-rollback",
+        method: "POST",
+        pathTemplate: "/core/v1/invitations",
+        body: { email: "jan@acme.test" },
+        getNow: () => now,
+        run: async (_tx, defer) => {
+          events.push("run-fail");
+          defer(async () => {
+            events.push("defer-fail");
+            throw new Error("SMTP niedostępny");
+          });
+          return { status: 201, body: { data: { id: "inv-1" } } };
+        },
+      }),
+    ).rejects.toThrow("SMTP niedostępny");
+    expect(events).toEqual(["run-fail", "upsert", "defer-fail"]);
+    expect(keys.size).toBe(0);
+
+    // 2. Ponowienie z tym samym kluczem uruchamia run, zapisuje klucz, a potem wykonuje defer w kolejności
+    events.length = 0;
+    const ok = await executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "defer-rollback",
+      method: "POST",
+      pathTemplate: "/core/v1/invitations",
+      body: { email: "jan@acme.test" },
+      getNow: () => now,
+      run: async (_tx, defer) => {
+        events.push("run-ok");
+        defer(async () => {
+          events.push("defer-1");
+        });
+        defer(async () => {
+          events.push("defer-2");
+        });
+        return { status: 201, body: { data: { id: "inv-2" } } };
+      },
+    });
+    expect(ok).toEqual({ replayed: false, status: 201, body: { data: { id: "inv-2" } } });
+    expect(events).toEqual(["run-ok", "upsert", "defer-1", "defer-2"]);
+
+    // 3. Powtórka nie wywołuje ani run, ani defer
+    events.length = 0;
+    const replay = await executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "defer-rollback",
+      method: "POST",
+      pathTemplate: "/core/v1/invitations",
+      body: { email: "jan@acme.test" },
+      getNow: () => now,
+      run: async (_tx, defer) => {
+        events.push("should-not-run");
+        defer(async () => {
+          events.push("should-not-defer");
+        });
+        return { status: 201, body: { data: { id: "inv-3" } } };
+      },
+    });
+    expect(replay).toEqual({ replayed: true, status: 201, body: { data: { id: "inv-2" } } });
+    expect(events).toEqual([]);
+  });
+
+  it("deterministyczna współbieżność z barierą: commit-while-waiting (handler raz) i rollback-while-waiting (drugi przejmuje)", async () => {
+    const { db } = createInMemoryIdempotencyDb();
+    let currentNow = new Date("2026-11-25T12:00:00.000Z");
+
+    // 1. Commit-while-waiting: drugie żądanie czeka na blokadzie, pierwsze zatwierdza -> drugie dostaje powtórkę
+    const enteredCommit = deferred();
+    const releaseCommit = deferred();
+    let commitRunCount = 0;
+
+    const firstCommit = executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "barrier-commit",
+      method: "POST",
+      pathTemplate: "/core/v1/employees",
+      body: { firstName: "Anna" },
+      getNow: () => currentNow,
+      run: async () => {
+        commitRunCount += 1;
+        enteredCommit.resolve();
+        await releaseCommit.promise;
+        return { status: 201, body: { data: { id: "emp-committed" } } };
+      },
+    });
+
+    await enteredCommit.promise;
+    // Przesuwamy zegar przed zwolnieniem blokady, żeby sprawdzić, że drugie żądanie pobiera czas po przejęciu blokady
+    const secondCommit = executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "barrier-commit",
+      method: "POST",
+      pathTemplate: "/core/v1/employees",
+      body: { firstName: "Anna" },
+      getNow: () => currentNow,
+      run: async () => {
+        commitRunCount += 1;
+        return { status: 201, body: { data: { id: "emp-should-not-run" } } };
+      },
+    });
+
+    currentNow = new Date(currentNow.getTime() + 1000);
+    releaseCommit.resolve();
+
+    const [c1, c2] = await Promise.all([firstCommit, secondCommit]);
+    expect(commitRunCount).toBe(1);
+    expect(c1).toEqual({ replayed: false, status: 201, body: { data: { id: "emp-committed" } } });
+    expect(c2).toEqual({ replayed: true, status: 201, body: { data: { id: "emp-committed" } } });
+
+    // 2. Rollback-while-waiting: pierwsze rzuca błąd i wycofuje -> czekające drugie uruchamia handler i kończy się sukcesem
+    const enteredRollback = deferred();
+    const releaseRollback = deferred();
+    let rollbackRunCount = 0;
+
+    const firstRollback = executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "barrier-rollback",
+      method: "POST",
+      pathTemplate: "/core/v1/employees",
+      body: { firstName: "Jan" },
+      getNow: () => currentNow,
+      run: async () => {
+        rollbackRunCount += 1;
+        enteredRollback.resolve();
+        await releaseRollback.promise;
+        throw new Error("błąd w pierwszej transakcji");
+      },
+    });
+
+    await enteredRollback.promise;
+    const secondRollback = executeWithIdempotency({
+      db,
+      organizationId: ORG_ID,
+      principal: accountPrincipal(ACC_ID),
+      key: "barrier-rollback",
+      method: "POST",
+      pathTemplate: "/core/v1/employees",
+      body: { firstName: "Jan" },
+      getNow: () => currentNow,
+      run: async () => {
+        rollbackRunCount += 1;
+        return { status: 201, body: { data: { id: "emp-after-rollback" } } };
+      },
+    });
+
+    releaseRollback.resolve();
+
+    await expect(firstRollback).rejects.toThrow("błąd w pierwszej transakcji");
+    const r2 = await secondRollback;
+    expect(rollbackRunCount).toBe(2);
+    expect(r2).toEqual({ replayed: false, status: 201, body: { data: { id: "emp-after-rollback" } } });
+  });
+
+  it("obsługuje pełny cykl HTTP (400 przy błędnym lub powtórzonym nagłówku, 201, powtórka, 409, wygasanie, brak zapisu błędu)", async () => {
+    const { db, keys, employees } = createInMemoryIdempotencyDb();
     let currentNow = new Date("2026-11-25T12:00:00.000Z");
 
     const app = buildServer({
@@ -224,6 +496,20 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
       });
       expect(employees).toHaveLength(0);
 
+      // Dwa nagłówki Idempotency-Key w jednym żądaniu HTTP -> 400 VALIDATION_FAILED
+      const duplicateHeaderRes = await app.inject({
+        method: "POST",
+        url: "/core/v1/employees",
+        headers: { authorization: "Bearer stub", [IDEMPOTENCY_KEY_HEADER]: ["dup-1", "dup-2"] },
+        payload: { firstName: "Jan", lastName: "Nowak" },
+      });
+      expect(duplicateHeaderRes.statusCode).toBe(400);
+      expect(duplicateHeaderRes.json()).toMatchObject({
+        data: null,
+        error: { code: "VALIDATION_FAILED", details: [{ field: IDEMPOTENCY_KEY_HEADER }] },
+      });
+      expect(employees).toHaveLength(0);
+
       // Błąd 422 nie zapisuje klucza -> ponowienie z tym samym kluczem i poprawną treścią udaje się
       const badBodyRes = await app.inject({
         method: "POST",
@@ -243,6 +529,8 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
       expect(firstOk.statusCode).toBe(201);
       expect(firstOk.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
       expect(employees).toHaveLength(1);
+      // Principal zapisany z prefiksem account:
+      expect([...keys.values()][0]?.principal).toBe(`account:${ACC_ID}`);
 
       // Powtórzenie z tym samym kluczem i inną kolejnością pól JSON -> ta sama odpowiedź + Idempotency-Replayed: true
       const replayed = await app.inject({
@@ -287,17 +575,24 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
     }
   });
 
-  it("okresowe sprzątanie wygasłych kluczy działa w pętli, przeżywa błędy i zatrzymuje się na żądanie", async () => {
+  it("okresowe sprzątanie wygasłych kluczy działa w pętli, przeżywa błędy, przerywa między porcjami i czeka na bieżący przebieg", async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
       const errors: unknown[] = [];
+      const inFlightStarted = deferred();
+      const releaseInFlight = deferred();
+      let inFlightFinished = false;
+
       const stop = startIdempotencyCleanup({
         db: {} as PrismaClient,
         intervalMs: 1000,
         cleanup: async () => {
           calls += 1;
           if (calls === 1) throw new Error("chwilowy brak bazy");
+          inFlightStarted.resolve();
+          await releaseInFlight.promise;
+          inFlightFinished = true;
           return 3;
         },
         onError: (err) => errors.push(err),
@@ -308,24 +603,39 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
       expect(errors).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(1000);
+      await inFlightStarted.promise;
       expect(calls).toBe(2);
 
-      stop();
+      // stop() czeka na zakończenie trwającego przebiegu
+      let stopResolved = false;
+      const stopPromise = stop().then(() => {
+        stopResolved = true;
+      });
+      await Promise.resolve();
+      expect(stopResolved).toBe(false);
+
+      releaseInFlight.resolve();
+      await stopPromise;
+      expect(inFlightFinished).toBe(true);
+      expect(stopResolved).toBe(true);
+
       await vi.advanceTimersByTimeAsync(5000);
       expect(calls).toBe(2);
     } finally {
       vi.useRealTimers();
     }
 
-    // cleanupAllExpiredIdempotencyKeys pobiera kolejne porcje aż do niepełnej
+    // cleanupAllExpiredIdempotencyKeys przerywa między porcjami, gdy shouldStop() zwróci true
     let batch = 0;
+    let shouldStop = false;
     const fakeDb = {
       $queryRaw: async () => {
         batch += 1;
-        return [{ deleted: batch === 1 ? 2 : 1 }];
+        if (batch === 1) shouldStop = true;
+        return [{ deleted: 2 }];
       },
     } as unknown as PrismaClient;
-    expect(await cleanupAllExpiredIdempotencyKeys(fakeDb, 2)).toBe(3);
-    expect(batch).toBe(2);
+    expect(await cleanupAllExpiredIdempotencyKeys(fakeDb, 2, () => shouldStop)).toBe(2);
+    expect(batch).toBe(1);
   });
 });

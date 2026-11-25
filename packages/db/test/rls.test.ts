@@ -1680,7 +1680,7 @@ describe("zaproszenia pracowników (RLS, jeden PENDING na konto i wyszukiwanie p
 });
 
 describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", () => {
-  it("izoluje klucze między firmami, blokuje DELETE dla core_app i usuwa wyłącznie wygasłe wiersze funkcją sprzątającą", async () => {
+  it("izoluje klucze między firmami, egzekwuje CHECKi, blokuje DELETE dla core_app i usuwa wygasłe wiersze porcjami", async () => {
     const acmeActiveId = uuidv7();
     const acmeExpiredId = uuidv7();
     const acmeOtherPrincipalId = uuidv7();
@@ -1688,9 +1688,14 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
     const globexExpiredId = uuidv7();
     const sharedKey = `rls-idem-${uuidv7()}`;
     const expiredKey = `rls-expired-${uuidv7()}`;
+    const acmePrincipal = `account:${acme.accountId}`;
+    const globexPrincipal = `account:${globex.accountId}`;
     const validHash = hashToken("POST\n/core/v1/employees\n{}");
     const futureExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const pastExpiry = new Date(Date.now() - 60 * 1000);
+
+    // Czyścimy ewentualne wygasłe klucze z innych testów, żeby asercje dla p_limit=1 były deterministyczne
+    await cleanupExpiredIdempotencyKeys(db, 10000);
 
     try {
       await withOrganization(db, acme.id, async (tx) => {
@@ -1698,7 +1703,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
           data: {
             id: acmeActiveId,
             organizationId: acme.id,
-            principal: acme.accountId,
+            principal: acmePrincipal,
             key: sharedKey,
             method: "POST",
             path: "/core/v1/employees",
@@ -1712,7 +1717,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
           data: {
             id: acmeExpiredId,
             organizationId: acme.id,
-            principal: acme.accountId,
+            principal: acmePrincipal,
             key: expiredKey,
             method: "POST",
             path: "/core/v1/employees",
@@ -1722,12 +1727,12 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
             expiresAt: pastExpiry,
           },
         });
-        // Inny principal w tej samej firmie może użyć tego samego klucza (np. inny użytkownik albo klient maszynowy)
+        // Inny principal w tej samej firmie może użyć tego samego klucza (np. klient maszynowy OAuth)
         await tx.idempotencyKey.create({
           data: {
             id: acmeOtherPrincipalId,
             organizationId: acme.id,
-            principal: "timotime-web",
+            principal: "client:timotime-web",
             key: sharedKey,
             method: "POST",
             path: "/core/v1/employees",
@@ -1744,7 +1749,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
           data: {
             id: globexActiveId,
             organizationId: globex.id,
-            principal: globex.accountId,
+            principal: globexPrincipal,
             key: sharedKey,
             method: "POST",
             path: "/core/v1/employees",
@@ -1758,7 +1763,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
           data: {
             id: globexExpiredId,
             organizationId: globex.id,
-            principal: globex.accountId,
+            principal: globexPrincipal,
             key: expiredKey,
             method: "POST",
             path: "/core/v1/employees",
@@ -1785,7 +1790,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
             data: {
               id: uuidv7(),
               organizationId: globex.id,
-              principal: globex.accountId,
+              principal: globexPrincipal,
               key: `cross-${uuidv7()}`,
               method: "POST",
               path: "/core/v1/employees",
@@ -1808,14 +1813,14 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
         withOrganization(db, acme.id, (tx) => tx.idempotencyKey.delete({ where: { id: acmeActiveId } })),
       ).rejects.toThrow(/permission denied/i);
 
-      // Unikalność (organizationId, principal, key) oraz CHECKi formatu klucza, skrótu i statusu 2xx
+      // Unikalność (organizationId, principal, key)
       await expect(
         withOrganization(db, acme.id, (tx) =>
           tx.idempotencyKey.create({
             data: {
               id: uuidv7(),
               organizationId: acme.id,
-              principal: acme.accountId,
+              principal: acmePrincipal,
               key: sharedKey,
               method: "POST",
               path: "/core/v1/employees",
@@ -1828,13 +1833,56 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
         ),
       ).rejects.toThrow(/idempotency_keys_organizationId_principal_key_key|unique|duplicate/i);
 
+      // CHECKi: principal (wymaga prefiksu account: lub client:), requestHash (64 znaki hex), status 2xx i format klucza
+      for (const badPrincipal of [acme.accountId, "account:", "client:", "user:123", ""]) {
+        await expect(
+          withOrganization(db, acme.id, (tx) =>
+            tx.idempotencyKey.create({
+              data: {
+                id: uuidv7(),
+                organizationId: acme.id,
+                principal: badPrincipal,
+                key: `bad-principal-${uuidv7()}`,
+                method: "POST",
+                path: "/core/v1/employees",
+                requestHash: validHash,
+                responseStatus: 201,
+                responseBody: {},
+                expiresAt: futureExpiry,
+              },
+            }),
+          ),
+        ).rejects.toThrow(/idempotency_keys_principal_format|check constraint|violates/i);
+      }
+
+      for (const badHash of ["not-a-sha256", validHash.toUpperCase(), validHash.slice(0, 63)]) {
+        await expect(
+          withOrganization(db, acme.id, (tx) =>
+            tx.idempotencyKey.create({
+              data: {
+                id: uuidv7(),
+                organizationId: acme.id,
+                principal: acmePrincipal,
+                key: `bad-hash-${uuidv7()}`,
+                method: "POST",
+                path: "/core/v1/employees",
+                requestHash: badHash,
+                responseStatus: 201,
+                responseBody: {},
+                expiresAt: futureExpiry,
+              },
+            }),
+          ),
+        ).rejects.toThrow(/idempotency_keys_request_hash_format|check constraint|violates/i);
+      }
+
       await expect(
         withOrganization(db, acme.id, (tx) =>
           tx.idempotencyKey.create({
             data: {
               id: uuidv7(),
               organizationId: acme.id,
-              principal: acme.accountId,
+              principal: acmePrincipal,
               key: `bad-status-${uuidv7()}`,
               method: "POST",
               path: "/core/v1/employees",
@@ -1853,7 +1901,7 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
             data: {
               id: uuidv7(),
               organizationId: acme.id,
-              principal: acme.accountId,
+              principal: acmePrincipal,
               key: "niedrukowalny\nklucz",
               method: "POST",
               path: "/core/v1/employees",
@@ -1866,9 +1914,14 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
         ),
       ).rejects.toThrow(/idempotency_keys_key_format|check constraint|violates/i);
 
-      // Funkcja sprzątająca usuwa wyłącznie wygasłe klucze ponad granicą firm i zostawia ważne
-      const deleted = await cleanupExpiredIdempotencyKeys(db);
-      expect(deleted).toBeGreaterThanOrEqual(2);
+      // Walidacja zakresu p_limit (0 i 10001 zgłaszają błąd)
+      await expect(cleanupExpiredIdempotencyKeys(db, 0)).rejects.toThrow(/p_limit/i);
+      await expect(cleanupExpiredIdempotencyKeys(db, 10001)).rejects.toThrow(/p_limit/i);
+
+      // p_limit = 1 usuwa dokładnie jeden wygasły wiersz na wywołanie i nie rusza ważnych
+      expect(await cleanupExpiredIdempotencyKeys(db, 1)).toBe(1);
+      expect(await cleanupExpiredIdempotencyKeys(db, 1)).toBe(1);
+      expect(await cleanupExpiredIdempotencyKeys(db, 1)).toBe(0);
 
       const acmeRemaining = await withOrganization(db, acme.id, (tx) => tx.idempotencyKey.findMany());
       expect(acmeRemaining.map((row) => row.id).sort()).toEqual([acmeActiveId, acmeOtherPrincipalId].sort());
@@ -1883,5 +1936,33 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
         tx.idempotencyKey.deleteMany({ where: { id: { in: [globexActiveId, globexExpiredId] } } }),
       );
     }
+  });
+
+  it("usunięcie firmy kaskadowo usuwa jej klucze Idempotency-Key", async () => {
+    const temp = await createCompany("TempIdem");
+    const keyId = uuidv7();
+    await withOrganization(db, temp.id, (tx) =>
+      tx.idempotencyKey.create({
+        data: {
+          id: keyId,
+          organizationId: temp.id,
+          principal: `account:${temp.accountId}`,
+          key: `cascade-${uuidv7()}`,
+          method: "POST",
+          path: "/core/v1/employees",
+          requestHash: hashToken("POST\n/core/v1/employees\n{}"),
+          responseStatus: 201,
+          responseBody: {},
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      }),
+    );
+
+    expect(await withOrganization(ownerDb, temp.id, (tx) => tx.idempotencyKey.count({ where: { id: keyId } }))).toBe(1);
+
+    await withOrganization(db, temp.id, (tx) => tx.organization.delete({ where: { id: temp.id } }));
+    await db.authUser.delete({ where: { id: temp.accountId } });
+
+    expect(await withOrganization(ownerDb, temp.id, (tx) => tx.idempotencyKey.count({ where: { id: keyId } }))).toBe(0);
   });
 });
