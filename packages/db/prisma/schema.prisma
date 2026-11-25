@@ -774,6 +774,8 @@ model OutboxEvent {
   payload         Json
   occurredAt      DateTime      @db.Timestamptz(3)
   publishedAt     DateTime?     @db.Timestamptz(3)
+  /// Numer w kanale zdarzeń produktów, nadawany przy wysyłce (`outbox_publish_pending`)
+  sequence        BigInt?       @unique
 
   @@index([organizationId])
   @@map("outbox_events")

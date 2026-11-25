@@ -20,6 +20,9 @@ export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const PERMISSIONS_READ_SCOPE = "core:permissions.read";
 export const DIRECTORY_READ_SCOPE = "core:directory.read";
+export const EVENTS_READ_SCOPE = "core:events.read";
+export const MAX_EVENT_FEED_LIMIT = 500;
+export const DEFAULT_EVENT_FEED_LIMIT = 100;
 export const MAX_PERMISSION_MANIFEST_ENTRIES = 500;
 export const MAX_ROLE_TEMPLATE_ENTRIES = 100;
 export const MAX_ROLE_PERMISSIONS = 200;
@@ -694,3 +697,33 @@ export const DOMAIN_TXT_PREFIX = "monorise-verification=";
 export function domainVerificationHost(domain: string): string {
   return `_monorise-verification.${domain}`;
 }
+
+// ── Kanał zdarzeń dla produktów (MonoriseCore#53, do czasu EventBridge i SQS z ADR-0045) ─────────────
+
+/** Numer zdarzenia w kanale: dodatnia liczba 64-bitowa zapisana dziesiętnie (bez zer wiodących). */
+export const EventSequence = z.string().regex(/^[1-9][0-9]{0,18}$/);
+
+/** Kursor kanału: numer ostatnio przetworzonego zdarzenia (wyłącznie) albo `0` = od początku. */
+export const EventFeedPosition = z.string().regex(/^(0|[1-9][0-9]{0,18})$/);
+
+export const ProductEventsQuery = z.object({
+  cursor: EventFeedPosition.optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_EVENT_FEED_LIMIT).default(DEFAULT_EVENT_FEED_LIMIT),
+});
+export type ProductEventsQuery = z.infer<typeof ProductEventsQuery>;
+
+/** Zdarzenie w kanale produktu: koperta z `@monorise-team/events` plus numer `sequence`. */
+export const ProductEvent = z.object({
+  sequence: EventSequence,
+  id: z.uuid(),
+  type: z.string(),
+  version: z.number().int().min(1),
+  source: z.literal("core"),
+  organizationId: z.uuid(),
+  resourceType: z.string(),
+  resourceId: z.string(),
+  resourceVersion: z.number().int().min(0),
+  occurredAt: z.string(),
+  data: z.record(z.string(), z.unknown()),
+});
+export type ProductEvent = z.infer<typeof ProductEvent>;

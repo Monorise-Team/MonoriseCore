@@ -3007,7 +3007,8 @@ export const OutboxEventScalarFieldEnum = {
   resourceVersion: 'resourceVersion',
   payload: 'payload',
   occurredAt: 'occurredAt',
-  publishedAt: 'publishedAt'
+  publishedAt: 'publishedAt',
+  sequence: 'sequence'
 } as const
 
 export type OutboxEventScalarFieldEnum = (typeof OutboxEventScalarFieldEnum)[keyof typeof OutboxEventScalarFieldEnum]
@@ -3343,6 +3344,20 @@ export type EnumAppAccessStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$
  * Reference to a field of type 'AppAccessStatus[]'
  */
 export type ListEnumAppAccessStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AppAccessStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'BigInt'
+ */
+export type BigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt'>
+    
+
+
+/**
+ * Reference to a field of type 'BigInt[]'
+ */
+export type ListBigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt[]'>
     
 
 

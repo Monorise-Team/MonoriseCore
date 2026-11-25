@@ -10,6 +10,11 @@ import {
   DEFAULT_PAGE_LIMIT,
   DIRECTORY_READ_SCOPE,
   DirectoryEmployee,
+  EVENTS_READ_SCOPE,
+  EventFeedPosition,
+  MAX_EVENT_FEED_LIMIT,
+  DEFAULT_EVENT_FEED_LIMIT,
+  ProductEvent,
   DirectoryUnitMember,
   Employee,
   Entitlement,
@@ -57,7 +62,8 @@ export type RouteTag =
   | "Permissions"
   | "Roles"
   | "AppAccess"
-  | "Directory";
+  | "Directory"
+  | "Events";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -84,6 +90,10 @@ export const TAGS: readonly TagDefinition[] = [
   {
     name: "Directory",
     description: "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy).",
+  },
+  {
+    name: "Events",
+    description: "Kanał zdarzeń Core dla serwerów produktów (token maszynowy), do czasu EventBridge i SQS.",
   },
 ];
 
@@ -152,6 +162,7 @@ export const EntitlementList = z.array(Entitlement);
 export const AppAccessList = z.array(AppAccess);
 export const DirectoryUnitMemberList = z.array(DirectoryUnitMember);
 export const DirectoryEmployeeList = z.array(DirectoryEmployee);
+export const ProductEventList = z.array(ProductEvent);
 
 const UuidParam = z.uuid();
 const RepeatableUuidParam = z.array(z.uuid()).max(MAX_DIRECTORY_FILTER_IDS);
@@ -1051,6 +1062,53 @@ export const ROUTES = {
     dataSchema: PermissionSnapshot,
     responseSchemaName: "PermissionSnapshotResponse",
     responseDescription: "Migawka uprawnień konta dla wskazanego produktu.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listProductEvents: {
+    method: "GET",
+    path: `${API_PREFIX}/products/{productKey}/events`,
+    operationId: "listProductEvents",
+    tag: "Events",
+    summary: "Kanał zdarzeń Core dla serwera produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:events.read`). Zwraca wysłane zdarzenia Core (koperta `@monorise-team/events` z numerem " +
+      "`sequence`) w rosnącej kolejności numerów, wyłącznie dla firm z aktywnym dostępem do produktu. Produkt " +
+      "zapamiętuje numer ostatnio przetworzonego zdarzenia i pyta o kolejne (`cursor`). `meta.nextCursor` to " +
+      "numer ostatniego zdarzenia, gdy strona jest pełna, a `null`, gdy produkt jest na bieżąco. Rozwiązanie " +
+      "do czasu EventBridge i SQS (ADR-0045).",
+    auth: { scheme: "productOAuth", scopes: [EVENTS_READ_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      PRODUCT_KEY_PARAM,
+      {
+        name: "cursor",
+        in: "query",
+        required: false,
+        description:
+          "Numer ostatnio przetworzonego zdarzenia (wyłącznie, jawny, nie nieprzezroczysty); brak albo `0` = od początku kanału.",
+        schema: EventFeedPosition,
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        description: `Liczba zdarzeń na stronie (1–${MAX_EVENT_FEED_LIMIT}, domyślnie ${DEFAULT_EVENT_FEED_LIMIT}).`,
+        schema: z.number().int().min(1).max(MAX_EVENT_FEED_LIMIT).default(DEFAULT_EVENT_FEED_LIMIT),
+      },
+    ],
+    dataSchemaName: "ProductEventList",
+    dataSchema: ProductEventList,
+    responseSchemaName: "ProductEventListResponse",
+    responseDescription: "Strona kanału zdarzeń produktu.",
     errors: {
       401: ["UNAUTHENTICATED"],
       403: ["PERMISSION_DENIED"],
