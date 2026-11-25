@@ -46,6 +46,19 @@ export function DomainActions({ devTrust }: { devTrust: boolean }) {
   );
 }
 
+export function ReturnToProductAction({ href, label }: { href: string; label: string }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg bg-bg-tertiary p-4">
+      <p className="text-sm text-text-primary">Firma jest gotowa. Możesz wrócić do aplikacji, z której zaczynasz.</p>
+      <div>
+        <Button asChild variant="primary" size="md">
+          <a href={href}>{label}</a>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AccountActions() {
   const router = useRouter();
   return (

@@ -5,7 +5,7 @@ import { Button, Card, TextField } from "@monorise-team/ui";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
-export function SignUpForm() {
+export function SignUpForm({ clientId }: { clientId?: string }) {
   const [form, setForm] = useState({ organizationName: "", firstName: "", lastName: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function SignUpForm() {
     const response = await fetch("/api/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(clientId ? { ...form, client_id: clientId } : form),
     });
     const body = (await response.json()) as ApiResponse<{ organizationId: string }>;
     setBusy(false);

@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export function SignInForm({ activated = false }: { activated?: boolean }) {
+export function SignInForm({ activated = false, clientId }: { activated?: boolean; clientId?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const signUpHref = clientId ? `/sign-up?${new URLSearchParams({ client_id: clientId }).toString()}` : "/sign-up";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -69,7 +70,7 @@ export function SignInForm({ activated = false }: { activated?: boolean }) {
       </form>
       <p className="text-sm text-text-tertiary">
         Nowa firma?{" "}
-        <Link className="text-accent underline-offset-2 hover:underline" href="/sign-up">
+        <Link className="text-accent underline-offset-2 hover:underline" href={signUpHref}>
           Załóż konto firmy
         </Link>
       </p>

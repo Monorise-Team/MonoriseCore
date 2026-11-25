@@ -1,13 +1,14 @@
 import { domainVerificationHost } from "@core/contracts";
 import { accountClaims, withOrganization } from "@core/db";
 import { Badge, Card } from "@monorise-team/ui";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { config } from "@/server/config";
 import { db } from "@/server/db";
 import { domainTxtValue } from "@/server/domains";
-import { AccountActions, DomainActions } from "./AccountActions";
+import { findReturnClient, resolveAccountReturnButton, RETURN_CLIENT_COOKIE } from "@/server/return-to-product";
+import { AccountActions, DomainActions, ReturnToProductAction } from "./AccountActions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Konto firmy — Monorise" };
@@ -34,6 +35,18 @@ export default async function AccountPage() {
   }));
   const status = STATUS[organization.status];
   const pending = organization.domains.find((d) => d.isPrimary && d.status !== "VERIFIED");
+  const cookieStore = await cookies();
+  const returnClientId = cookieStore.get(RETURN_CLIENT_COOKIE)?.value;
+  const returnClient =
+    organization.status === "ACTIVE" && !pending && session.user.emailVerified
+      ? await findReturnClient(returnClientId)
+      : null;
+  const returnButton = resolveAccountReturnButton({
+    organizationStatus: organization.status,
+    hasPendingPrimaryDomain: Boolean(pending),
+    emailVerified: session.user.emailVerified,
+    client: returnClient,
+  });
 
   return (
     <Card surface="float" className="mr-enter flex w-full max-w-lg flex-col gap-5 p-6">
@@ -62,10 +75,13 @@ export default async function AccountPage() {
           <DomainActions devTrust={config.devTrustDomains} />
         </div>
       ) : (
-        <p className="text-sm text-text-secondary">
-          Domeny firmy: {organization.domains.map((d) => d.domain).join(", ")}. Produkty Monorise zalogują Cię tym
-          kontem.
-        </p>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-text-secondary">
+            Domeny firmy: {organization.domains.map((d) => d.domain).join(", ")}. Produkty Monorise zalogują Cię tym
+            kontem.
+          </p>
+          {returnButton ? <ReturnToProductAction href={returnButton.href} label={returnButton.label} /> : null}
+        </div>
       )}
 
       <AccountActions />
