@@ -38,6 +38,67 @@ async function call(path: string, init: RequestInit & { form?: Record<string, st
   return auth.handler(new Request(`${BASE}${path}`, { ...init, headers, body, redirect: "manual" }));
 }
 
+async function refreshWith(refreshToken: string) {
+  return call("/api/auth/oauth2/token", {
+    method: "POST",
+    form: {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: client.client_id,
+      client_secret: client.client_secret,
+      resource: RESOURCE,
+    },
+  });
+}
+
+/** Udaje, że minęło okno powtórki (20 s) dla obróconych tokenów Anny w tej aplikacji. */
+async function expireRotationReplays() {
+  const user = await db.authUser.findUniqueOrThrow({ where: { email } });
+  await db.authOAuthRefreshToken.updateMany({
+    where: { userId: user.id, clientId: client.client_id, rotatedAt: { not: null } },
+    data: { rotationReplayExpiresAt: new Date(Date.now() - 1000) },
+  });
+}
+
+/** Pełne logowanie Anny w produkcie (PKCE) i wymiana kodu na tokeny. */
+async function signInForTokens(): Promise<{ access_token: string; refresh_token: string }> {
+  const verifier = base64url(randomBytes(32));
+  const challenge = base64url(createHash("sha256").update(verifier).digest());
+  const authorize = new URLSearchParams({
+    response_type: "code",
+    client_id: client.client_id,
+    redirect_uri: REDIRECT,
+    scope: "openid profile email offline_access",
+    state: "stan-456",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    resource: RESOURCE,
+  });
+  const first = await call(`/api/auth/oauth2/authorize?${authorize}`);
+  const login = new URL(first.headers.get("location")!, BASE);
+  const signIn = await call("/api/auth/sign-in/email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: PASSWORD, oauth_query: login.search.slice(1) }),
+  });
+  const signInBody = (await signIn.json().catch(() => ({}))) as { url?: string };
+  const code = new URL(signIn.headers.get("location") ?? signInBody.url!).searchParams.get("code")!;
+  const exchange = await call("/api/auth/oauth2/token", {
+    method: "POST",
+    form: {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT,
+      client_id: client.client_id,
+      client_secret: client.client_secret,
+      code_verifier: verifier,
+      resource: RESOURCE,
+    },
+  });
+  expect(exchange.status).toBe(200);
+  return (await exchange.json()) as { access_token: string; refresh_token: string };
+}
+
 beforeAll(async () => {
   const secrets = await ensureFirstPartyClients({
     resources: [{ identifier: RESOURCE, name: "AvenMail API (test)" }],
@@ -158,33 +219,40 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
     const again = await jwtVerify(refreshed.access_token, jwks, { audience: RESOURCE });
     expect(again.payload.org_id).toBe(organizationId);
 
-    // 5. Token odświeżania jest jednorazowy: dostajemy nowy, a stary już nie działa
+    // 5. Token odświeżania jest jednorazowy: dostajemy nowy
     expect(refreshed.refresh_token).toBeTruthy();
     expect(refreshed.refresh_token).not.toBe(tokens.refresh_token);
-    const reuse = await call("/api/auth/oauth2/token", {
-      method: "POST",
-      form: {
-        grant_type: "refresh_token",
-        refresh_token: tokens.refresh_token,
-        client_id: client.client_id,
-        client_secret: client.client_secret,
-        resource: RESOURCE,
-      },
-    });
-    expect(reuse.status).toBe(400);
 
-    // 6. Ponowne użycie starego tokenu wygląda na kradzież, więc unieważnia też nowy (RFC 9700)
-    const afterReuse = await call("/api/auth/oauth2/token", {
-      method: "POST",
-      form: {
-        grant_type: "refresh_token",
-        refresh_token: refreshed.refresh_token,
-        client_id: client.client_id,
-        client_secret: client.client_secret,
-        resource: RESOURCE,
-      },
-    });
+    // 6. Przez 20 s stary token dostaje tę samą odpowiedź (dwa żądania przeglądarki naraz, ADR-0098)
+    const replay = await refreshWith(tokens.refresh_token);
+    expect(replay.status).toBe(200);
+    const replayed = (await replay.json()) as { access_token: string; refresh_token: string };
+    expect(replayed.refresh_token).toBe(refreshed.refresh_token);
+
+    // 7. Po tym czasie ponowne użycie wygląda na kradzież i unieważnia też nowy token (RFC 9700, ADR-0023)
+    await expireRotationReplays();
+    const reuse = await refreshWith(tokens.refresh_token);
+    expect(reuse.status).toBe(400);
+    expect(((await reuse.json()) as { error?: string }).error).toBe("invalid_grant");
+    const afterReuse = await refreshWith(refreshed.refresh_token);
     expect(afterReuse.status).toBe(400);
+  });
+
+  it("odmawia odświeżenia nieaktywnemu kontu zwykłym invalid_grant, a nie błędem serwera", async () => {
+    const tokens = await signInForTokens();
+    const user = await db.authUser.findUniqueOrThrow({ where: { email } });
+    await withOrganization(db, organizationId, (tx) =>
+      tx.account.update({ where: { id: user.id }, data: { status: "DEACTIVATED" } }),
+    );
+    try {
+      const refresh = await refreshWith(tokens.refresh_token);
+      expect(refresh.status).toBe(400);
+      expect(((await refresh.json()) as { error?: string }).error).toBe("invalid_grant");
+    } finally {
+      await withOrganization(db, organizationId, (tx) =>
+        tx.account.update({ where: { id: user.id }, data: { status: "ACTIVE" } }),
+      );
+    }
   });
 
   it("aplikacja na komputer loguje się przez 127.0.0.1 z dowolnym portem, bez sekretu (RFC 8252)", async () => {
