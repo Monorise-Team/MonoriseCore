@@ -251,6 +251,14 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
     expect(inv).not.toHaveProperty("tokenHash");
     expect(Date.parse(inv.expiresAt) - currentNow.getTime()).toBe(INVITATION_TTL_MS);
 
+    // Lista pracowników pokazuje stan konta: zaproszony Jan (INVITED) i aktywna Anna (ACTIVE)
+    const employees = (await request("GET", "/core/v1/employees?limit=100", ownerToken)).json().data as Array<{
+      id: string;
+      accountStatus: string | null;
+    }>;
+    expect(employees.find((employee) => employee.id === inv.employeeId)?.accountStatus).toBe("INVITED");
+    expect(employees.find((employee) => employee.id === acme.employeeId)?.accountStatus).toBe("ACTIVE");
+
     // E-mail przechwycony w pamięci zawiera nazwę firmy, zapraszającego i link /invite?token=...
     const rawToken = extractTokenFromMail(inv.email);
     const mail = sentMails()[0]!;
