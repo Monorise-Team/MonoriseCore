@@ -321,6 +321,7 @@ model Organization {
   appAccesses          AppAccess[]
   outboxEvents         OutboxEvent[]
   auditLogs            AuditLog[]
+  idempotencyKeys      IdempotencyKey[]
 
   @@map("organizations")
   @@schema("public")
@@ -779,5 +780,30 @@ model OutboxEvent {
 
   @@index([organizationId])
   @@map("outbox_events")
+  @@schema("public")
+}
+
+// ── Klucze powtórzeń żądań API (MonoriseCore#30, 05-integration/api-standards.md) ──────────────────
+
+/// Zapisane odpowiedzi operacji tworzących (`POST`) powiązane z nagłówkiem `Idempotency-Key`.
+/// Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź bez ponownego wykonania operacji.
+model IdempotencyKey {
+  id             String       @id @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  principal      String
+  key            String
+  method         String
+  path           String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  expiresAt      DateTime     @db.Timestamptz(3)
+
+  @@unique([organizationId, principal, key])
+  @@index([organizationId])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
   @@schema("public")
 }

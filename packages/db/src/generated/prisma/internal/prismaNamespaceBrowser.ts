@@ -78,7 +78,8 @@ export const ModelName = {
   AuditLog: 'AuditLog',
   Entitlement: 'Entitlement',
   AppAccess: 'AppAccess',
-  OutboxEvent: 'OutboxEvent'
+  OutboxEvent: 'OutboxEvent',
+  IdempotencyKey: 'IdempotencyKey'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -554,6 +555,23 @@ export const OutboxEventScalarFieldEnum = {
 } as const
 
 export type OutboxEventScalarFieldEnum = (typeof OutboxEventScalarFieldEnum)[keyof typeof OutboxEventScalarFieldEnum]
+
+
+export const IdempotencyKeyScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  principal: 'principal',
+  key: 'key',
+  method: 'method',
+  path: 'path',
+  requestHash: 'requestHash',
+  responseStatus: 'responseStatus',
+  responseBody: 'responseBody',
+  createdAt: 'createdAt',
+  expiresAt: 'expiresAt'
+} as const
+
+export type IdempotencyKeyScalarFieldEnum = (typeof IdempotencyKeyScalarFieldEnum)[keyof typeof IdempotencyKeyScalarFieldEnum]
 
 
 export const SortOrder = {

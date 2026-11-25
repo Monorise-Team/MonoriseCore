@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   accountClaims,
+  cleanupExpiredIdempotencyKeys,
   createDb,
   domainOwner,
   hashToken,
@@ -1674,6 +1675,213 @@ describe("zaproszenia pracowników (RLS, jeden PENDING na konto i wyszukiwanie p
         await tx.employee.deleteMany({ where: { id: globexInvitedEmpId } });
       });
       await db.authUser.deleteMany({ where: { id: { in: [acmeInvitedAccId, globexInvitedAccId] } } });
+    }
+  });
+});
+
+describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", () => {
+  it("izoluje klucze między firmami, blokuje DELETE dla core_app i usuwa wyłącznie wygasłe wiersze funkcją sprzątającą", async () => {
+    const acmeActiveId = uuidv7();
+    const acmeExpiredId = uuidv7();
+    const acmeOtherPrincipalId = uuidv7();
+    const globexActiveId = uuidv7();
+    const globexExpiredId = uuidv7();
+    const sharedKey = `rls-idem-${uuidv7()}`;
+    const expiredKey = `rls-expired-${uuidv7()}`;
+    const validHash = hashToken("POST\n/core/v1/employees\n{}");
+    const futureExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const pastExpiry = new Date(Date.now() - 60 * 1000);
+
+    try {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.idempotencyKey.create({
+          data: {
+            id: acmeActiveId,
+            organizationId: acme.id,
+            principal: acme.accountId,
+            key: sharedKey,
+            method: "POST",
+            path: "/core/v1/employees",
+            requestHash: validHash,
+            responseStatus: 201,
+            responseBody: { data: { id: acmeActiveId }, meta: { requestId: "req_1" }, error: null },
+            expiresAt: futureExpiry,
+          },
+        });
+        await tx.idempotencyKey.create({
+          data: {
+            id: acmeExpiredId,
+            organizationId: acme.id,
+            principal: acme.accountId,
+            key: expiredKey,
+            method: "POST",
+            path: "/core/v1/employees",
+            requestHash: validHash,
+            responseStatus: 201,
+            responseBody: { data: { id: acmeExpiredId }, meta: { requestId: "req_2" }, error: null },
+            expiresAt: pastExpiry,
+          },
+        });
+        // Inny principal w tej samej firmie może użyć tego samego klucza (np. inny użytkownik albo klient maszynowy)
+        await tx.idempotencyKey.create({
+          data: {
+            id: acmeOtherPrincipalId,
+            organizationId: acme.id,
+            principal: "timotime-web",
+            key: sharedKey,
+            method: "POST",
+            path: "/core/v1/employees",
+            requestHash: validHash,
+            responseStatus: 201,
+            responseBody: { data: { id: acmeOtherPrincipalId }, meta: { requestId: "req_3" }, error: null },
+            expiresAt: futureExpiry,
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.idempotencyKey.create({
+          data: {
+            id: globexActiveId,
+            organizationId: globex.id,
+            principal: globex.accountId,
+            key: sharedKey,
+            method: "POST",
+            path: "/core/v1/employees",
+            requestHash: validHash,
+            responseStatus: 201,
+            responseBody: { data: { id: globexActiveId }, meta: { requestId: "req_4" }, error: null },
+            expiresAt: futureExpiry,
+          },
+        });
+        await tx.idempotencyKey.create({
+          data: {
+            id: globexExpiredId,
+            organizationId: globex.id,
+            principal: globex.accountId,
+            key: expiredKey,
+            method: "POST",
+            path: "/core/v1/employees",
+            requestHash: validHash,
+            responseStatus: 201,
+            responseBody: { data: { id: globexExpiredId }, meta: { requestId: "req_5" }, error: null },
+            expiresAt: pastExpiry,
+          },
+        });
+      });
+
+      // Firma A widzi wyłącznie swoje klucze, nie widzi kluczy firmy B; bez kontekstu firmy wynik jest pusty
+      const acmeVisible = await withOrganization(db, acme.id, (tx) => tx.idempotencyKey.findMany());
+      expect(acmeVisible.map((row) => row.id).sort()).toEqual(
+        [acmeActiveId, acmeExpiredId, acmeOtherPrincipalId].sort(),
+      );
+      expect(acmeVisible.every((row) => row.organizationId === acme.id)).toBe(true);
+      expect(await db.idempotencyKey.findMany()).toEqual([]);
+
+      // Firma A nie może zapisać klucza w firmie B ani zmodyfikować klucza firmy B
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.idempotencyKey.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              principal: globex.accountId,
+              key: `cross-${uuidv7()}`,
+              method: "POST",
+              path: "/core/v1/employees",
+              requestHash: validHash,
+              responseStatus: 201,
+              responseBody: {},
+              expiresAt: futureExpiry,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      const crossUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.idempotencyKey.updateMany({ where: { id: globexActiveId }, data: { responseStatus: 200 } }),
+      );
+      expect(crossUpdate.count).toBe(0);
+
+      // core_app nie może usuwać wierszy bezpośrednio (sprząta wyłącznie funkcja SECURITY DEFINER)
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.idempotencyKey.delete({ where: { id: acmeActiveId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // Unikalność (organizationId, principal, key) oraz CHECKi formatu klucza, skrótu i statusu 2xx
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.idempotencyKey.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              principal: acme.accountId,
+              key: sharedKey,
+              method: "POST",
+              path: "/core/v1/employees",
+              requestHash: validHash,
+              responseStatus: 201,
+              responseBody: {},
+              expiresAt: futureExpiry,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/idempotency_keys_organizationId_principal_key_key|unique|duplicate/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.idempotencyKey.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              principal: acme.accountId,
+              key: `bad-status-${uuidv7()}`,
+              method: "POST",
+              path: "/core/v1/employees",
+              requestHash: validHash,
+              responseStatus: 409,
+              responseBody: {},
+              expiresAt: futureExpiry,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/idempotency_keys_response_status_2xx|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.idempotencyKey.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              principal: acme.accountId,
+              key: "niedrukowalny\nklucz",
+              method: "POST",
+              path: "/core/v1/employees",
+              requestHash: validHash,
+              responseStatus: 201,
+              responseBody: {},
+              expiresAt: futureExpiry,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/idempotency_keys_key_format|check constraint|violates/i);
+
+      // Funkcja sprzątająca usuwa wyłącznie wygasłe klucze ponad granicą firm i zostawia ważne
+      const deleted = await cleanupExpiredIdempotencyKeys(db);
+      expect(deleted).toBeGreaterThanOrEqual(2);
+
+      const acmeRemaining = await withOrganization(db, acme.id, (tx) => tx.idempotencyKey.findMany());
+      expect(acmeRemaining.map((row) => row.id).sort()).toEqual([acmeActiveId, acmeOtherPrincipalId].sort());
+
+      const globexRemaining = await withOrganization(db, globex.id, (tx) => tx.idempotencyKey.findMany());
+      expect(globexRemaining.map((row) => row.id)).toEqual([globexActiveId]);
+    } finally {
+      await withOrganization(ownerDb, acme.id, (tx) =>
+        tx.idempotencyKey.deleteMany({ where: { id: { in: [acmeActiveId, acmeExpiredId, acmeOtherPrincipalId] } } }),
+      );
+      await withOrganization(ownerDb, globex.id, (tx) =>
+        tx.idempotencyKey.deleteMany({ where: { id: { in: [globexActiveId, globexExpiredId] } } }),
+      );
     }
   });
 });
