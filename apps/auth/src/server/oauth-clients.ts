@@ -36,6 +36,8 @@ export interface FirstPartyClient {
   clientId: string;
   name: string;
   redirectUris: string[];
+  /** Strona produktu, która zaczyna logowanie (OIDC `client_uri`), np. https://time.monorise.studio/app. */
+  uri?: string;
   /** Serwer produktu (BFF) z sekretem; aplikacje na komputer i telefon są publiczne (tylko PKCE). */
   confidential: boolean;
   resources: string[];
@@ -85,6 +87,7 @@ export async function ensureFirstPartyClients({
         : ["authorization_code", "refresh_token"];
     const data = {
       name: client.name,
+      uri: client.uri ?? null,
       redirectUris: client.redirectUris,
       skipConsent: true,
       requirePKCE: true,

@@ -31,6 +31,7 @@ const secrets = await ensureFirstPartyClients({
     {
       clientId: "avenmail-web",
       name: "AvenMail",
+      uri: `${AVEN_WEB}/`,
       redirectUris: [`${AVEN_WEB}/api/auth/callback`],
       confidential: true,
       resources: [AVEN_API, CORE_API],
@@ -54,6 +55,7 @@ const secrets = await ensureFirstPartyClients({
     {
       clientId: "timotime-web",
       name: "TimoTime",
+      uri: `${TIME_WEB}/app`,
       redirectUris: [`${TIME_WEB}/api/auth/callback`],
       confidential: true,
       resources: [TIME_API, CORE_API],
@@ -70,6 +72,7 @@ const secrets = await ensureFirstPartyClients({
       // Panel klienta (BFF bez własnej bazy): tylko Core API, bez tokenów serwerowych i bez wpisu w products
       clientId: "monorise-portal",
       name: "MonorisePortal",
+      uri: `${PORTAL_WEB}/`,
       redirectUris: [`${PORTAL_WEB}/api/auth/callback`],
       confidential: true,
       resources: [CORE_API],
