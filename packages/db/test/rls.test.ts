@@ -1422,12 +1422,19 @@ describe("role, uprawnienia ról i przypisania ról (RLS i wyzwalacze)", () => {
         }),
       ).rejects.toThrow(/row-level security|violates/i);
 
-      // core_app może oznaczyć własne zdarzenie jako wysłane (UPDATE), ale nie może go usunąć (DELETE)
-      const publishedAt = new Date();
-      const updated = await withOrganization(db, acme.id, (tx) =>
-        tx.outboxEvent.update({ where: { id: acmeEventId }, data: { publishedAt } }),
+      // core_app nie zmienia zdarzeń (UPDATE) ani ich nie usuwa (DELETE); wysyła je tylko funkcja
+      // outbox_publish_pending, która nadaje numer w kanale produktów (MonoriseCore#53)
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.outboxEvent.update({ where: { id: acmeEventId }, data: { publishedAt: new Date() } }),
+        ),
+      ).rejects.toThrow(/permission denied/i);
+      await db.$queryRaw`SELECT "public"."outbox_publish_pending"(1000)`;
+      const published = await withOrganization(db, acme.id, (tx) =>
+        tx.outboxEvent.findUniqueOrThrow({ where: { id: acmeEventId } }),
       );
-      expect(updated.publishedAt?.toISOString()).toBe(publishedAt.toISOString());
+      expect(published.publishedAt).not.toBeNull();
+      expect(published.sequence).toEqual(expect.any(BigInt));
 
       await expect(
         withOrganization(db, acme.id, (tx) => tx.outboxEvent.delete({ where: { id: acmeEventId } })),

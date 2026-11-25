@@ -7,6 +7,8 @@ import {
   CreateRoleAssignment,
   CreateUnit,
   DIRECTORY_READ_SCOPE,
+  EVENTS_READ_SCOPE,
+  ProductEventsQuery,
   EntitlementStatus,
   InvitationStatus,
   MAX_DIRECTORY_FILTER_IDS,
@@ -59,6 +61,7 @@ import {
   toGrantScope,
 } from "./authorization.js";
 import { isEntitlementActive } from "./entitlements.js";
+import { readProductEventFeed } from "./event-feed.js";
 import {
   createInvitation,
   InvitationError,
@@ -1976,6 +1979,25 @@ export function buildServer({
         })),
         nextCursor,
       );
+    },
+  });
+
+  app.route({
+    method: ROUTES.listProductEvents.method,
+    url: toFastifyPath(ROUTES.listProductEvents.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, EVENTS_READ_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const query = parseInput(ProductEventsQuery, request.query ?? {});
+      const product = await requireProductForMachine(
+        params.productKey,
+        machine.clientId,
+        "Ten klient nie może odczytywać zdarzeń wskazanego produktu",
+      );
+      // Funkcja bazy (SECURITY DEFINER) zwraca tylko zdarzenia firm z aktywnym dostępem do tego produktu
+      const items = await readProductEventFeed(db, product.id, BigInt(query.cursor ?? "0"), query.limit);
+      const last = items.at(-1);
+      return sendList(request, items, items.length === query.limit && last ? last.sequence : null);
     },
   });
 

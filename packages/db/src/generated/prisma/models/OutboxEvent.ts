@@ -30,11 +30,13 @@ export type AggregateOutboxEvent = {
 export type OutboxEventAvgAggregateOutputType = {
   version: number | null
   resourceVersion: number | null
+  sequence: number | null
 }
 
 export type OutboxEventSumAggregateOutputType = {
   version: number | null
   resourceVersion: number | null
+  sequence: bigint | null
 }
 
 export type OutboxEventMinAggregateOutputType = {
@@ -47,6 +49,7 @@ export type OutboxEventMinAggregateOutputType = {
   resourceVersion: number | null
   occurredAt: Date | null
   publishedAt: Date | null
+  sequence: bigint | null
 }
 
 export type OutboxEventMaxAggregateOutputType = {
@@ -59,6 +62,7 @@ export type OutboxEventMaxAggregateOutputType = {
   resourceVersion: number | null
   occurredAt: Date | null
   publishedAt: Date | null
+  sequence: bigint | null
 }
 
 export type OutboxEventCountAggregateOutputType = {
@@ -72,6 +76,7 @@ export type OutboxEventCountAggregateOutputType = {
   payload: number
   occurredAt: number
   publishedAt: number
+  sequence: number
   _all: number
 }
 
@@ -79,11 +84,13 @@ export type OutboxEventCountAggregateOutputType = {
 export type OutboxEventAvgAggregateInputType = {
   version?: true
   resourceVersion?: true
+  sequence?: true
 }
 
 export type OutboxEventSumAggregateInputType = {
   version?: true
   resourceVersion?: true
+  sequence?: true
 }
 
 export type OutboxEventMinAggregateInputType = {
@@ -96,6 +103,7 @@ export type OutboxEventMinAggregateInputType = {
   resourceVersion?: true
   occurredAt?: true
   publishedAt?: true
+  sequence?: true
 }
 
 export type OutboxEventMaxAggregateInputType = {
@@ -108,6 +116,7 @@ export type OutboxEventMaxAggregateInputType = {
   resourceVersion?: true
   occurredAt?: true
   publishedAt?: true
+  sequence?: true
 }
 
 export type OutboxEventCountAggregateInputType = {
@@ -121,6 +130,7 @@ export type OutboxEventCountAggregateInputType = {
   payload?: true
   occurredAt?: true
   publishedAt?: true
+  sequence?: true
   _all?: true
 }
 
@@ -221,6 +231,7 @@ export type OutboxEventGroupByOutputType = {
   payload: runtime.JsonValue
   occurredAt: Date
   publishedAt: Date | null
+  sequence: bigint | null
   _count: OutboxEventCountAggregateOutputType | null
   _avg: OutboxEventAvgAggregateOutputType | null
   _sum: OutboxEventSumAggregateOutputType | null
@@ -257,6 +268,7 @@ export type OutboxEventWhereInput = {
   payload?: Prisma.JsonFilter<"OutboxEvent">
   occurredAt?: Prisma.DateTimeFilter<"OutboxEvent"> | Date | string
   publishedAt?: Prisma.DateTimeNullableFilter<"OutboxEvent"> | Date | string | null
+  sequence?: Prisma.BigIntNullableFilter<"OutboxEvent"> | bigint | number | null
   organization?: Prisma.XOR<Prisma.OrganizationNullableScalarRelationFilter, Prisma.OrganizationWhereInput> | null
 }
 
@@ -271,11 +283,13 @@ export type OutboxEventOrderByWithRelationInput = {
   payload?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  sequence?: Prisma.SortOrderInput | Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
 }
 
 export type OutboxEventWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  sequence?: bigint | number
   AND?: Prisma.OutboxEventWhereInput | Prisma.OutboxEventWhereInput[]
   OR?: Prisma.OutboxEventWhereInput[]
   NOT?: Prisma.OutboxEventWhereInput | Prisma.OutboxEventWhereInput[]
@@ -289,7 +303,7 @@ export type OutboxEventWhereUniqueInput = Prisma.AtLeast<{
   occurredAt?: Prisma.DateTimeFilter<"OutboxEvent"> | Date | string
   publishedAt?: Prisma.DateTimeNullableFilter<"OutboxEvent"> | Date | string | null
   organization?: Prisma.XOR<Prisma.OrganizationNullableScalarRelationFilter, Prisma.OrganizationWhereInput> | null
-}, "id">
+}, "id" | "sequence">
 
 export type OutboxEventOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -302,6 +316,7 @@ export type OutboxEventOrderByWithAggregationInput = {
   payload?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  sequence?: Prisma.SortOrderInput | Prisma.SortOrder
   _count?: Prisma.OutboxEventCountOrderByAggregateInput
   _avg?: Prisma.OutboxEventAvgOrderByAggregateInput
   _max?: Prisma.OutboxEventMaxOrderByAggregateInput
@@ -323,6 +338,7 @@ export type OutboxEventScalarWhereWithAggregatesInput = {
   payload?: Prisma.JsonWithAggregatesFilter<"OutboxEvent">
   occurredAt?: Prisma.DateTimeWithAggregatesFilter<"OutboxEvent"> | Date | string
   publishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"OutboxEvent"> | Date | string | null
+  sequence?: Prisma.BigIntNullableWithAggregatesFilter<"OutboxEvent"> | bigint | number | null
 }
 
 export type OutboxEventCreateInput = {
@@ -335,6 +351,7 @@ export type OutboxEventCreateInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
   organization?: Prisma.OrganizationCreateNestedOneWithoutOutboxEventsInput
 }
 
@@ -349,6 +366,7 @@ export type OutboxEventUncheckedCreateInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
 }
 
 export type OutboxEventUpdateInput = {
@@ -361,6 +379,7 @@ export type OutboxEventUpdateInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   organization?: Prisma.OrganizationUpdateOneWithoutOutboxEventsNestedInput
 }
 
@@ -375,6 +394,7 @@ export type OutboxEventUncheckedUpdateInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 export type OutboxEventCreateManyInput = {
@@ -388,6 +408,7 @@ export type OutboxEventCreateManyInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
 }
 
 export type OutboxEventUpdateManyMutationInput = {
@@ -400,6 +421,7 @@ export type OutboxEventUpdateManyMutationInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 export type OutboxEventUncheckedUpdateManyInput = {
@@ -413,6 +435,7 @@ export type OutboxEventUncheckedUpdateManyInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 export type OutboxEventListRelationFilter = {
@@ -436,11 +459,13 @@ export type OutboxEventCountOrderByAggregateInput = {
   payload?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
+  sequence?: Prisma.SortOrder
 }
 
 export type OutboxEventAvgOrderByAggregateInput = {
   version?: Prisma.SortOrder
   resourceVersion?: Prisma.SortOrder
+  sequence?: Prisma.SortOrder
 }
 
 export type OutboxEventMaxOrderByAggregateInput = {
@@ -453,6 +478,7 @@ export type OutboxEventMaxOrderByAggregateInput = {
   resourceVersion?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
+  sequence?: Prisma.SortOrder
 }
 
 export type OutboxEventMinOrderByAggregateInput = {
@@ -465,11 +491,13 @@ export type OutboxEventMinOrderByAggregateInput = {
   resourceVersion?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
+  sequence?: Prisma.SortOrder
 }
 
 export type OutboxEventSumOrderByAggregateInput = {
   version?: Prisma.SortOrder
   resourceVersion?: Prisma.SortOrder
+  sequence?: Prisma.SortOrder
 }
 
 export type OutboxEventCreateNestedManyWithoutOrganizationInput = {
@@ -514,6 +542,14 @@ export type OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput = {
   deleteMany?: Prisma.OutboxEventScalarWhereInput | Prisma.OutboxEventScalarWhereInput[]
 }
 
+export type NullableBigIntFieldUpdateOperationsInput = {
+  set?: bigint | number | null
+  increment?: bigint | number
+  decrement?: bigint | number
+  multiply?: bigint | number
+  divide?: bigint | number
+}
+
 export type OutboxEventCreateWithoutOrganizationInput = {
   id: string
   type: string
@@ -524,6 +560,7 @@ export type OutboxEventCreateWithoutOrganizationInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
 }
 
 export type OutboxEventUncheckedCreateWithoutOrganizationInput = {
@@ -536,6 +573,7 @@ export type OutboxEventUncheckedCreateWithoutOrganizationInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
 }
 
 export type OutboxEventCreateOrConnectWithoutOrganizationInput = {
@@ -578,6 +616,7 @@ export type OutboxEventScalarWhereInput = {
   payload?: Prisma.JsonFilter<"OutboxEvent">
   occurredAt?: Prisma.DateTimeFilter<"OutboxEvent"> | Date | string
   publishedAt?: Prisma.DateTimeNullableFilter<"OutboxEvent"> | Date | string | null
+  sequence?: Prisma.BigIntNullableFilter<"OutboxEvent"> | bigint | number | null
 }
 
 export type OutboxEventCreateManyOrganizationInput = {
@@ -590,6 +629,7 @@ export type OutboxEventCreateManyOrganizationInput = {
   payload: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   publishedAt?: Date | string | null
+  sequence?: bigint | number | null
 }
 
 export type OutboxEventUpdateWithoutOrganizationInput = {
@@ -602,6 +642,7 @@ export type OutboxEventUpdateWithoutOrganizationInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 export type OutboxEventUncheckedUpdateWithoutOrganizationInput = {
@@ -614,6 +655,7 @@ export type OutboxEventUncheckedUpdateWithoutOrganizationInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 export type OutboxEventUncheckedUpdateManyWithoutOrganizationInput = {
@@ -626,6 +668,7 @@ export type OutboxEventUncheckedUpdateManyWithoutOrganizationInput = {
   payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sequence?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
 }
 
 
@@ -641,6 +684,7 @@ export type OutboxEventSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   payload?: boolean
   occurredAt?: boolean
   publishedAt?: boolean
+  sequence?: boolean
   organization?: boolean | Prisma.OutboxEvent$organizationArgs<ExtArgs>
 }, ExtArgs["result"]["outboxEvent"]>
 
@@ -655,6 +699,7 @@ export type OutboxEventSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
   payload?: boolean
   occurredAt?: boolean
   publishedAt?: boolean
+  sequence?: boolean
   organization?: boolean | Prisma.OutboxEvent$organizationArgs<ExtArgs>
 }, ExtArgs["result"]["outboxEvent"]>
 
@@ -669,6 +714,7 @@ export type OutboxEventSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
   payload?: boolean
   occurredAt?: boolean
   publishedAt?: boolean
+  sequence?: boolean
   organization?: boolean | Prisma.OutboxEvent$organizationArgs<ExtArgs>
 }, ExtArgs["result"]["outboxEvent"]>
 
@@ -683,9 +729,10 @@ export type OutboxEventSelectScalar = {
   payload?: boolean
   occurredAt?: boolean
   publishedAt?: boolean
+  sequence?: boolean
 }
 
-export type OutboxEventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "type" | "version" | "resourceType" | "resourceId" | "resourceVersion" | "payload" | "occurredAt" | "publishedAt", ExtArgs["result"]["outboxEvent"]>
+export type OutboxEventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "type" | "version" | "resourceType" | "resourceId" | "resourceVersion" | "payload" | "occurredAt" | "publishedAt" | "sequence", ExtArgs["result"]["outboxEvent"]>
 export type OutboxEventInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OutboxEvent$organizationArgs<ExtArgs>
 }
@@ -712,6 +759,10 @@ export type $OutboxEventPayload<ExtArgs extends runtime.Types.Extensions.Interna
     payload: runtime.JsonValue
     occurredAt: Date
     publishedAt: Date | null
+    /**
+     * Numer w kanale zdarzeń produktów, nadawany przy wysyłce (`outbox_publish_pending`)
+     */
+    sequence: bigint | null
   }, ExtArgs["result"]["outboxEvent"]>
   composites: {}
 }
@@ -1146,6 +1197,7 @@ export interface OutboxEventFieldRefs {
   readonly payload: Prisma.FieldRef<"OutboxEvent", 'Json'>
   readonly occurredAt: Prisma.FieldRef<"OutboxEvent", 'DateTime'>
   readonly publishedAt: Prisma.FieldRef<"OutboxEvent", 'DateTime'>
+  readonly sequence: Prisma.FieldRef<"OutboxEvent", 'BigInt'>
 }
     
 

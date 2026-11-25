@@ -1,4 +1,5 @@
 import { createDb } from "@core/db";
+import { startOutboxPublisher } from "./event-feed.js";
 import { registerCorePermissions } from "./permissions-registry.js";
 import { registerCoreRoleTemplates } from "./role-templates-registry.js";
 import { buildServer } from "./server.js";
@@ -30,5 +31,16 @@ app.log.info({ summary }, "zarejestrowano uprawnienia platformy Core");
 
 const templatesSummary = await registerCoreRoleTemplates(db);
 app.log.info({ summary: templatesSummary }, "zarejestrowano gotowe role platformy Core");
+
+// Wysyłka zdarzeń z outboxa do kanału produktów (MonoriseCore#53); 0 wyłącza (np. gdy wysyła inna instancja)
+const publishIntervalMs = Number(process.env.CORE_OUTBOX_PUBLISH_INTERVAL_MS ?? 1000);
+if (publishIntervalMs > 0) {
+  const stopPublisher = startOutboxPublisher({
+    db,
+    intervalMs: publishIntervalMs,
+    onError: (error) => app.log.error({ err: error }, "wysyłka zdarzeń z outboxa nie powiodła się"),
+  });
+  app.addHook("onClose", async () => stopPublisher());
+}
 
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 3200) });
