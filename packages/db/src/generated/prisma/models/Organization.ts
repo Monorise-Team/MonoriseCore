@@ -226,6 +226,7 @@ export type OrganizationWhereInput = {
   domains?: Prisma.OrganizationDomainListRelationFilter
   employees?: Prisma.EmployeeListRelationFilter
   accounts?: Prisma.AccountListRelationFilter
+  invitations?: Prisma.InvitationListRelationFilter
   units?: Prisma.OrganizationUnitListRelationFilter
   unitMemberships?: Prisma.UnitMembershipListRelationFilter
   roles?: Prisma.RoleListRelationFilter
@@ -251,6 +252,7 @@ export type OrganizationOrderByWithRelationInput = {
   domains?: Prisma.OrganizationDomainOrderByRelationAggregateInput
   employees?: Prisma.EmployeeOrderByRelationAggregateInput
   accounts?: Prisma.AccountOrderByRelationAggregateInput
+  invitations?: Prisma.InvitationOrderByRelationAggregateInput
   units?: Prisma.OrganizationUnitOrderByRelationAggregateInput
   unitMemberships?: Prisma.UnitMembershipOrderByRelationAggregateInput
   roles?: Prisma.RoleOrderByRelationAggregateInput
@@ -279,6 +281,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   domains?: Prisma.OrganizationDomainListRelationFilter
   employees?: Prisma.EmployeeListRelationFilter
   accounts?: Prisma.AccountListRelationFilter
+  invitations?: Prisma.InvitationListRelationFilter
   units?: Prisma.OrganizationUnitListRelationFilter
   unitMemberships?: Prisma.UnitMembershipListRelationFilter
   roles?: Prisma.RoleListRelationFilter
@@ -335,6 +338,7 @@ export type OrganizationCreateInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -359,6 +363,7 @@ export type OrganizationUncheckedCreateInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -383,6 +388,7 @@ export type OrganizationUpdateInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -407,6 +413,7 @@ export type OrganizationUncheckedUpdateInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -586,6 +593,20 @@ export type OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutOwnerAccountInput, Prisma.OrganizationUpdateWithoutOwnerAccountInput>, Prisma.OrganizationUncheckedUpdateWithoutOwnerAccountInput>
 }
 
+export type OrganizationCreateNestedOneWithoutInvitationsInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutInvitationsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutInvitationsNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutInvitationsInput
+  upsert?: Prisma.OrganizationUpsertWithoutInvitationsInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutInvitationsInput, Prisma.OrganizationUpdateWithoutInvitationsInput>, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+}
+
 export type OrganizationCreateNestedOneWithoutUnitsInput = {
   create?: Prisma.XOR<Prisma.OrganizationCreateWithoutUnitsInput, Prisma.OrganizationUncheckedCreateWithoutUnitsInput>
   connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutUnitsInput
@@ -717,6 +738,7 @@ export type OrganizationCreateWithoutDomainsInput = {
   ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -740,6 +762,7 @@ export type OrganizationUncheckedCreateWithoutDomainsInput = {
   updatedAt?: Date | string
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -779,6 +802,7 @@ export type OrganizationUpdateWithoutDomainsInput = {
   ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -802,6 +826,7 @@ export type OrganizationUncheckedUpdateWithoutDomainsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -825,6 +850,7 @@ export type OrganizationCreateWithoutEmployeesInput = {
   ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -848,6 +874,7 @@ export type OrganizationUncheckedCreateWithoutEmployeesInput = {
   updatedAt?: Date | string
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -887,6 +914,7 @@ export type OrganizationUpdateWithoutEmployeesInput = {
   ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -910,6 +938,7 @@ export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -933,6 +962,7 @@ export type OrganizationCreateWithoutAccountsInput = {
   ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -956,6 +986,7 @@ export type OrganizationUncheckedCreateWithoutAccountsInput = {
   updatedAt?: Date | string
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -984,6 +1015,7 @@ export type OrganizationCreateWithoutOwnerAccountInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1007,6 +1039,7 @@ export type OrganizationUncheckedCreateWithoutOwnerAccountInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1046,6 +1079,7 @@ export type OrganizationUpdateWithoutAccountsInput = {
   ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1069,6 +1103,7 @@ export type OrganizationUncheckedUpdateWithoutAccountsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1103,6 +1138,7 @@ export type OrganizationUpdateWithoutOwnerAccountInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1118,6 +1154,119 @@ export type OrganizationUncheckedUpdateWithoutOwnerAccountInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutOrganizationNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutOrganizationNestedInput
+  outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
+  auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutInvitationsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
+  domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
+  roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
+  roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutOrganizationInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutOrganizationInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutOrganizationInput
+  outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
+  auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutInvitationsInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutOrganizationInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutOrganizationInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutOrganizationInput
+  outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
+  auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutInvitationsInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+}
+
+export type OrganizationUpsertWithoutInvitationsInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutInvitationsInput, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutInvitationsInput, Prisma.OrganizationUncheckedCreateWithoutInvitationsInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutInvitationsInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutInvitationsInput, Prisma.OrganizationUncheckedUpdateWithoutInvitationsInput>
+}
+
+export type OrganizationUpdateWithoutInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
+  domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
+  roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutOrganizationNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutOrganizationNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutOrganizationNestedInput
+  outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
+  auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutInvitationsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1150,6 +1299,7 @@ export type OrganizationCreateWithoutUnitsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutOrganizationInput
@@ -1173,6 +1323,7 @@ export type OrganizationUncheckedCreateWithoutUnitsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1212,6 +1363,7 @@ export type OrganizationUpdateWithoutUnitsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutOrganizationNestedInput
@@ -1235,6 +1387,7 @@ export type OrganizationUncheckedUpdateWithoutUnitsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1258,6 +1411,7 @@ export type OrganizationCreateWithoutUnitMembershipsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutOrganizationInput
@@ -1281,6 +1435,7 @@ export type OrganizationUncheckedCreateWithoutUnitMembershipsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1320,6 +1475,7 @@ export type OrganizationUpdateWithoutUnitMembershipsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutOrganizationNestedInput
@@ -1343,6 +1499,7 @@ export type OrganizationUncheckedUpdateWithoutUnitMembershipsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1366,6 +1523,7 @@ export type OrganizationCreateWithoutRolesInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutOrganizationInput
@@ -1389,6 +1547,7 @@ export type OrganizationUncheckedCreateWithoutRolesInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1428,6 +1587,7 @@ export type OrganizationUpdateWithoutRolesInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutOrganizationNestedInput
@@ -1451,6 +1611,7 @@ export type OrganizationUncheckedUpdateWithoutRolesInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1474,6 +1635,7 @@ export type OrganizationCreateWithoutRoleAssignmentsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1497,6 +1659,7 @@ export type OrganizationUncheckedCreateWithoutRoleAssignmentsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1536,6 +1699,7 @@ export type OrganizationUpdateWithoutRoleAssignmentsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1559,6 +1723,7 @@ export type OrganizationUncheckedUpdateWithoutRoleAssignmentsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1582,6 +1747,7 @@ export type OrganizationCreateWithoutAuditLogsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1605,6 +1771,7 @@ export type OrganizationUncheckedCreateWithoutAuditLogsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1644,6 +1811,7 @@ export type OrganizationUpdateWithoutAuditLogsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1667,6 +1835,7 @@ export type OrganizationUncheckedUpdateWithoutAuditLogsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1690,6 +1859,7 @@ export type OrganizationCreateWithoutEntitlementsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1713,6 +1883,7 @@ export type OrganizationUncheckedCreateWithoutEntitlementsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1752,6 +1923,7 @@ export type OrganizationUpdateWithoutEntitlementsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1775,6 +1947,7 @@ export type OrganizationUncheckedUpdateWithoutEntitlementsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1798,6 +1971,7 @@ export type OrganizationCreateWithoutAppAccessesInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1821,6 +1995,7 @@ export type OrganizationUncheckedCreateWithoutAppAccessesInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1860,6 +2035,7 @@ export type OrganizationUpdateWithoutAppAccessesInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1883,6 +2059,7 @@ export type OrganizationUncheckedUpdateWithoutAppAccessesInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -1906,6 +2083,7 @@ export type OrganizationCreateWithoutOutboxEventsInput = {
   domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
@@ -1929,6 +2107,7 @@ export type OrganizationUncheckedCreateWithoutOutboxEventsInput = {
   domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
   employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
   accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
   units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
   unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
   roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
@@ -1968,6 +2147,7 @@ export type OrganizationUpdateWithoutOutboxEventsInput = {
   domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
@@ -1991,6 +2171,7 @@ export type OrganizationUncheckedUpdateWithoutOutboxEventsInput = {
   domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
   employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
   accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
   units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
   unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
   roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
@@ -2009,6 +2190,7 @@ export type OrganizationCountOutputType = {
   domains: number
   employees: number
   accounts: number
+  invitations: number
   units: number
   unitMemberships: number
   roles: number
@@ -2023,6 +2205,7 @@ export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Exte
   domains?: boolean | OrganizationCountOutputTypeCountDomainsArgs
   employees?: boolean | OrganizationCountOutputTypeCountEmployeesArgs
   accounts?: boolean | OrganizationCountOutputTypeCountAccountsArgs
+  invitations?: boolean | OrganizationCountOutputTypeCountInvitationsArgs
   units?: boolean | OrganizationCountOutputTypeCountUnitsArgs
   unitMemberships?: boolean | OrganizationCountOutputTypeCountUnitMembershipsArgs
   roles?: boolean | OrganizationCountOutputTypeCountRolesArgs
@@ -2062,6 +2245,13 @@ export type OrganizationCountOutputTypeCountEmployeesArgs<ExtArgs extends runtim
  */
 export type OrganizationCountOutputTypeCountAccountsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.AccountWhereInput
+}
+
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountInvitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.InvitationWhereInput
 }
 
 /**
@@ -2136,6 +2326,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   domains?: boolean | Prisma.Organization$domainsArgs<ExtArgs>
   employees?: boolean | Prisma.Organization$employeesArgs<ExtArgs>
   accounts?: boolean | Prisma.Organization$accountsArgs<ExtArgs>
+  invitations?: boolean | Prisma.Organization$invitationsArgs<ExtArgs>
   units?: boolean | Prisma.Organization$unitsArgs<ExtArgs>
   unitMemberships?: boolean | Prisma.Organization$unitMembershipsArgs<ExtArgs>
   roles?: boolean | Prisma.Organization$rolesArgs<ExtArgs>
@@ -2194,6 +2385,7 @@ export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.Interna
   domains?: boolean | Prisma.Organization$domainsArgs<ExtArgs>
   employees?: boolean | Prisma.Organization$employeesArgs<ExtArgs>
   accounts?: boolean | Prisma.Organization$accountsArgs<ExtArgs>
+  invitations?: boolean | Prisma.Organization$invitationsArgs<ExtArgs>
   units?: boolean | Prisma.Organization$unitsArgs<ExtArgs>
   unitMemberships?: boolean | Prisma.Organization$unitMembershipsArgs<ExtArgs>
   roles?: boolean | Prisma.Organization$rolesArgs<ExtArgs>
@@ -2218,6 +2410,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     domains: Prisma.$OrganizationDomainPayload<ExtArgs>[]
     employees: Prisma.$EmployeePayload<ExtArgs>[]
     accounts: Prisma.$AccountPayload<ExtArgs>[]
+    invitations: Prisma.$InvitationPayload<ExtArgs>[]
     units: Prisma.$OrganizationUnitPayload<ExtArgs>[]
     unitMemberships: Prisma.$UnitMembershipPayload<ExtArgs>[]
     roles: Prisma.$RolePayload<ExtArgs>[]
@@ -2636,6 +2829,7 @@ export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends run
   domains<T extends Prisma.Organization$domainsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$domainsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationDomainPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   employees<T extends Prisma.Organization$employeesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$employeesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EmployeePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   accounts<T extends Prisma.Organization$accountsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$accountsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  invitations<T extends Prisma.Organization$invitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$invitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   units<T extends Prisma.Organization$unitsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$unitsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrganizationUnitPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   unitMemberships<T extends Prisma.Organization$unitMembershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$unitMembershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UnitMembershipPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   roles<T extends Prisma.Organization$rolesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$rolesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RolePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -3172,6 +3366,30 @@ export type Organization$accountsArgs<ExtArgs extends runtime.Types.Extensions.I
   take?: number
   skip?: number
   distinct?: Prisma.AccountScalarFieldEnum | Prisma.AccountScalarFieldEnum[]
+}
+
+/**
+ * Organization.invitations
+ */
+export type Organization$invitationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+  orderBy?: Prisma.InvitationOrderByWithRelationInput | Prisma.InvitationOrderByWithRelationInput[]
+  cursor?: Prisma.InvitationWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.InvitationScalarFieldEnum | Prisma.InvitationScalarFieldEnum[]
 }
 
 /**

@@ -67,6 +67,7 @@ export const ModelName = {
   OrganizationDomain: 'OrganizationDomain',
   Employee: 'Employee',
   Account: 'Account',
+  Invitation: 'Invitation',
   OrganizationUnit: 'OrganizationUnit',
   UnitMembership: 'UnitMembership',
   Product: 'Product',
@@ -372,6 +373,24 @@ export const AccountScalarFieldEnum = {
 } as const
 
 export type AccountScalarFieldEnum = (typeof AccountScalarFieldEnum)[keyof typeof AccountScalarFieldEnum]
+
+
+export const InvitationScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  email: 'email',
+  normalizedEmail: 'normalizedEmail',
+  tokenHash: 'tokenHash',
+  status: 'status',
+  expiresAt: 'expiresAt',
+  invitedByAccountId: 'invitedByAccountId',
+  acceptedAt: 'acceptedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type InvitationScalarFieldEnum = (typeof InvitationScalarFieldEnum)[keyof typeof InvitationScalarFieldEnum]
 
 
 export const OrganizationUnitScalarFieldEnum = {

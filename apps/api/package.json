@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "entitlement:grant": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts grant",
-    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end"
+    "entitlement:end": "tsx --env-file-if-exists=.env.local scripts/entitlement.ts end",
+    "invitation:create": "tsx --env-file-if-exists=.env.local scripts/invitation.ts create"
   },
   "dependencies": {
     "@core/contracts": "workspace:*",
@@ -22,11 +23,13 @@
     "@monorise-team/permissions": "0.0.1-dev.6",
     "fastify": "^5.12.0",
     "jose": "^6.2.0",
+    "nodemailer": "^10.6.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@monorise-team/config": "0.0.1-dev.6",
     "@types/node": "^24.10.0",
+    "@types/nodemailer": "^8.0.2",
     "eslint": "^10.15.0",
     "tsx": "^4.20.0",
     "typescript": "^6.0.3",

@@ -3,6 +3,7 @@ import {
   AppAccess,
   CreateAppAccess,
   CreateEmployee,
+  CreateInvitation,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
@@ -14,6 +15,8 @@ import {
   Entitlement,
   EntitlementStatus,
   Health,
+  Invitation,
+  InvitationStatus,
   MAX_DIRECTORY_FILTER_IDS,
   MAX_PAGE_LIMIT,
   Me,
@@ -46,7 +49,15 @@ import { z } from "zod";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type RouteTag =
-  "System" | "People" | "Organization" | "Structure" | "Permissions" | "Roles" | "AppAccess" | "Directory";
+  | "System"
+  | "People"
+  | "Invitations"
+  | "Organization"
+  | "Structure"
+  | "Permissions"
+  | "Roles"
+  | "AppAccess"
+  | "Directory";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -58,6 +69,7 @@ export interface TagDefinition {
 export const TAGS: readonly TagDefinition[] = [
   { name: "System", description: "Stan usługi i opis OpenAPI." },
   { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
+  { name: "Invitations", description: "Zaproszenia pracowników do aktywacji konta INVITED (ADR-0021)." },
   { name: "Organization", description: "Firma zalogowanego użytkownika oraz przekazanie roli Ownera." },
   { name: "Structure", description: "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie." },
   { name: "Permissions", description: "Rejestr uprawnień oraz migawka uprawnień dla produktów (ADR-0036)." },
@@ -130,6 +142,7 @@ export const OpenApiDocument = z
   .loose();
 
 export const EmployeeList = z.array(Employee);
+export const InvitationList = z.array(Invitation);
 export const UnitList = z.array(Unit);
 export const UnitMemberList = z.array(UnitMember);
 export const PermissionList = z.array(Permission);
@@ -192,6 +205,14 @@ const EMPLOYEE_ID_PARAM: ParameterDefinition = {
   in: "path",
   required: true,
   description: "Identyfikator pracownika (UUID v7).",
+  schema: UuidParam,
+};
+
+const INVITATION_ID_PARAM: ParameterDefinition = {
+  name: "invitationId",
+  in: "path",
+  required: true,
+  description: "Identyfikator zaproszenia pracownika (UUID v7).",
   schema: UuidParam,
 };
 
@@ -375,6 +396,119 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  listInvitations: {
+    method: "GET",
+    path: `${API_PREFIX}/invitations`,
+    operationId: "listInvitations",
+    tag: "Invitations",
+    summary: "Lista zaproszeń pracowników firmy",
+    description:
+      "Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`), " +
+      "opcjonalnie filtrowaną statusem. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "status",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr statusu zaproszenia (`PENDING`, `ACCEPTED`, `EXPIRED` albo `REVOKED`).",
+        schema: InvitationStatus,
+      },
+    ],
+    dataSchemaName: "InvitationList",
+    dataSchema: InvitationList,
+    responseSchemaName: "InvitationListResponse",
+    responseDescription: "Strona listy zaproszeń pracowników firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  createInvitation: {
+    method: "POST",
+    path: `${API_PREFIX}/invitations`,
+    operationId: "createInvitation",
+    tag: "Invitations",
+    summary: "Zaproś pracownika e-mailem",
+    description:
+      "Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), generuje jednorazowy link " +
+      "aktywacyjny ważny 7 dni i wysyła wiadomość e-mail (ADR-0021). Adres musi należeć do zweryfikowanej domeny firmy. " +
+      "Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 201,
+    envelope: true,
+    requestBodySchemaName: "CreateInvitation",
+    requestBodySchema: CreateInvitation,
+    requestBodyDescription: "Adres e-mail oraz imię i nazwisko albo identyfikator istniejącego pracownika bez konta.",
+    dataSchemaName: "Invitation",
+    dataSchema: Invitation,
+    responseSchemaName: "InvitationResponse",
+    responseDescription: "Utworzone zaproszenie (bez tokenu aktywacyjnego).",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  resendInvitation: {
+    method: "POST",
+    path: `${API_PREFIX}/invitations/{invitationId}/resend`,
+    operationId: "resendInvitation",
+    tag: "Invitations",
+    summary: "Wyślij ponownie zaproszenie pracownika",
+    description:
+      "Generuje nowy 7-dniowy link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED` (unieważnia poprzedni " +
+      "link), ustawia status `PENDING` i wysyła nowy e-mail. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy " +
+      "albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [INVITATION_ID_PARAM],
+    dataSchemaName: "Invitation",
+    dataSchema: Invitation,
+    responseSchemaName: "InvitationResponse",
+    responseDescription: "Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego).",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL"],
+    },
+  },
+  revokeInvitation: {
+    method: "DELETE",
+    path: `${API_PREFIX}/invitations/{invitationId}`,
+    operationId: "revokeInvitation",
+    tag: "Invitations",
+    summary: "Cofnij oczekujące zaproszenie",
+    description:
+      "Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` (konto pozostaje w statusie `INVITED`, a zaproszenie " +
+      "można później wysłać ponownie). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 204,
+    envelope: false,
+    parameters: [INVITATION_ID_PARAM],
+    responseDescription: "Zaproszenie zostało cofnięte.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
       500: ["INTERNAL"],
     },

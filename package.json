@@ -28,7 +28,8 @@
     "prepare": "husky",
     "oauth:seed": "pnpm --filter @core/auth oauth:seed",
     "entitlement:grant": "pnpm --filter @core/api entitlement:grant",
-    "entitlement:end": "pnpm --filter @core/api entitlement:end"
+    "entitlement:end": "pnpm --filter @core/api entitlement:end",
+    "invitation:create": "pnpm --filter @core/api invitation:create"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

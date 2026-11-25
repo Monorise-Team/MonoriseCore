@@ -413,6 +413,7 @@ export const ModelName = {
   OrganizationDomain: 'OrganizationDomain',
   Employee: 'Employee',
   Account: 'Account',
+  Invitation: 'Invitation',
   OrganizationUnit: 'OrganizationUnit',
   UnitMembership: 'UnitMembership',
   Product: 'Product',
@@ -439,7 +440,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog" | "entitlement" | "appAccess" | "outboxEvent"
+    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "invitation" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog" | "entitlement" | "appAccess" | "outboxEvent"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1627,6 +1628,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Invitation: {
+      payload: Prisma.$InvitationPayload<ExtArgs>
+      fields: Prisma.InvitationFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.InvitationFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.InvitationFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        findFirst: {
+          args: Prisma.InvitationFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.InvitationFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        findMany: {
+          args: Prisma.InvitationFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>[]
+        }
+        create: {
+          args: Prisma.InvitationCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        createMany: {
+          args: Prisma.InvitationCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.InvitationCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>[]
+        }
+        delete: {
+          args: Prisma.InvitationDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        update: {
+          args: Prisma.InvitationUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        deleteMany: {
+          args: Prisma.InvitationDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.InvitationUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.InvitationUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>[]
+        }
+        upsert: {
+          args: Prisma.InvitationUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$InvitationPayload>
+        }
+        aggregate: {
+          args: Prisma.InvitationAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateInvitation>
+        }
+        groupBy: {
+          args: Prisma.InvitationGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.InvitationGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.InvitationCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.InvitationCountAggregateOutputType> | number
+        }
+      }
+    }
     OrganizationUnit: {
       payload: Prisma.$OrganizationUnitPayload<ExtArgs>
       fields: Prisma.OrganizationUnitFieldRefs
@@ -2758,6 +2833,24 @@ export const AccountScalarFieldEnum = {
 export type AccountScalarFieldEnum = (typeof AccountScalarFieldEnum)[keyof typeof AccountScalarFieldEnum]
 
 
+export const InvitationScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  email: 'email',
+  normalizedEmail: 'normalizedEmail',
+  tokenHash: 'tokenHash',
+  status: 'status',
+  expiresAt: 'expiresAt',
+  invitedByAccountId: 'invitedByAccountId',
+  acceptedAt: 'acceptedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type InvitationScalarFieldEnum = (typeof InvitationScalarFieldEnum)[keyof typeof InvitationScalarFieldEnum]
+
+
 export const OrganizationUnitScalarFieldEnum = {
   id: 'id',
   organizationId: 'organizationId',
@@ -3100,6 +3193,20 @@ export type ListEnumAccountStatusFieldRefInput<$PrismaModel> = FieldRefInputType
 
 
 /**
+ * Reference to a field of type 'InvitationStatus'
+ */
+export type EnumInvitationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InvitationStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'InvitationStatus[]'
+ */
+export type ListEnumInvitationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InvitationStatus[]'>
+    
+
+
+/**
  * Reference to a field of type 'UnitType'
  */
 export type EnumUnitTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'UnitType'>
@@ -3419,6 +3526,7 @@ export type GlobalOmitConfig = {
   organizationDomain?: Prisma.OrganizationDomainOmit
   employee?: Prisma.EmployeeOmit
   account?: Prisma.AccountOmit
+  invitation?: Prisma.InvitationOmit
   organizationUnit?: Prisma.OrganizationUnitOmit
   unitMembership?: Prisma.UnitMembershipOmit
   product?: Prisma.ProductOmit

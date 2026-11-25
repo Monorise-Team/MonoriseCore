@@ -21,6 +21,7 @@ const app = buildServer({
   db,
   verifyToken: createTokenVerifier(tokenOptions),
   verifyMachineToken: createMachineTokenVerifier(tokenOptions),
+  authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
   logger: true,
 });
 

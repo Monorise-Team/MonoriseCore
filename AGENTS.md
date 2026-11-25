@@ -69,18 +69,18 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, domeny, JWT/JWKS, OAuth 2.1 (PKCE, `client_credentials` M2M)    |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; firmy, pracownicy, jednostki, role, `app-access`, migawka produktu  |
-| `packages/db`        | Prisma (struktura, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `AuditLog`), migracje (RLS), `withOrganization` |
-| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe         |
+| Gdzie                | Co                                                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M) |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; firmy, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka       |
+| `packages/db`        | Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `AuditLog`), RLS, `withOrganization`        |
+| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe                  |
 
 ## Zasady kodu
 
 1. **Firma zawsze z zaufanego źródła** (token, sesja), nigdy z treści żądania, adresu ani formularza (ADR-0037).
 2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez właściciela tabel i `BYPASSRLS`).
-3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
+3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`, `invitation_by_token_hash`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
 4. **Każda tabela z danymi firmy** ma w migracji `ENABLE` + `FORCE` RLS i testy izolacji. `audit_log` jest niezmienny (tylko `SELECT`/`INSERT` dla `core_app`, wyzwalacz blokujący `UPDATE` także dla `core_owner`).
 5. **Tokeny** (ADR-0023): JWT EdDSA (5 min). Użytkownik: `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień). Maszynowy (`client_credentials`, zakresy `core:permissions.register`, `core:permissions.read`, `core:directory.read`) bez `org_id`: manifesty, migawki i katalog produktów.
 6. **Klienci OAuth tylko z kodu**: `ensureFirstPartyClients` (`pnpm oauth:seed`) rejestruje klientów (z PKCE) i produkty (`avenmail`, `timotime`). Rejestracja HTTP wyłączona; zmiany klientów/adresów powrotu opisz w PR.
@@ -96,6 +96,7 @@ pnpm install && pnpm setup:env && pnpm db:up && pnpm db:migrate
 pnpm dev                 # logowanie: localhost:3100, Core API: localhost:3200, poczta (Mailpit): localhost:8125
 pnpm oauth:seed          # lokalni klienci OAuth AvenMail i TimoTime (sekrety w apps/auth/.data/)
 pnpm entitlement:grant   # przyznaje firmie dostęp do produktu (-- --organization <id|domena> --product <klucz>)
+pnpm invitation:create   # tworzy zaproszenie pracownika z CLI (-- --organization <id|domena> --email ... --first-name ... --last-name ...)
 pnpm openapi             # generuje openapi/core-api.json z kodu (pnpm openapi:check sprawdza aktualność)
 pnpm check               # obowiązkowo przed pull requestem (wymaga bazy z pnpm db:up)
 ```

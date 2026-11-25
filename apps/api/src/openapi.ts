@@ -14,6 +14,7 @@ import {
   CopyRole,
   CreateAppAccess,
   CreateEmployee,
+  CreateInvitation,
   CreateRole,
   CreateRoleAssignment,
   CreateRoleFromScratch,
@@ -31,6 +32,8 @@ import {
   ErrorCode,
   GrantScope,
   Health,
+  Invitation,
+  InvitationStatus,
   Me,
   Organization,
   OrganizationDomain,
@@ -207,6 +210,9 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("EmployeeStatus", EmployeeStatus);
   register("Employee", Employee);
   register("CreateEmployee", CreateEmployee);
+  register("InvitationStatus", InvitationStatus);
+  register("Invitation", Invitation);
+  register("CreateInvitation", CreateInvitation);
   register("AccountStatus", AccountStatus);
   register("Me", Me);
   register("UnitType", UnitType);
