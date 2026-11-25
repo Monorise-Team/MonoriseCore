@@ -17,6 +17,7 @@ const AVEN_WEB = env("CORE_AVENMAIL_WEB_URL", "http://aven-mail.localhost:3000")
 const TIME_API = env("CORE_TIMOTIME_API_URL", "http://time.localhost:3300");
 const TIME_WEB = env("CORE_TIMOTIME_WEB_URL", "http://timo-time.localhost:3300");
 const CORE_API = env("CORE_API_URL", "http://localhost:3200");
+const PORTAL_WEB = env("CORE_PORTAL_WEB_URL", "http://portal.localhost:3400");
 // Expo Go podczas pracy lokalnej wraca adresem exp:// serwera Metro (`expo start --localhost`)
 const EXPO_GO = env("CORE_EXPO_GO_REDIRECT", "exp://127.0.0.1:8081/--/oauth/callback");
 
@@ -64,6 +65,14 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: ["timotime://oauth/callback", EXPO_GO],
       confidential: false,
       resources: [TIME_API, CORE_API],
+    },
+    {
+      // Panel klienta (BFF bez własnej bazy): tylko Core API, bez tokenów serwerowych i bez wpisu w products
+      clientId: "monorise-portal",
+      name: "MonorisePortal",
+      redirectUris: [`${PORTAL_WEB}/api/auth/callback`],
+      confidential: true,
+      resources: [CORE_API],
     },
   ],
   products: [
