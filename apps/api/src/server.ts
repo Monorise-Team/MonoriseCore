@@ -25,6 +25,7 @@ import {
   type AppAccess,
   type DirectoryEmployee,
   type DirectoryUnitMember,
+  type AccountStatus,
   type Employee,
   type Entitlement,
   type ErrorCode,
@@ -245,7 +246,7 @@ function isUniqueViolation(error: unknown): boolean {
 
 function serializeEmployee(employee: {
   id: string;
-  account?: { id: string } | null;
+  account?: { id: string; status: AccountStatus } | null;
   firstName: string;
   lastName: string;
   workEmail: string | null;
@@ -255,6 +256,7 @@ function serializeEmployee(employee: {
   return {
     id: employee.id,
     accountId: employee.account?.id ?? null,
+    accountStatus: employee.account?.status ?? null,
     firstName: employee.firstName,
     lastName: employee.lastName,
     workEmail: employee.workEmail,
@@ -290,7 +292,7 @@ function serializeUnitMember(membership: {
   joinedAt: Date;
   employee: {
     id: string;
-    account?: { id: string } | null;
+    account?: { id: string; status: AccountStatus } | null;
     firstName: string;
     lastName: string;
     workEmail: string | null;
@@ -645,7 +647,7 @@ export function buildServer({
             status: account.status,
             isOwner: account.organization.ownerAccountId === account.id,
           },
-          employee: serializeEmployee({ ...account.employee, account: { id: account.id } }),
+          employee: serializeEmployee({ ...account.employee, account: { id: account.id, status: account.status } }),
           organization: {
             id: account.organization.id,
             name: account.organization.name,
@@ -737,7 +739,7 @@ export function buildServer({
       const rows = await withOrganization(db, who.organizationId, (tx) =>
         tx.employee.findMany({
           ...(page.afterId ? { where: { id: { gt: page.afterId } } } : {}),
-          include: { account: { select: { id: true } } },
+          include: { account: { select: { id: true, status: true } } },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         }),
@@ -1107,7 +1109,7 @@ export function buildServer({
             unitId: params.unitId,
             ...(page.afterId ? { id: { gt: page.afterId } } : {}),
           },
-          include: { employee: { include: { account: { select: { id: true } } } } },
+          include: { employee: { include: { account: { select: { id: true, status: true } } } } },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         });
@@ -1152,7 +1154,7 @@ export function buildServer({
             role: body.role,
           },
           update: { role: body.role },
-          include: { employee: { include: { account: { select: { id: true } } } } },
+          include: { employee: { include: { account: { select: { id: true, status: true } } } } },
         });
         await writeAudit(tx, request, who, {
           action: "unit.member.set",

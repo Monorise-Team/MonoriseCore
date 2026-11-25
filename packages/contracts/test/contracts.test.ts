@@ -23,6 +23,7 @@ import {
   DEFAULT_PAGE_LIMIT,
   DIRECTORY_READ_SCOPE,
   DirectoryEmployee,
+  Employee,
   DirectoryUnitMember,
   emailDomain,
   Entitlement,
@@ -149,6 +150,21 @@ describe("kontrakty", () => {
       status: "ARCHIVED",
     });
 
+    // Stan konta: null bez konta, zaproszone konto ma INVITED, nieznany stan jest odrzucany
+    const marek = {
+      id: UUID_2,
+      accountId: null,
+      firstName: "Marek",
+      lastName: "Nowak",
+      workEmail: null,
+      jobTitle: null,
+      status: "ACTIVE",
+    };
+    expect(Employee.parse({ ...marek, accountStatus: null }).accountStatus).toBeNull();
+    expect(Employee.parse({ ...marek, accountId: UUID_1, accountStatus: "INVITED" }).accountStatus).toBe("INVITED");
+    expect(Employee.safeParse({ ...marek, accountStatus: "BLOCKED" }).success).toBe(false);
+    expect(Employee.safeParse(marek).success).toBe(false);
+
     expect(PutUnitMember.parse({ role: "LEADER" })).toEqual({ role: "LEADER" });
     expect(PutUnitMember.safeParse({ role: "OWNER" }).success).toBe(false);
 
@@ -173,6 +189,7 @@ describe("kontrakty", () => {
         employee: {
           id: UUID_2,
           accountId: UUID_1,
+          accountStatus: "ACTIVE",
           firstName: "Anna",
           lastName: "Nowak",
           workEmail: "anna@acme.test",
@@ -188,6 +205,7 @@ describe("kontrakty", () => {
         employee: {
           id: UUID_2,
           accountId: UUID_1,
+          accountStatus: "ACTIVE",
           firstName: "Anna",
           lastName: "Nowak",
           workEmail: "anna@acme.test",

@@ -177,7 +177,13 @@ describe("Core API", () => {
     expect(ownerResponse.statusCode).toBe(200);
     expect(ownerResponse.json().data).toMatchObject({
       account: { id: acme.accountId, status: "ACTIVE", isOwner: true },
-      employee: { id: acme.employeeId, accountId: acme.accountId, firstName: "Anna", lastName: "acme" },
+      employee: {
+        id: acme.employeeId,
+        accountId: acme.accountId,
+        accountStatus: "ACTIVE",
+        firstName: "Anna",
+        lastName: "acme",
+      },
       organization: { id: acme.id, name: "acme", status: "ACTIVE" },
     });
 
@@ -225,6 +231,7 @@ describe("Core API", () => {
     const marek = createdEmployee.json().data;
     expect(marek).toMatchObject({
       accountId: null,
+      accountStatus: null,
       firstName: "Marek",
       lastName: "Nowak",
       workEmail: `marek@${acme.domain}`,

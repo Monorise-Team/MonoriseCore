@@ -198,9 +198,14 @@ export type TransferOrganizationOwner = z.infer<typeof TransferOrganizationOwner
 export const EmployeeStatus = z.enum(["ACTIVE", "FORMER", "ANONYMIZED"]);
 export type EmployeeStatus = z.infer<typeof EmployeeStatus>;
 
+export const AccountStatus = z.enum(["INVITED", "ACTIVE", "DEACTIVATED"]);
+export type AccountStatus = z.infer<typeof AccountStatus>;
+
 export const Employee = z.object({
   id: z.uuid(),
   accountId: z.uuid().nullable(),
+  /** Stan konta logowania (zaproszone, aktywne, dezaktywowane); `null`, gdy pracownik nie ma konta. */
+  accountStatus: AccountStatus.nullable(),
   firstName: z.string(),
   lastName: z.string(),
   workEmail: z.string().nullable(),
@@ -216,9 +221,6 @@ export const CreateEmployee = z.object({
   jobTitle: z.string().trim().min(1).max(120).optional(),
 });
 export type CreateEmployee = z.infer<typeof CreateEmployee>;
-
-export const AccountStatus = z.enum(["INVITED", "ACTIVE", "DEACTIVATED"]);
-export type AccountStatus = z.infer<typeof AccountStatus>;
 
 /** Kim jestem: konto, pracownik i firma z tokenu. */
 export const Me = z.object({
