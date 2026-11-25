@@ -29,6 +29,24 @@ export const MAX_ROLE_PERMISSIONS = 200;
 export const MAX_DIRECTORY_FILTER_IDS = 100;
 export const INVITATION_TTL_DAYS = 7;
 export const INVITATION_TTL_MS = INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000;
+export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+export const IDEMPOTENCY_REPLAYED_HEADER = "Idempotency-Replayed";
+export const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
+export const IDEMPOTENCY_KEY_TTL_HOURS = 24;
+export const IDEMPOTENCY_KEY_TTL_MS = IDEMPOTENCY_KEY_TTL_HOURS * 60 * 60 * 1000;
+/** Drukowalne znaki ASCII (0x20–0x7E), bez wiodących/końcowych spacji ani samych spacji. */
+export const IDEMPOTENCY_KEY_REGEX = /^[!-~]([ -~]*[!-~])?$/;
+
+/** Klucz powtórzenia z nagłówka `Idempotency-Key` (1–255 drukowalnych znaków ASCII). */
+export const IdempotencyKeyHeader = z
+  .string()
+  .min(1, "Nagłówek Idempotency-Key nie może być pusty")
+  .max(
+    IDEMPOTENCY_KEY_MAX_LENGTH,
+    `Nagłówek Idempotency-Key może mieć co najwyżej ${IDEMPOTENCY_KEY_MAX_LENGTH} znaków`,
+  )
+  .regex(IDEMPOTENCY_KEY_REGEX, "Nagłówek Idempotency-Key może zawierać wyłącznie drukowalne znaki ASCII");
+export type IdempotencyKeyHeader = z.infer<typeof IdempotencyKeyHeader>;
 
 // ── Odpowiedzi i błędy ──────────────────────────────────────────────────────────────────────────
 
