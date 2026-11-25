@@ -20,6 +20,8 @@ import {
   Entitlement,
   EntitlementStatus,
   Health,
+  IDEMPOTENCY_KEY_HEADER,
+  IdempotencyKeyHeader,
   Invitation,
   InvitationStatus,
   MAX_DIRECTORY_FILTER_IDS,
@@ -98,12 +100,12 @@ export const TAGS: readonly TagDefinition[] = [
 ];
 
 export type SuccessStatus = 200 | 201 | 204;
-export type ErrorStatus = 401 | 403 | 404 | 409 | 422 | 429 | 500;
+export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
 export type RouteErrors = Partial<Record<ErrorStatus, readonly ErrorCode[]>>;
 
 export interface ParameterDefinition {
   name: string;
-  in: "path" | "query";
+  in: "path" | "query" | "header";
   required: boolean;
   description: string;
   schema: z.ZodType;
@@ -243,6 +245,18 @@ const PAGE_PARAMETERS: readonly ParameterDefinition[] = [
     schema: PageCursor,
   },
 ];
+
+/** Opcjonalny nagłówek `Idempotency-Key` dodawany automatycznie do wszystkich operacji `POST` w OpenAPI. */
+export const IDEMPOTENCY_KEY_PARAMETER: ParameterDefinition = {
+  name: IDEMPOTENCY_KEY_HEADER,
+  in: "header",
+  required: false,
+  description:
+    "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). " +
+    "Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem " +
+    "`Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+  schema: IdempotencyKeyHeader,
+};
 
 /** Zamienia ścieżkę OpenAPI (`/units/{unitId}`) na format Fastify (`/units/:unitId`). */
 export function toFastifyPath(openApiPath: string): string {

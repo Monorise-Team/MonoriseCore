@@ -10,6 +10,7 @@ import {
   EVENTS_READ_SCOPE,
   ProductEventsQuery,
   EntitlementStatus,
+  IDEMPOTENCY_REPLAYED_HEADER,
   InvitationStatus,
   MAX_DIRECTORY_FILTER_IDS,
   PageQuery,
@@ -62,6 +63,7 @@ import {
 } from "./authorization.js";
 import { isEntitlementActive } from "./entitlements.js";
 import { readProductEventFeed } from "./event-feed.js";
+import { executeWithIdempotency, IdempotencyError, parseIdempotencyKeyHeader } from "./idempotency.js";
 import {
   createInvitation,
   InvitationError,
@@ -75,7 +77,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
 import { registerRoleTemplates } from "./role-templates-registry.js";
-import { ROUTES, toFastifyPath } from "./routes.js";
+import { ROUTES, toFastifyPath, type RouteDefinition } from "./routes.js";
 import type { MachineTokenVerifier, TokenVerifier } from "./tokens.js";
 
 class ApiFailure extends Error {
@@ -530,15 +532,17 @@ export function buildServer({
     const failure =
       error instanceof ApiFailure
         ? error
-        : error instanceof InvitationError
+        : error instanceof IdempotencyError
           ? new ApiFailure(error.status, error.code, error.message, error.details)
-          : error instanceof PermissionError
-            ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
-            : statusCode === 404
-              ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-              : statusCode === 400
-                ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-                : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
+          : error instanceof InvitationError
+            ? new ApiFailure(error.status, error.code, error.message, error.details)
+            : error instanceof PermissionError
+              ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+              : statusCode === 404
+                ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+                : statusCode === 400
+                  ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+                  : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -620,6 +624,60 @@ export function buildServer({
   app.addHook("onSend", async (_request, reply) => {
     void reply.header("Cache-Control", "no-store");
   });
+
+  type BearerPostRoute = RouteDefinition & { method: "POST"; auth: "bearer" };
+
+  /**
+   * Wspólna rejestracja operacji tworzących (`POST`) z katalogu `ROUTES`: uwierzytelnia konto,
+   * obsługuje opcjonalny nagłówek `Idempotency-Key` w tej samej transakcji `withOrganization`
+   * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx i odtwarzanie z
+   * `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu z kodem statusu z katalogu tras.
+   */
+  function registerPostRoute<TData>(
+    route: BearerPostRoute,
+    execute: (ctx: { request: FastifyRequest; who: Caller; tx: Tx; now: Date }) => Promise<TData>,
+  ): void {
+    app.route({
+      method: route.method,
+      url: toFastifyPath(route.path),
+      handler: async (request, reply) => {
+        const who = await caller(request);
+        const idempotencyKey = parseIdempotencyKeyHeader(request.headers["idempotency-key"]);
+        const now = getNow();
+
+        if (idempotencyKey === null) {
+          const data = await withOrganization(db, who.organizationId, (tx) => execute({ request, who, tx, now }));
+          return reply.status(route.successStatus).send(send(request, data));
+        }
+
+        const params =
+          request.params && typeof request.params === "object"
+            ? (request.params as Record<string, unknown>)
+            : undefined;
+
+        const outcome = await executeWithIdempotency({
+          db,
+          organizationId: who.organizationId,
+          principal: who.accountId,
+          key: idempotencyKey,
+          method: route.method,
+          pathTemplate: route.path,
+          body: request.body,
+          params,
+          now,
+          run: async (tx) => {
+            const data = await execute({ request, who, tx, now });
+            return { status: route.successStatus, body: send(request, data) };
+          },
+        });
+
+        if (outcome.replayed) {
+          void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+        }
+        return reply.status(outcome.status).send(outcome.body);
+      },
+    });
+  }
 
   app.route({
     method: ROUTES.getHealth.method,
@@ -752,35 +810,27 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.createEmployee.method,
-    url: toFastifyPath(ROUTES.createEmployee.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateEmployee, request.body);
-      const employee = await withOrganization(db, who.organizationId, async (tx) => {
-        const snapshot = await loadPermissionSnapshot(tx, who);
-        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
-        const created = await tx.employee.create({
-          data: {
-            id: uuidv7(),
-            organizationId: who.organizationId,
-            firstName: body.firstName,
-            lastName: body.lastName,
-            workEmail: body.workEmail ?? null,
-            jobTitle: body.jobTitle ?? null,
-          },
-        });
-        await writeAudit(tx, request, who, {
-          action: "employee.created",
-          resourceType: "employee",
-          resourceId: created.id,
-          metadata: {},
-        });
-        return created;
-      });
-      return reply.status(201).send(send(request, serializeEmployee({ ...employee, account: null })));
-    },
+  registerPostRoute(ROUTES.createEmployee, async ({ request, who, tx }) => {
+    const body = parseInput(CreateEmployee, request.body);
+    const snapshot = await loadPermissionSnapshot(tx, who);
+    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+    const created = await tx.employee.create({
+      data: {
+        id: uuidv7(),
+        organizationId: who.organizationId,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        workEmail: body.workEmail ?? null,
+        jobTitle: body.jobTitle ?? null,
+      },
+    });
+    await writeAudit(tx, request, who, {
+      action: "employee.created",
+      resourceType: "employee",
+      resourceId: created.id,
+      metadata: {},
+    });
+    return serializeEmployee({ ...created, account: null });
   });
 
   function invitationActorFromRequest(request: FastifyRequest, who: Caller): InvitationActor {
@@ -838,58 +888,38 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.createInvitation.method,
-    url: toFastifyPath(ROUTES.createInvitation.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateInvitation, request.body);
-      const currentTime = getNow();
-
-      const result = await withOrganization(db, who.organizationId, async (tx) => {
-        const snapshot = await loadPermissionSnapshot(tx, who);
-        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
-        return createInvitation(tx, {
-          organizationId: who.organizationId,
-          email: body.email,
-          firstName: body.firstName,
-          lastName: body.lastName,
-          employeeId: body.employeeId,
-          invitedBy: who.accountId,
-          actor: invitationActorFromRequest(request, who),
-          now: currentTime,
-          authUrl,
-          mailer,
-        });
-      });
-
-      return reply.status(201).send(send(request, result.invitation));
-    },
+  registerPostRoute(ROUTES.createInvitation, async ({ request, who, tx, now }) => {
+    const body = parseInput(CreateInvitation, request.body);
+    const snapshot = await loadPermissionSnapshot(tx, who);
+    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+    const result = await createInvitation(tx, {
+      organizationId: who.organizationId,
+      email: body.email,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      employeeId: body.employeeId,
+      invitedBy: who.accountId,
+      actor: invitationActorFromRequest(request, who),
+      now,
+      authUrl,
+      mailer,
+    });
+    return result.invitation;
   });
 
-  app.route({
-    method: ROUTES.resendInvitation.method,
-    url: toFastifyPath(ROUTES.resendInvitation.path),
-    handler: async (request) => {
-      const who = await caller(request);
-      const params = parseInput(InvitationIdParams, request.params);
-      const currentTime = getNow();
-
-      const result = await withOrganization(db, who.organizationId, async (tx) => {
-        const snapshot = await loadPermissionSnapshot(tx, who);
-        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
-        return resendInvitation(tx, {
-          organizationId: who.organizationId,
-          invitationId: params.invitationId,
-          actor: invitationActorFromRequest(request, who),
-          now: currentTime,
-          authUrl,
-          mailer,
-        });
-      });
-
-      return send(request, result.invitation);
-    },
+  registerPostRoute(ROUTES.resendInvitation, async ({ request, who, tx, now }) => {
+    const params = parseInput(InvitationIdParams, request.params);
+    const snapshot = await loadPermissionSnapshot(tx, who);
+    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+    const result = await resendInvitation(tx, {
+      organizationId: who.organizationId,
+      invitationId: params.invitationId,
+      actor: invitationActorFromRequest(request, who),
+      now,
+      authUrl,
+      mailer,
+    });
+    return result.invitation;
   });
 
   app.route({
@@ -937,53 +967,45 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.createUnit.method,
-    url: toFastifyPath(ROUTES.createUnit.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateUnit, request.body);
-      const unit = await withOrganization(db, who.organizationId, async (tx) => {
-        await lockOrganizationUnits(tx, who.organizationId);
-        if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
-        const snapshot = await loadPermissionSnapshot(tx, who);
-        assertCorePermission(
-          snapshot,
-          CORE_PERMISSIONS.keys["structure.manage"],
-          body.parentId ? { unitIds: [body.parentId] } : {},
-        );
-        if (body.parentId) {
-          const parent = await tx.organizationUnit.findUnique({
-            where: { id: body.parentId },
-            select: { id: true, status: true },
-          });
-          if (!parent) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki nadrzędnej");
-          if (parent.status === "ARCHIVED") {
-            throw new ApiFailure(409, "CONFLICT", "Nie można dodać jednostki pod zarchiwizowaną jednostką");
-          }
-        }
-        const created = await tx.organizationUnit.create({
-          data: {
-            id: uuidv7(),
-            organizationId: who.organizationId,
-            parentId: body.parentId ?? null,
-            name: body.name,
-            type: body.type,
-          },
-        });
-        await writeAudit(tx, request, who, {
-          action: "unit.created",
-          resourceType: "unit",
-          resourceId: created.id,
-          metadata: {
-            type: created.type,
-            parentId: created.parentId,
-          },
-        });
-        return created;
+  registerPostRoute(ROUTES.createUnit, async ({ request, who, tx }) => {
+    const body = parseInput(CreateUnit, request.body);
+    await lockOrganizationUnits(tx, who.organizationId);
+    if (body.parentId) await assertUnitExists(tx, body.parentId, "Nie znaleziono jednostki nadrzędnej");
+    const snapshot = await loadPermissionSnapshot(tx, who);
+    assertCorePermission(
+      snapshot,
+      CORE_PERMISSIONS.keys["structure.manage"],
+      body.parentId ? { unitIds: [body.parentId] } : {},
+    );
+    if (body.parentId) {
+      const parent = await tx.organizationUnit.findUnique({
+        where: { id: body.parentId },
+        select: { id: true, status: true },
       });
-      return reply.status(201).send(send(request, serializeUnit(unit)));
-    },
+      if (!parent) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki nadrzędnej");
+      if (parent.status === "ARCHIVED") {
+        throw new ApiFailure(409, "CONFLICT", "Nie można dodać jednostki pod zarchiwizowaną jednostką");
+      }
+    }
+    const created = await tx.organizationUnit.create({
+      data: {
+        id: uuidv7(),
+        organizationId: who.organizationId,
+        parentId: body.parentId ?? null,
+        name: body.name,
+        type: body.type,
+      },
+    });
+    await writeAudit(tx, request, who, {
+      action: "unit.created",
+      resourceType: "unit",
+      resourceId: created.id,
+      metadata: {
+        type: created.type,
+        parentId: created.parentId,
+      },
+    });
+    return serializeUnit(created);
   });
 
   app.route({
@@ -1375,134 +1397,126 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.createRole.method,
-    url: toFastifyPath(ROUTES.createRole.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateRole, request.body);
+  registerPostRoute(ROUTES.createRole, async ({ request, who, tx }) => {
+    const body = parseInput(CreateRole, request.body);
 
-      try {
-        const created = await withOrganization(db, who.organizationId, async (tx) => {
-          const snapshot = await loadPermissionSnapshot(tx, who);
-          assertCorePermission(snapshot, CORE_PERMISSIONS.keys["roles.manage"], {});
+    try {
+      const snapshot = await loadPermissionSnapshot(tx, who);
+      assertCorePermission(snapshot, CORE_PERMISSIONS.keys["roles.manage"], {});
 
-          if ("copyFromRoleId" in body) {
-            const source = await tx.role.findUnique({
-              where: { id: body.copyFromRoleId },
-              include: {
-                product: { select: { key: true } },
-                permissions: {
-                  select: { permission: { select: { id: true, key: true, deprecatedAt: true } } },
-                },
-              },
-            });
-            if (!source) {
-              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono kopiowanej roli");
-            }
-            if (source.archivedAt !== null) {
-              throw new ApiFailure(409, "CONFLICT", "Nie można skopiować zarchiwizowanej roli");
-            }
-            const activePermissions = source.permissions
-              .filter((rp) => rp.permission.deprecatedAt === null)
-              .map((rp) => ({ id: rp.permission.id, key: rp.permission.key }));
-
-            const roleId = uuidv7();
-            const role = await tx.role.create({
-              data: {
-                id: roleId,
-                organizationId: who.organizationId,
-                productId: source.productId,
-                key: null,
-                name: body.name ?? source.name,
-                description: body.description !== undefined ? body.description : source.description,
-                copiedFromRoleId: source.id,
-              },
-            });
-            if (activePermissions.length > 0) {
-              await tx.rolePermission.createMany({
-                data: activePermissions.map((perm) => ({ roleId, permissionId: perm.id })),
-              });
-            }
-            await writeAudit(tx, request, who, {
-              action: "role.created",
-              resourceType: "role",
-              resourceId: role.id,
-              metadata: {
-                copiedFromRoleId: source.id,
-                product: source.product?.key ?? null,
-                permissions: activePermissions.map((perm) => perm.key).sort(),
-              },
-            });
-            return {
-              ...role,
-              product: source.product,
-              permissions: activePermissions.map((perm) => ({ permission: { key: perm.key } })),
-            };
-          }
-
-          if (body.product === "core") {
-            throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
-              { field: "product", message: 'Dla roli platformowej podaj wartość null zamiast "core"' },
-            ]);
-          }
-
-          let product: { id: string; key: string } | null = null;
-          if (body.product !== null) {
-            product = await tx.product.findUnique({
-              where: { key: body.product },
-              select: { id: true, key: true },
-            });
-            if (!product) {
-              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
-            }
-          }
-
-          const resolvedPermissions = await resolveActiveRolePermissions(
-            tx,
-            product?.id ?? null,
-            product?.key ?? "core",
-            body.permissions,
-          );
-
-          const roleId = uuidv7();
-          const role = await tx.role.create({
-            data: {
-              id: roleId,
-              organizationId: who.organizationId,
-              productId: product?.id ?? null,
-              key: null,
-              name: body.name,
-              description: body.description ?? null,
-              copiedFromRoleId: null,
+      if ("copyFromRoleId" in body) {
+        const source = await tx.role.findUnique({
+          where: { id: body.copyFromRoleId },
+          include: {
+            product: { select: { key: true } },
+            permissions: {
+              select: { permission: { select: { id: true, key: true, deprecatedAt: true } } },
             },
-          });
-          await tx.rolePermission.createMany({
-            data: resolvedPermissions.map((perm) => ({ roleId, permissionId: perm.id })),
-          });
-          await writeAudit(tx, request, who, {
-            action: "role.created",
-            resourceType: "role",
-            resourceId: role.id,
-            metadata: {
-              product: product?.key ?? null,
-              permissions: resolvedPermissions.map((perm) => perm.key).sort(),
-            },
-          });
-          return {
-            ...role,
-            product: product ? { key: product.key } : null,
-            permissions: resolvedPermissions.map((perm) => ({ permission: { key: perm.key } })),
-          };
+          },
         });
-        return reply.status(201).send(send(request, serializeRole(created)));
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          throw new ApiFailure(409, "CONFLICT", "Aktywna rola o takiej nazwie już istnieje w firmie");
+        if (!source) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono kopiowanej roli");
         }
-        throw error;
+        if (source.archivedAt !== null) {
+          throw new ApiFailure(409, "CONFLICT", "Nie można skopiować zarchiwizowanej roli");
+        }
+        const activePermissions = source.permissions
+          .filter((rp) => rp.permission.deprecatedAt === null)
+          .map((rp) => ({ id: rp.permission.id, key: rp.permission.key }));
+
+        const roleId = uuidv7();
+        const role = await tx.role.create({
+          data: {
+            id: roleId,
+            organizationId: who.organizationId,
+            productId: source.productId,
+            key: null,
+            name: body.name ?? source.name,
+            description: body.description !== undefined ? body.description : source.description,
+            copiedFromRoleId: source.id,
+          },
+        });
+        if (activePermissions.length > 0) {
+          await tx.rolePermission.createMany({
+            data: activePermissions.map((perm) => ({ roleId, permissionId: perm.id })),
+          });
+        }
+        await writeAudit(tx, request, who, {
+          action: "role.created",
+          resourceType: "role",
+          resourceId: role.id,
+          metadata: {
+            copiedFromRoleId: source.id,
+            product: source.product?.key ?? null,
+            permissions: activePermissions.map((perm) => perm.key).sort(),
+          },
+        });
+        return serializeRole({
+          ...role,
+          product: source.product,
+          permissions: activePermissions.map((perm) => ({ permission: { key: perm.key } })),
+        });
       }
-    },
+
+      if (body.product === "core") {
+        throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+          { field: "product", message: 'Dla roli platformowej podaj wartość null zamiast "core"' },
+        ]);
+      }
+
+      let product: { id: string; key: string } | null = null;
+      if (body.product !== null) {
+        product = await tx.product.findUnique({
+          where: { key: body.product },
+          select: { id: true, key: true },
+        });
+        if (!product) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+        }
+      }
+
+      const resolvedPermissions = await resolveActiveRolePermissions(
+        tx,
+        product?.id ?? null,
+        product?.key ?? "core",
+        body.permissions,
+      );
+
+      const roleId = uuidv7();
+      const role = await tx.role.create({
+        data: {
+          id: roleId,
+          organizationId: who.organizationId,
+          productId: product?.id ?? null,
+          key: null,
+          name: body.name,
+          description: body.description ?? null,
+          copiedFromRoleId: null,
+        },
+      });
+      await tx.rolePermission.createMany({
+        data: resolvedPermissions.map((perm) => ({ roleId, permissionId: perm.id })),
+      });
+      await writeAudit(tx, request, who, {
+        action: "role.created",
+        resourceType: "role",
+        resourceId: role.id,
+        metadata: {
+          product: product?.key ?? null,
+          permissions: resolvedPermissions.map((perm) => perm.key).sort(),
+        },
+      });
+      return serializeRole({
+        ...role,
+        product: product ? { key: product.key } : null,
+        permissions: resolvedPermissions.map((perm) => ({ permission: { key: perm.key } })),
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ApiFailure(409, "CONFLICT", "Aktywna rola o takiej nazwie już istnieje w firmie");
+      }
+      throw error;
+    }
   });
 
   app.route({
@@ -1695,103 +1709,95 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.createRoleAssignment.method,
-    url: toFastifyPath(ROUTES.createRoleAssignment.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateRoleAssignment, request.body);
-      const scopeId = body.scopeType === "ORGANIZATION" ? null : (body.scopeId ?? null);
-      const grantScope = toGrantScope(body.scopeType, scopeId);
+  registerPostRoute(ROUTES.createRoleAssignment, async ({ request, who, tx }) => {
+    const body = parseInput(CreateRoleAssignment, request.body);
+    const scopeId = body.scopeType === "ORGANIZATION" ? null : (body.scopeId ?? null);
+    const grantScope = toGrantScope(body.scopeType, scopeId);
 
-      try {
-        const created = await withOrganization(db, who.organizationId, async (tx) => {
-          await lockRole(tx, body.roleId);
-          const snapshot = await loadPermissionSnapshot(tx, who);
-          assertCanAssignInScope(snapshot, grantScope);
+    try {
+      await lockRole(tx, body.roleId);
+      const snapshot = await loadPermissionSnapshot(tx, who);
+      assertCanAssignInScope(snapshot, grantScope);
 
-          const account = await tx.account.findUnique({
-            where: { id: body.accountId },
-            select: { id: true, status: true },
-          });
-          if (!account) {
-            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
-          }
-          if (account.status === "DEACTIVATED") {
-            throw new ApiFailure(409, "CONFLICT", "Nie można nadać roli wyłączonemu kontu");
-          }
-
-          const role = await tx.role.findUnique({
-            where: { id: body.roleId },
-            include: {
-              permissions: { select: { permission: { select: { key: true, deprecatedAt: true } } } },
-            },
-          });
-          if (!role) {
-            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
-          }
-          if (role.archivedAt !== null) {
-            throw new ApiFailure(409, "CONFLICT", "Nie można przypisać zarchiwizowanej roli");
-          }
-
-          if (body.scopeType === "UNIT" && scopeId) {
-            const unit = await tx.organizationUnit.findUnique({
-              where: { id: scopeId },
-              select: { id: true, status: true },
-            });
-            if (!unit) {
-              throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
-            }
-            if (unit.status === "ARCHIVED") {
-              throw new ApiFailure(409, "CONFLICT", "Nie można przypisać roli do zarchiwizowanej jednostki");
-            }
-          }
-
-          const activePermissionKeys = role.permissions
-            .filter((rp) => rp.permission.deprecatedAt === null)
-            .map((rp) => rp.permission.key);
-          assertCanDelegateRole(snapshot, activePermissionKeys, grantScope);
-
-          const assignment = await tx.roleAssignment.create({
-            data: {
-              id: uuidv7(),
-              organizationId: who.organizationId,
-              accountId: body.accountId,
-              roleId: body.roleId,
-              scopeType: body.scopeType,
-              scopeId,
-              validFrom: body.validFrom ? new Date(body.validFrom) : null,
-              validUntil: body.validUntil ? new Date(body.validUntil) : null,
-              grantedByAccountId: who.accountId,
-            },
-          });
-
-          await bumpAuthzRevisions(tx, who.organizationId, { id: body.accountId });
-
-          await writeAudit(tx, request, who, {
-            action: "role.assigned",
-            resourceType: "role_assignment",
-            resourceId: assignment.id,
-            metadata: {
-              accountId: assignment.accountId,
-              roleId: assignment.roleId,
-              scopeType: assignment.scopeType,
-              scopeId: assignment.scopeId,
-              validFrom: assignment.validFrom ? assignment.validFrom.toISOString() : null,
-              validUntil: assignment.validUntil ? assignment.validUntil.toISOString() : null,
-            },
-          });
-
-          return assignment;
-        });
-        return reply.status(201).send(send(request, serializeRoleAssignment(created)));
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          throw new ApiFailure(409, "CONFLICT", "To konto ma już przypisaną tę rolę w tym zakresie");
-        }
-        throw error;
+      const account = await tx.account.findUnique({
+        where: { id: body.accountId },
+        select: { id: true, status: true },
+      });
+      if (!account) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
       }
-    },
+      if (account.status === "DEACTIVATED") {
+        throw new ApiFailure(409, "CONFLICT", "Nie można nadać roli wyłączonemu kontu");
+      }
+
+      const role = await tx.role.findUnique({
+        where: { id: body.roleId },
+        include: {
+          permissions: { select: { permission: { select: { key: true, deprecatedAt: true } } } },
+        },
+      });
+      if (!role) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono roli");
+      }
+      if (role.archivedAt !== null) {
+        throw new ApiFailure(409, "CONFLICT", "Nie można przypisać zarchiwizowanej roli");
+      }
+
+      if (body.scopeType === "UNIT" && scopeId) {
+        const unit = await tx.organizationUnit.findUnique({
+          where: { id: scopeId },
+          select: { id: true, status: true },
+        });
+        if (!unit) {
+          throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono jednostki organizacyjnej");
+        }
+        if (unit.status === "ARCHIVED") {
+          throw new ApiFailure(409, "CONFLICT", "Nie można przypisać roli do zarchiwizowanej jednostki");
+        }
+      }
+
+      const activePermissionKeys = role.permissions
+        .filter((rp) => rp.permission.deprecatedAt === null)
+        .map((rp) => rp.permission.key);
+      assertCanDelegateRole(snapshot, activePermissionKeys, grantScope);
+
+      const assignment = await tx.roleAssignment.create({
+        data: {
+          id: uuidv7(),
+          organizationId: who.organizationId,
+          accountId: body.accountId,
+          roleId: body.roleId,
+          scopeType: body.scopeType,
+          scopeId,
+          validFrom: body.validFrom ? new Date(body.validFrom) : null,
+          validUntil: body.validUntil ? new Date(body.validUntil) : null,
+          grantedByAccountId: who.accountId,
+        },
+      });
+
+      await bumpAuthzRevisions(tx, who.organizationId, { id: body.accountId });
+
+      await writeAudit(tx, request, who, {
+        action: "role.assigned",
+        resourceType: "role_assignment",
+        resourceId: assignment.id,
+        metadata: {
+          accountId: assignment.accountId,
+          roleId: assignment.roleId,
+          scopeType: assignment.scopeType,
+          scopeId: assignment.scopeId,
+          validFrom: assignment.validFrom ? assignment.validFrom.toISOString() : null,
+          validUntil: assignment.validUntil ? assignment.validUntil.toISOString() : null,
+        },
+      });
+
+      return serializeRoleAssignment(assignment);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ApiFailure(409, "CONFLICT", "To konto ma już przypisaną tę rolę w tym zakresie");
+      }
+      throw error;
+    }
   });
 
   app.route({
@@ -2108,107 +2114,97 @@ export function buildServer({
     },
   });
 
-  app.route({
-    method: ROUTES.grantAppAccess.method,
-    url: toFastifyPath(ROUTES.grantAppAccess.path),
-    handler: async (request, reply) => {
-      const who = await caller(request);
-      const body = parseInput(CreateAppAccess, request.body);
+  registerPostRoute(ROUTES.grantAppAccess, async ({ request, who, tx, now }) => {
+    const body = parseInput(CreateAppAccess, request.body);
 
-      try {
-        const created = await withOrganization(db, who.organizationId, async (tx) => {
-          const snapshot = await loadPermissionSnapshot(tx, who);
-          if (!hasAnyAppAccessManagePermission(snapshot)) {
-            throw new PermissionError(CORE_PERMISSIONS.keys["app_access.manage"]);
-          }
-
-          const account = await tx.account.findUnique({
-            where: { id: body.accountId },
-            select: {
-              id: true,
-              status: true,
-              employee: {
-                select: { unitMemberships: { select: { unitId: true } } },
-              },
-            },
-          });
-          if (!account) {
-            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
-          }
-
-          const unitIds = account.employee.unitMemberships.map((m) => m.unitId);
-          assertCanManageAppAccessForUnits(snapshot, unitIds);
-
-          const product = await tx.product.findUnique({
-            where: { key: body.product },
-            select: { id: true, key: true },
-          });
-          if (!product) {
-            throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
-          }
-
-          if (account.status !== "ACTIVE") {
-            throw new ApiFailure(409, "CONFLICT", "Dostęp do aplikacji można włączyć wyłącznie aktywnemu kontu");
-          }
-
-          const now = new Date();
-          const entitlement = await tx.entitlement.findFirst({
-            where: {
-              productId: product.id,
-              status: "ACTIVE",
-              startsAt: { lte: now },
-              OR: [{ endsAt: null }, { endsAt: { gt: now } }],
-            },
-            select: { id: true },
-          });
-          if (!entitlement) {
-            throw new ApiFailure(409, "CONFLICT", "Firma nie ma aktywnego dostępu do tego produktu");
-          }
-
-          const existing = await tx.appAccess.findFirst({
-            where: { accountId: account.id, productId: product.id, status: "ACTIVE" },
-            select: { id: true },
-          });
-          if (existing) {
-            throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
-          }
-
-          const access = await tx.appAccess.create({
-            data: {
-              id: uuidv7(),
-              organizationId: who.organizationId,
-              accountId: account.id,
-              productId: product.id,
-              status: "ACTIVE",
-              grantedByAccountId: who.accountId,
-              revokedAt: null,
-            },
-            include: { product: { select: { key: true } } },
-          });
-
-          await bumpAuthzRevisions(tx, who.organizationId, { id: account.id });
-
-          await writeAudit(tx, request, who, {
-            action: "app_access.granted",
-            resourceType: "app_access",
-            resourceId: access.id,
-            metadata: {
-              accountId: access.accountId,
-              product: product.key,
-            },
-          });
-
-          return access;
-        });
-
-        return reply.status(201).send(send(request, serializeAppAccess(created)));
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
-        }
-        throw error;
+    try {
+      const snapshot = await loadPermissionSnapshot(tx, who);
+      if (!hasAnyAppAccessManagePermission(snapshot)) {
+        throw new PermissionError(CORE_PERMISSIONS.keys["app_access.manage"]);
       }
-    },
+
+      const account = await tx.account.findUnique({
+        where: { id: body.accountId },
+        select: {
+          id: true,
+          status: true,
+          employee: {
+            select: { unitMemberships: { select: { unitId: true } } },
+          },
+        },
+      });
+      if (!account) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono konta");
+      }
+
+      const unitIds = account.employee.unitMemberships.map((m) => m.unitId);
+      assertCanManageAppAccessForUnits(snapshot, unitIds);
+
+      const product = await tx.product.findUnique({
+        where: { key: body.product },
+        select: { id: true, key: true },
+      });
+      if (!product) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono produktu");
+      }
+
+      if (account.status !== "ACTIVE") {
+        throw new ApiFailure(409, "CONFLICT", "Dostęp do aplikacji można włączyć wyłącznie aktywnemu kontu");
+      }
+
+      const entitlement = await tx.entitlement.findFirst({
+        where: {
+          productId: product.id,
+          status: "ACTIVE",
+          startsAt: { lte: now },
+          OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+        },
+        select: { id: true },
+      });
+      if (!entitlement) {
+        throw new ApiFailure(409, "CONFLICT", "Firma nie ma aktywnego dostępu do tego produktu");
+      }
+
+      const existing = await tx.appAccess.findFirst({
+        where: { accountId: account.id, productId: product.id, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
+      }
+
+      const access = await tx.appAccess.create({
+        data: {
+          id: uuidv7(),
+          organizationId: who.organizationId,
+          accountId: account.id,
+          productId: product.id,
+          status: "ACTIVE",
+          grantedByAccountId: who.accountId,
+          revokedAt: null,
+        },
+        include: { product: { select: { key: true } } },
+      });
+
+      await bumpAuthzRevisions(tx, who.organizationId, { id: account.id });
+
+      await writeAudit(tx, request, who, {
+        action: "app_access.granted",
+        resourceType: "app_access",
+        resourceId: access.id,
+        metadata: {
+          accountId: access.accountId,
+          product: product.key,
+        },
+      });
+
+      return serializeAppAccess(access);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ApiFailure(409, "CONFLICT", "To konto ma już włączony dostęp do tego produktu");
+      }
+      throw error;
+    }
   });
 
   app.route({

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "@core/contracts";
 import type { PrismaClient } from "@core/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildOpenApiDocument, serializeOpenApiDocument, type OpenApiSpec } from "../src/openapi.js";
@@ -145,5 +146,32 @@ describe("OpenAPI Core API", () => {
     expect(response.json()).toEqual(document);
     expect(response.json()).not.toHaveProperty("data");
     expect(response.json()).not.toHaveProperty("error");
+  });
+
+  it("dokumentuje nagłówek Idempotency-Key, odpowiedź 409 i nagłówek Idempotency-Replayed wyłącznie w operacjach POST", () => {
+    const postRoutes = ROUTE_LIST.filter((route) => route.method === "POST");
+    expect(postRoutes.length).toBeGreaterThan(0);
+
+    for (const route of ROUTE_LIST) {
+      const operation = document.paths[route.path]?.[route.method.toLowerCase()];
+      expect(operation).toBeDefined();
+      const idemParam = operation?.parameters?.find((p) => p.in === "header" && p.name === IDEMPOTENCY_KEY_HEADER);
+      const successResponse = operation?.responses[String(route.successStatus)];
+
+      if (route.method === "POST") {
+        expect(idemParam, `Brak nagłówka ${IDEMPOTENCY_KEY_HEADER} w POST ${route.path}`).toBeDefined();
+        expect(idemParam?.required).toBe(false);
+        expect(idemParam?.schema).toMatchObject({ type: "string", minLength: 1, maxLength: 255 });
+        expect(operation?.responses["400"]).toBeDefined();
+        expect(operation?.responses["409"]).toBeDefined();
+        expect(successResponse?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toMatchObject({
+          required: false,
+          schema: { type: "string", enum: ["true"] },
+        });
+      } else {
+        expect(idemParam).toBeUndefined();
+        expect(successResponse?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toBeUndefined();
+      }
+    }
   });
 });

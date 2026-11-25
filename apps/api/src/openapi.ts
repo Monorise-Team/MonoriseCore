@@ -33,6 +33,7 @@ import {
   ErrorCode,
   GrantScope,
   Health,
+  IDEMPOTENCY_REPLAYED_HEADER,
   Invitation,
   InvitationStatus,
   Me,
@@ -67,6 +68,7 @@ import {
 } from "@core/contracts";
 import { z } from "zod";
 import {
+  IDEMPOTENCY_KEY_PARAMETER,
   OpenApiDocument,
   ROUTE_LIST,
   TAGS,
@@ -78,6 +80,7 @@ import {
 const ROOT_PACKAGE_JSON_PATH = resolve(import.meta.dirname, "../../../package.json");
 
 const ERROR_STATUS_SUMMARY: Record<ErrorStatus, string> = {
+  400: "Nieprawidłowe żądanie",
   401: "Brak albo nieważny token dostępu albo wyłączone konto",
   403: "Brak uprawnień",
   404: "Nie znaleziono zasobu",
@@ -130,9 +133,15 @@ export interface OpenApiSpec {
 
 export interface OpenApiParameterObject {
   name: string;
-  in: "path" | "query";
+  in: "path" | "query" | "header";
   required: boolean;
   description: string;
+  schema: Record<string, unknown>;
+}
+
+export interface OpenApiHeaderObject {
+  description: string;
+  required?: boolean;
   schema: Record<string, unknown>;
 }
 
@@ -148,6 +157,7 @@ export interface OpenApiRequestBodyObject {
 
 export interface OpenApiResponseObject {
   description: string;
+  headers?: Record<string, OpenApiHeaderObject>;
   content?: {
     "application/json": {
       schema: { $ref: string };
@@ -307,12 +317,31 @@ function describeError(status: ErrorStatus, codes: readonly string[]): string {
   return codes.length > 0 ? `${base} (${codes.join(", ")}).` : `${base}.`;
 }
 
+const IDEMPOTENCY_REPLAYED_RESPONSE_HEADER: OpenApiHeaderObject = {
+  description:
+    "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+  required: false,
+  schema: {
+    type: "string",
+    enum: ["true"],
+  },
+};
+
+function mergeErrorCodes(existing: readonly string[] | undefined, extra: readonly string[]): string[] {
+  const merged = new Set<string>(existing ?? []);
+  for (const code of extra) merged.add(code);
+  return [...merged];
+}
+
 function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodType, string>): OpenApiOperation {
   const responses: Record<string, OpenApiResponseObject> = {};
+  const isPost = route.method === "POST";
+  const replayHeaders = isPost ? { [IDEMPOTENCY_REPLAYED_HEADER]: IDEMPOTENCY_REPLAYED_RESPONSE_HEADER } : undefined;
 
   if (route.successStatus === 204) {
     responses["204"] = {
       description: route.responseDescription,
+      ...(replayHeaders ? { headers: replayHeaders } : {}),
     };
   } else {
     const successSchemaName =
@@ -322,6 +351,7 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
     }
     responses[String(route.successStatus)] = {
       description: route.responseDescription,
+      ...(replayHeaders ? { headers: replayHeaders } : {}),
       content: {
         "application/json": {
           schema: { $ref: `#/components/schemas/${successSchemaName}` },
@@ -330,12 +360,18 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
     };
   }
 
-  const errorStatuses = Object.keys(route.errors)
+  const effectiveErrors: Partial<Record<ErrorStatus, readonly string[]>> = { ...route.errors };
+  if (isPost) {
+    effectiveErrors[400] = mergeErrorCodes(effectiveErrors[400], ["VALIDATION_FAILED"]);
+    effectiveErrors[409] = mergeErrorCodes(effectiveErrors[409], ["CONFLICT"]);
+  }
+
+  const errorStatuses = Object.keys(effectiveErrors)
     .map(Number)
     .sort((a, b) => a - b) as ErrorStatus[];
 
   for (const status of errorStatuses) {
-    const codes = route.errors[status];
+    const codes = effectiveErrors[status];
     if (!codes) continue;
     responses[String(status)] = {
       description: describeError(status, codes),
@@ -347,10 +383,16 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
     };
   }
 
+  const rawParameters: ParameterDefinition[] = [...(route.parameters ?? [])];
+  if (
+    isPost &&
+    !rawParameters.some((param) => param.in === "header" && param.name === IDEMPOTENCY_KEY_PARAMETER.name)
+  ) {
+    rawParameters.push(IDEMPOTENCY_KEY_PARAMETER);
+  }
+
   const parameters =
-    route.parameters && route.parameters.length > 0
-      ? route.parameters.map((param) => buildParameter(param, idBySchema))
-      : undefined;
+    rawParameters.length > 0 ? rawParameters.map((param) => buildParameter(param, idBySchema)) : undefined;
 
   const requestBody: OpenApiRequestBodyObject | undefined = route.requestBodySchemaName
     ? {
