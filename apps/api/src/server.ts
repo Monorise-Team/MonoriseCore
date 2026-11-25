@@ -63,7 +63,14 @@ import {
 } from "./authorization.js";
 import { isEntitlementActive } from "./entitlements.js";
 import { readProductEventFeed } from "./event-feed.js";
-import { executeWithIdempotency, IdempotencyError, parseIdempotencyKeyHeader } from "./idempotency.js";
+import {
+  accountPrincipal,
+  executeWithIdempotency,
+  extractIdempotencyKeyHeader,
+  IdempotencyError,
+  parseIdempotencyKeyHeader,
+  type DeferFn,
+} from "./idempotency.js";
 import {
   createInvitation,
   InvitationError,
@@ -630,23 +637,37 @@ export function buildServer({
   /**
    * Wspólna rejestracja operacji tworzących (`POST`) z katalogu `ROUTES`: uwierzytelnia konto,
    * obsługuje opcjonalny nagłówek `Idempotency-Key` w tej samej transakcji `withOrganization`
-   * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx i odtwarzanie z
-   * `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu z kodem statusu z katalogu tras.
+   * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx, kroki odłożone przez `defer`
+   * przed `COMMIT` i odtwarzanie z `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu.
    */
   function registerPostRoute<TData>(
     route: BearerPostRoute,
-    execute: (ctx: { request: FastifyRequest; who: Caller; tx: Tx; now: Date }) => Promise<TData>,
+    execute: (ctx: { request: FastifyRequest; who: Caller; tx: Tx; now: Date; defer: DeferFn }) => Promise<TData>,
   ): void {
     app.route({
       method: route.method,
       url: toFastifyPath(route.path),
+      config: { idempotent: true },
       handler: async (request, reply) => {
         const who = await caller(request);
-        const idempotencyKey = parseIdempotencyKeyHeader(request.headers["idempotency-key"]);
-        const now = getNow();
+        const idempotencyKey = parseIdempotencyKeyHeader(extractIdempotencyKeyHeader(request));
 
         if (idempotencyKey === null) {
-          const data = await withOrganization(db, who.organizationId, (tx) => execute({ request, who, tx, now }));
+          const data = await withOrganization(db, who.organizationId, async (tx) => {
+            const deferred: (() => Promise<void>)[] = [];
+            const defer: DeferFn = (fn) => {
+              deferred.push(fn);
+            };
+            const result = await execute({ request, who, tx, now: getNow(), defer });
+            for (const fn of deferred) {
+              await fn();
+            }
+            return result;
+          });
+          // Żadna obecna trasa POST nie zwraca 204, ale przy przyszłej 204 No Content nie wysyłamy ciała.
+          if (route.successStatus === 204) {
+            return reply.status(204).send();
+          }
           return reply.status(route.successStatus).send(send(request, data));
         }
 
@@ -658,21 +679,28 @@ export function buildServer({
         const outcome = await executeWithIdempotency({
           db,
           organizationId: who.organizationId,
-          principal: who.accountId,
+          principal: accountPrincipal(who.accountId),
           key: idempotencyKey,
           method: route.method,
           pathTemplate: route.path,
           body: request.body,
           params,
-          now,
-          run: async (tx) => {
-            const data = await execute({ request, who, tx, now });
-            return { status: route.successStatus, body: send(request, data) };
+          getNow,
+          run: async (tx, defer, now) => {
+            const data = await execute({ request, who, tx, now, defer });
+            return {
+              status: route.successStatus,
+              body: route.successStatus === 204 ? null : send(request, data),
+            };
           },
         });
 
         if (outcome.replayed) {
           void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+        }
+        // Żadna obecna trasa POST nie zwraca 204, ale przy przyszłej 204 No Content nie wysyłamy ciała.
+        if (outcome.status === 204) {
+          return reply.status(204).send();
         }
         return reply.status(outcome.status).send(outcome.body);
       },
@@ -888,7 +916,7 @@ export function buildServer({
     },
   });
 
-  registerPostRoute(ROUTES.createInvitation, async ({ request, who, tx, now }) => {
+  registerPostRoute(ROUTES.createInvitation, async ({ request, who, tx, now, defer }) => {
     const body = parseInput(CreateInvitation, request.body);
     const snapshot = await loadPermissionSnapshot(tx, who);
     assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
@@ -903,11 +931,12 @@ export function buildServer({
       now,
       authUrl,
       mailer,
+      defer,
     });
     return result.invitation;
   });
 
-  registerPostRoute(ROUTES.resendInvitation, async ({ request, who, tx, now }) => {
+  registerPostRoute(ROUTES.resendInvitation, async ({ request, who, tx, now, defer }) => {
     const params = parseInput(InvitationIdParams, request.params);
     const snapshot = await loadPermissionSnapshot(tx, who);
     assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
@@ -918,6 +947,7 @@ export function buildServer({
       now,
       authUrl,
       mailer,
+      defer,
     });
     return result.invitation;
   });

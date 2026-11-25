@@ -52,6 +52,8 @@ export interface CreateInvitationInput {
   now?: Date | undefined;
   authUrl?: string | undefined;
   mailer?: MailSender | undefined;
+  /** Opcjonalne odłożenie wysyłki e-maila na sam koniec transakcji (np. po zapisie `Idempotency-Key`). */
+  defer?: ((fn: () => Promise<void>) => void) | undefined;
 }
 
 export interface CreateInvitationResult {
@@ -66,6 +68,8 @@ export interface ResendInvitationInput {
   now?: Date | undefined;
   authUrl?: string | undefined;
   mailer?: MailSender | undefined;
+  /** Opcjonalne odłożenie wysyłki e-maila na sam koniec transakcji (np. po zapisie `Idempotency-Key`). */
+  defer?: ((fn: () => Promise<void>) => void) | undefined;
 }
 
 export interface ResendInvitationResult {
@@ -380,14 +384,24 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
 
   const inviterName = await resolveInviterName(tx, input.invitedBy);
   const inviteUrl = buildInviteUrl(token, input.authUrl);
-  await mailer(
-    invitationMail({
-      to: normalized,
-      organizationName: organization.name,
-      inviterName,
-      inviteUrl,
-    }),
-  );
+  const sendInvitationMail = () =>
+    mailer(
+      invitationMail({
+        to: normalized,
+        organizationName: organization.name,
+        inviterName,
+        inviteUrl,
+      }),
+    );
+
+  if (input.defer) {
+    // Wysyłka idzie jako ostatni krok transakcji (po zapisie wiersza Idempotency-Key), więc błąd bazy przed
+    // COMMIT nie wysyła maila, a błąd poczty nadal wycofuje całą transakcję. Pozostaje wąskie okno błędu
+    // samego COMMIT po wysłaniu wiadomości — zamknie je osobny transakcyjny outbox poczty.
+    input.defer(sendInvitationMail);
+  } else {
+    await sendInvitationMail();
+  }
 
   return {
     invitation: serializeInvitation(created, now),
@@ -459,14 +473,24 @@ export async function resendInvitation(tx: Tx, input: ResendInvitationInput): Pr
   const actorAccountId = input.actor.type === "ACCOUNT" ? input.actor.accountId : invitation.invitedByAccountId;
   const inviterName = await resolveInviterName(tx, actorAccountId);
   const inviteUrl = buildInviteUrl(token, input.authUrl);
-  await mailer(
-    invitationMail({
-      to: updated.email,
-      organizationName: invitation.organization.name,
-      inviterName,
-      inviteUrl,
-    }),
-  );
+  const sendInvitationMail = () =>
+    mailer(
+      invitationMail({
+        to: updated.email,
+        organizationName: invitation.organization.name,
+        inviterName,
+        inviteUrl,
+      }),
+    );
+
+  if (input.defer) {
+    // Wysyłka idzie jako ostatni krok transakcji (po zapisie wiersza Idempotency-Key), więc błąd bazy przed
+    // COMMIT nie wysyła maila, a błąd poczty nadal wycofuje całą transakcję. Pozostaje wąskie okno błędu
+    // samego COMMIT po wysłaniu wiadomości — zamknie je osobny transakcyjny outbox poczty.
+    input.defer(sendInvitationMail);
+  } else {
+    await sendInvitationMail();
+  }
 
   return {
     invitation: serializeInvitation(updated, now),

@@ -23,12 +23,8 @@ CREATE UNIQUE INDEX "idempotency_keys_organizationId_principal_key_key"
   ON "public"."idempotency_keys"("organizationId", "principal", "key");
 
 -- CreateIndex
-CREATE INDEX "idempotency_keys_organizationId_idx"
-  ON "public"."idempotency_keys"("organizationId");
-
--- CreateIndex
-CREATE INDEX "idempotency_keys_expiresAt_idx"
-  ON "public"."idempotency_keys"("expiresAt");
+CREATE INDEX "idempotency_keys_expiresAt_id_idx"
+  ON "public"."idempotency_keys"("expiresAt", "id");
 
 -- AddForeignKey
 ALTER TABLE "public"."idempotency_keys"
@@ -38,8 +34,8 @@ ALTER TABLE "public"."idempotency_keys"
 
 -- ── Ograniczenia spójności ─────────────────────────────────────────────────────────────────────────
 ALTER TABLE "public"."idempotency_keys"
-  ADD CONSTRAINT "idempotency_keys_principal_nonempty"
-  CHECK (char_length("principal") >= 1);
+  ADD CONSTRAINT "idempotency_keys_principal_format"
+  CHECK ("principal" ~ '^(account|client):.+');
 
 ALTER TABLE "public"."idempotency_keys"
   ADD CONSTRAINT "idempotency_keys_key_format"

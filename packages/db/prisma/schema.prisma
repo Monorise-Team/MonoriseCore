@@ -802,8 +802,7 @@ model IdempotencyKey {
   expiresAt      DateTime     @db.Timestamptz(3)
 
   @@unique([organizationId, principal, key])
-  @@index([organizationId])
-  @@index([expiresAt])
+  @@index([expiresAt, id])
   @@map("idempotency_keys")
   @@schema("public")
 }

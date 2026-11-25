@@ -71,6 +71,7 @@ import {
   IDEMPOTENCY_KEY_PARAMETER,
   OpenApiDocument,
   ROUTE_LIST,
+  supportsIdempotencyKey,
   TAGS,
   type ErrorStatus,
   type ParameterDefinition,
@@ -335,8 +336,10 @@ function mergeErrorCodes(existing: readonly string[] | undefined, extra: readonl
 
 function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodType, string>): OpenApiOperation {
   const responses: Record<string, OpenApiResponseObject> = {};
-  const isPost = route.method === "POST";
-  const replayHeaders = isPost ? { [IDEMPOTENCY_REPLAYED_HEADER]: IDEMPOTENCY_REPLAYED_RESPONSE_HEADER } : undefined;
+  const isIdempotent = supportsIdempotencyKey(route);
+  const replayHeaders = isIdempotent
+    ? { [IDEMPOTENCY_REPLAYED_HEADER]: IDEMPOTENCY_REPLAYED_RESPONSE_HEADER }
+    : undefined;
 
   if (route.successStatus === 204) {
     responses["204"] = {
@@ -361,7 +364,7 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
   }
 
   const effectiveErrors: Partial<Record<ErrorStatus, readonly string[]>> = { ...route.errors };
-  if (isPost) {
+  if (isIdempotent) {
     effectiveErrors[400] = mergeErrorCodes(effectiveErrors[400], ["VALIDATION_FAILED"]);
     effectiveErrors[409] = mergeErrorCodes(effectiveErrors[409], ["CONFLICT"]);
   }
@@ -385,7 +388,7 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
 
   const rawParameters: ParameterDefinition[] = [...(route.parameters ?? [])];
   if (
-    isPost &&
+    isIdempotent &&
     !rawParameters.some((param) => param.in === "header" && param.name === IDEMPOTENCY_KEY_PARAMETER.name)
   ) {
     rawParameters.push(IDEMPOTENCY_KEY_PARAMETER);

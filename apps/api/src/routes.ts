@@ -269,6 +269,14 @@ export function toOpenApiPath(fastifyPath: string): string {
 }
 
 /**
+ * Czy ścieżka obsługuje nagłówek `Idempotency-Key` (obecnie wszystkie operacje `POST` z tokenem użytkownika).
+ * Jedno źródło prawdy dla rejestracji tras w `server.ts`, opisu OpenAPI w `openapi.ts` i testów w `openapi.test.ts`.
+ */
+export function supportsIdempotencyKey(route: RouteDefinition): boolean {
+  return route.method === "POST" && route.auth === "bearer";
+}
+
+/**
  * Katalog publicznych ścieżek Core API.
  * Jedno źródło prawdy dla routingu w `server.ts` i generatora OpenAPI w `openapi.ts`.
  */
