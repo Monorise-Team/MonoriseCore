@@ -2,6 +2,7 @@ import "server-only";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { accountClaims, uuidv7, withOrganization } from "@core/db";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
@@ -106,6 +107,10 @@ export const auth = betterAuth({
       accessTokenExpiresIn: 300,
       m2mAccessTokenExpiresIn: 300,
       refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+      // Przez 20 s po obrocie ten sam stary token dostaje tę samą odpowiedź, zamiast unieważnić całą rodzinę.
+      // Chroni przed wylogowaniem, gdy dwa żądania przeglądarki odświeżają naraz (ADR-0098). Później ponowne
+      // użycie nadal unieważnia wszystkie tokeny tej osoby w tej aplikacji (ADR-0023).
+      refreshTokenReuseInterval: 20,
       // Aplikacje rejestruje tylko Core (skrypt oauth:seed). Żadne działanie na klientach i zasobach przez
       // HTTP nie jest dozwolone, także dla zalogowanych (domyślnie wtyczka pozwala na nie każdej sesji).
       allowDynamicClientRegistration: false,
@@ -119,7 +124,11 @@ export const auth = betterAuth({
         // W przepływie client_credentials (M2M) brak usera -> brak org_id, employee_id i authz_rev
         if (!user) return {};
         const claims = await accountClaims(db, user.id);
-        if (!claims || claims.accountStatus !== "ACTIVE") throw new Error("Konto nie może się logować");
+        // Nieaktywne konto albo wstrzymana firma: zwykła odmowa (400 invalid_grant), żeby aplikacja zakończyła
+        // sesję, a nie uznała tego za awarię Core
+        if (!claims || claims.accountStatus !== "ACTIVE" || BLOCKED_ORGANIZATIONS.has(claims.organizationStatus)) {
+          throw new APIError("BAD_REQUEST", { error: "invalid_grant", error_description: "account_inactive" });
+        }
         // amr i acr ustala sam serwer OAuth (pola zastrzeżone), dlatego ich tu nie ma
         return { org_id: claims.organizationId, employee_id: claims.employeeId, authz_rev: claims.authzRevision };
       },
