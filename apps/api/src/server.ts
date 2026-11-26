@@ -49,7 +49,7 @@ import {
   type Unit,
   type UnitMember,
 } from "@core/contracts";
-import { uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
+import { revokeUserAuthTokens, uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
 import { PermissionError } from "@monorise-team/permissions";
 import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
 import { z } from "zod";
@@ -254,6 +254,11 @@ async function lockOrganizationUnits(tx: Tx, organizationId: string): Promise<vo
 /** Serializuje zapisy na roli i przypisaniach tej roli (archiwizacja vs nowe przypisanie). */
 async function lockRole(tx: Tx, roleId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('role:' || ${roleId}::uuid::text, 0))`;
+}
+
+/** Serializuje zmiany stanu konta (np. wyłączenie i przywrócenie logowania) na czas transakcji. */
+async function lockAccount(tx: Tx, accountId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('account:' || ${accountId}::uuid::text, 0))`;
 }
 
 /** Serializuje zapisy tego samego służbowego adresu e-mail w jednej firmie na czas transakcji. */
@@ -1022,6 +1027,132 @@ export function buildServer({
 
       return send(request, updated);
     },
+  });
+
+  /**
+   * Wspólne sprawdzenie pracownika, uprawnienia `core.employees.manage` (zakres `ORGANIZATION` albo Owner)
+   * oraz blokady doradczej konta dla wyłączenia i przywrócenia logowania pracownika.
+   */
+  async function loadManageableEmployeeAccount(
+    tx: Tx,
+    who: Caller,
+    employeeId: string,
+    action: "deactivate" | "reactivate",
+  ) {
+    const employee = await tx.employee.findUnique({
+      where: { id: employeeId },
+      include: { account: { select: { id: true, status: true } } },
+    });
+    if (!employee) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono pracownika");
+
+    const snapshot = await loadPermissionSnapshot(tx, who);
+    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+
+    if (employee.status === "ANONYMIZED") {
+      throw new ApiFailure(409, "CONFLICT", "Nie można zmienić statusu konta zanonimizowanego pracownika");
+    }
+    if (employee.account === null) {
+      throw new ApiFailure(409, "CONFLICT", "Pracownik nie ma konta do logowania");
+    }
+
+    await lockAccount(tx, employee.account.id);
+
+    const [account, organization] = await Promise.all([
+      tx.account.findUniqueOrThrow({
+        where: { id: employee.account.id },
+        select: { id: true, status: true },
+      }),
+      tx.organization.findUniqueOrThrow({
+        where: { id: who.organizationId },
+        select: { ownerAccountId: true },
+      }),
+    ]);
+
+    if (account.id === organization.ownerAccountId) {
+      throw new ApiFailure(
+        409,
+        "CONFLICT",
+        action === "deactivate"
+          ? "Nie można wyłączyć konta Ownera firmy"
+          : "Nie można zmienić statusu konta Ownera firmy",
+      );
+    }
+    if (account.id === who.accountId) {
+      throw new ApiFailure(
+        409,
+        "CONFLICT",
+        action === "deactivate" ? "Nie można wyłączyć własnego konta" : "Nie można zmienić statusu własnego konta",
+      );
+    }
+    if (account.status === "INVITED") {
+      throw new ApiFailure(
+        409,
+        "CONFLICT",
+        action === "deactivate"
+          ? "Nie można wyłączyć konta z oczekującym zaproszeniem"
+          : "Nie można przywrócić konta z oczekującym zaproszeniem",
+      );
+    }
+
+    return { employee, account };
+  }
+
+  registerPostRoute(ROUTES.deactivateEmployee, async ({ request, who, tx, now }) => {
+    const params = parseInput(EmployeeIdParams, request.params);
+    const { employee, account } = await loadManageableEmployeeAccount(tx, who, params.employeeId, "deactivate");
+
+    if (account.status === "DEACTIVATED") {
+      return serializeEmployee({ ...employee, account });
+    }
+
+    const updatedAccount = await tx.account.update({
+      where: { id: account.id },
+      data: { status: "DEACTIVATED", deactivatedAt: now },
+      select: { id: true, status: true },
+    });
+    const revoked = await revokeUserAuthTokens(tx, account.id);
+    await tx.invitation.updateMany({
+      where: { accountId: account.id, status: "PENDING" },
+      data: { status: "REVOKED" },
+    });
+    await bumpAuthzRevisions(tx, who.organizationId, { id: account.id });
+    await writeAudit(tx, request, who, {
+      action: "account.deactivated",
+      resourceType: "account",
+      resourceId: account.id,
+      metadata: {
+        employeeId: employee.id,
+        revokedSessions: revoked.sessions,
+        revokedOAuthRefreshes: revoked.refreshTokens,
+        revokedOAuthAccesses: revoked.accessTokens,
+      },
+    });
+
+    return serializeEmployee({ ...employee, account: updatedAccount });
+  });
+
+  registerPostRoute(ROUTES.reactivateEmployee, async ({ request, who, tx }) => {
+    const params = parseInput(EmployeeIdParams, request.params);
+    const { employee, account } = await loadManageableEmployeeAccount(tx, who, params.employeeId, "reactivate");
+
+    if (account.status === "ACTIVE") {
+      return serializeEmployee({ ...employee, account });
+    }
+
+    const updatedAccount = await tx.account.update({
+      where: { id: account.id },
+      data: { status: "ACTIVE", deactivatedAt: null },
+      select: { id: true, status: true },
+    });
+    await bumpAuthzRevisions(tx, who.organizationId, { id: account.id });
+    await writeAudit(tx, request, who, {
+      action: "account.reactivated",
+      resourceType: "account",
+      resourceId: account.id,
+      metadata: { employeeId: employee.id },
+    });
+
+    return serializeEmployee({ ...employee, account: updatedAccount });
   });
 
   function invitationActorFromRequest(request: FastifyRequest, who: Caller): InvitationActor {

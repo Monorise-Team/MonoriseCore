@@ -218,4 +218,34 @@ describe("OpenAPI Core API", () => {
     expect("actorDisplayName" in entryProps).toBe(true);
     expect("actionLabel" in entryProps).toBe(true);
   });
+
+  it("dokumentuje POST /core/v1/employees/{employeeId}/deactivate i /reactivate z Idempotency-Key i EmployeeResponse", () => {
+    for (const [path, operationId] of [
+      ["/core/v1/employees/{employeeId}/deactivate", "deactivateEmployee"],
+      ["/core/v1/employees/{employeeId}/reactivate", "reactivateEmployee"],
+    ] as const) {
+      const operation = document.paths[path]?.post;
+      expect(operation, `Brak operacji POST ${path}`).toBeDefined();
+      expect(operation?.operationId).toBe(operationId);
+      expect(operation?.tags).toEqual(["People"]);
+      expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+      expect(operation?.requestBody).toBeUndefined();
+      expect(operation?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
+        $ref: "#/components/schemas/EmployeeResponse",
+      });
+      expect(operation?.responses["200"]?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toMatchObject({
+        required: false,
+        schema: { type: "string", enum: ["true"] },
+      });
+      expect(operation?.parameters?.some((p) => p.in === "path" && p.name === "employeeId" && p.required)).toBe(true);
+      expect(operation?.parameters?.some((p) => p.in === "header" && p.name === IDEMPOTENCY_KEY_HEADER)).toBe(true);
+      expect(operation?.responses["400"]).toBeDefined();
+      expect(operation?.responses["401"]).toBeDefined();
+      expect(operation?.responses["403"]).toBeDefined();
+      expect(operation?.responses["404"]).toBeDefined();
+      expect(operation?.responses["409"]).toBeDefined();
+      expect(operation?.responses["422"]).toBeDefined();
+      expect(operation?.responses["500"]).toBeDefined();
+    }
+  });
 });
