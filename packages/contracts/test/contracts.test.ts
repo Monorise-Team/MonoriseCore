@@ -10,6 +10,10 @@ import {
   apiErrorSchema,
   apiSuccessSchema,
   AppAccess,
+  AUDIT_LOG_RETENTION_DAYS,
+  AUDIT_LOG_RETENTION_MS,
+  AuditActorType,
+  AuditLogEntry,
   CORE_PERMISSIONS,
   CORE_ROLE_TEMPLATES,
   CopyRole,
@@ -39,6 +43,7 @@ import {
   INVITATION_TTL_DAYS,
   INVITATION_TTL_MS,
   isFreeEmailDomain,
+  ListAuditLogQuery,
   MachineTokenClaims,
   MAX_PAGE_LIMIT,
   MAX_PERMISSION_MANIFEST_ENTRIES,
@@ -600,5 +605,81 @@ describe("kontrakty", () => {
     expect(IdempotencyKeyHeader.safeParse("bad\nkey").success).toBe(false);
     expect(IdempotencyKeyHeader.safeParse("bad\x7fkey").success).toBe(false);
     expect(IdempotencyKeyHeader.safeParse("klucz-ą").success).toBe(false);
+  });
+
+  it("waliduje schematy dziennika zdarzeń firmy i parametry zapytania", () => {
+    expect(AUDIT_LOG_RETENTION_DAYS).toBe(730);
+    expect(AUDIT_LOG_RETENTION_MS).toBe(730 * 24 * 60 * 60 * 1000);
+
+    for (const actorType of ["ACCOUNT", "OPERATOR", "SYSTEM", "PRODUCT"]) {
+      expect(AuditActorType.parse(actorType)).toBe(actorType);
+    }
+    expect(AuditActorType.safeParse("ADMIN").success).toBe(false);
+
+    expect(
+      ListAuditLogQuery.parse({
+        limit: "25",
+        actorAccountId: UUID_1,
+        actorType: "ACCOUNT",
+        action: " role.assigned ",
+        resourceType: " role_assignment ",
+        resourceId: ` ${UUID_2} `,
+        from: "2026-11-01T00:00:00.000Z",
+        to: "2026-11-26T23:59:59.000Z",
+      }),
+    ).toEqual({
+      limit: 25,
+      actorAccountId: UUID_1,
+      actorType: "ACCOUNT",
+      action: "role.assigned",
+      resourceType: "role_assignment",
+      resourceId: UUID_2,
+      from: "2026-11-01T00:00:00.000Z",
+      to: "2026-11-26T23:59:59.000Z",
+    });
+
+    expect(ListAuditLogQuery.parse({})).toEqual({ limit: DEFAULT_PAGE_LIMIT });
+    expect(ListAuditLogQuery.safeParse({ limit: MAX_PAGE_LIMIT + 1 }).success).toBe(false);
+    expect(ListAuditLogQuery.safeParse({ limit: 0 }).success).toBe(false);
+    expect(ListAuditLogQuery.safeParse({ actorAccountId: "not-a-uuid" }).success).toBe(false);
+    expect(ListAuditLogQuery.safeParse({ actorType: "UNKNOWN" }).success).toBe(false);
+    expect(ListAuditLogQuery.safeParse({ action: "   " }).success).toBe(false);
+    expect(ListAuditLogQuery.safeParse({ from: "2026-11-26" }).success).toBe(false);
+
+    const invertedRange = ListAuditLogQuery.safeParse({
+      from: "2026-11-26T12:00:00.000Z",
+      to: "2026-11-26T11:59:59.000Z",
+    });
+    expect(invertedRange.success).toBe(false);
+    if (!invertedRange.success) {
+      expect(invertedRange.error.issues[0]?.path).toEqual(["to"]);
+    }
+
+    expect(
+      ListAuditLogQuery.safeParse({
+        from: "2026-11-26T12:00:00.000Z",
+        to: "2026-11-26T12:00:00.000Z",
+      }).success,
+    ).toBe(true);
+
+    const entry = AuditLogEntry.parse({
+      id: UUID_1,
+      actorType: "ACCOUNT",
+      actorAccountId: UUID_2,
+      actorDisplayName: "Anna Kowalska",
+      product: "timotime",
+      action: "app_access.revoked",
+      actionLabel: "Wyłączono dostęp do aplikacji",
+      resourceType: "app_access",
+      resourceId: UUID_3,
+      metadata: { product: "timotime", accountId: UUID_2 },
+      ipAddress: "127.0.0.1",
+      userAgent: "MonorisePortal/1.0",
+      requestId: "req_1234567890abcdef",
+      supportAccessGrantId: null,
+      createdAt: "2026-11-26T14:05:00.000Z",
+    });
+    expect(entry.actorDisplayName).toBe("Anna Kowalska");
+    expect(entry.product).toBe("timotime");
   });
 });
