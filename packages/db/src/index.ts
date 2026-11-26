@@ -217,3 +217,25 @@ export async function cleanupExpiredIdempotencyKeys(db: PrismaClient | Tx, limit
     SELECT "public"."idempotency_keys_cleanup_expired"(${limit}::integer) AS deleted`;
   return rows[0]?.deleted ?? 0;
 }
+
+export interface RevokedUserAuthTokens {
+  accessTokens: number;
+  refreshTokens: number;
+  sessions: number;
+}
+
+/**
+ * Usuwa wszystkie tokeny dostępu i odświeżania OAuth (włącznie z obróconymi w 20-sekundowym oknie powtórki)
+ * oraz sesje Better Auth wskazanego konta w bieżącej transakcji.
+ * Wywoływane wyłącznie dla `userId` rozwiązanego wcześniej z danych bieżącej firmy pod RLS.
+ */
+export async function revokeUserAuthTokens(tx: Tx, userId: string): Promise<RevokedUserAuthTokens> {
+  const accessTokens = await tx.authOAuthAccessToken.deleteMany({ where: { userId } });
+  const refreshTokens = await tx.authOAuthRefreshToken.deleteMany({ where: { userId } });
+  const sessions = await tx.authSession.deleteMany({ where: { userId } });
+  return {
+    accessTokens: accessTokens.count,
+    refreshTokens: refreshTokens.count,
+    sessions: sessions.count,
+  };
+}

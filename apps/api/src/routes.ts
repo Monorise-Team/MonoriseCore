@@ -643,6 +643,70 @@ export const ROUTES = {
       500: ["INTERNAL_ERROR"],
     },
   },
+  deactivateEmployee: {
+    method: "POST",
+    path: `${API_PREFIX}/employees/{employeeId}/deactivate`,
+    operationId: "deactivateEmployee",
+    tag: "People",
+    summary: "Wyłącz konto pracownika",
+    description:
+      "Blokuje logowanie konta pracownika (`Account.status = DEACTIVATED`), usuwa wszystkie jego sesje logowania " +
+      "oraz tokeny dostępu i odświeżania OAuth (także obrócone w 20-sekundowym oknie powtórki), cofa ewentualne " +
+      "oczekujące zaproszenia tego konta, podbija `authzRevision`, emituje zdarzenie `organization.permissions.changed` " +
+      "i zapisuje wpis audytu `account.deactivated`. Status zatrudnienia pracownika (`Employee.status`), przypisania " +
+      "ról, członkostwa w jednostkach i dostępy do aplikacji (`AppAccess`) pozostają zachowane. Operacja jest " +
+      "idempotentna w skutkach: ponowne wywołanie dla już wyłączonego konta zwraca bieżący stan bez kolejnego " +
+      "zdarzenia ani podbicia `authzRevision`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy " +
+      "albo roli Ownera; odrzuca (`409 CONFLICT`) konto Ownera, własne konto wywołującego, pracownika bez konta, " +
+      "konto `INVITED` oraz pracownika `ANONYMIZED`.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [EMPLOYEE_ID_PARAM],
+    dataSchemaName: "Employee",
+    dataSchema: Employee,
+    responseSchemaName: "EmployeeResponse",
+    responseDescription: "Pracownik z wyłączonym kontem logowania.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  reactivateEmployee: {
+    method: "POST",
+    path: `${API_PREFIX}/employees/{employeeId}/reactivate`,
+    operationId: "reactivateEmployee",
+    tag: "People",
+    summary: "Przywróć konto pracownika",
+    description:
+      "Włącza ponownie wyłączone konto pracownika (`Account.status = ACTIVE`, czyści `deactivatedAt`), podbija " +
+      "`authzRevision`, emituje zdarzenie `organization.permissions.changed` i zapisuje wpis audytu " +
+      "`account.reactivated`. Zachowane przypisania ról i dostępy do aplikacji (`AppAccess`) od razu wracają do " +
+      "działania. Operacja jest idempotentna w skutkach: ponowne wywołanie dla już aktywnego konta zwraca bieżący " +
+      "stan bez kolejnego zdarzenia ani podbicia `authzRevision`. Wymaga uprawnienia `core.employees.manage` w " +
+      "zakresie całej firmy albo roli Ownera; odrzuca (`409 CONFLICT`) konto Ownera, własne konto wywołującego, " +
+      "pracownika bez konta, konto `INVITED` oraz pracownika `ANONYMIZED`.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [EMPLOYEE_ID_PARAM],
+    dataSchemaName: "Employee",
+    dataSchema: Employee,
+    responseSchemaName: "EmployeeResponse",
+    responseDescription: "Pracownik z przywróconym kontem logowania.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
   listInvitations: {
     method: "GET",
     path: `${API_PREFIX}/invitations`,

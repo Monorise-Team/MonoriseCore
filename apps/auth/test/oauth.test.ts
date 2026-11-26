@@ -6,7 +6,7 @@ import {
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
 } from "@core/contracts";
-import { withOrganization } from "@core/db";
+import { revokeUserAuthTokens, withOrganization } from "@core/db";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth } from "@/server/auth";
@@ -251,6 +251,67 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
     } finally {
       await withOrganization(db, organizationId, (tx) =>
         tx.account.update({ where: { id: user.id }, data: { status: "ACTIVE" } }),
+      );
+    }
+  });
+
+  it("po dezaktywacji konta odrzuca odświeżenie także w 20-sekundowym oknie powtórki, unieważnia sesję i blokuje logowanie, a po przywróceniu logowanie wraca", async () => {
+    const firstTokens = await signInForTokens();
+    // Obracamy token, żeby stary firstTokens.refresh_token miał aktywne 20-sekundowe okno powtórki
+    const rotatedResponse = await refreshWith(firstTokens.refresh_token);
+    expect(rotatedResponse.status).toBe(200);
+    const rotatedTokens = (await rotatedResponse.json()) as { access_token: string; refresh_token: string };
+
+    const directSignIn = await call("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: PASSWORD }),
+    });
+    expect(directSignIn.status).toBe(200);
+    const sessionCookie = directSignIn.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    expect(await auth.api.getSession({ headers: new Headers({ cookie: sessionCookie }) })).not.toBeNull();
+
+    const user = await db.authUser.findUniqueOrThrow({ where: { email } });
+    await withOrganization(db, organizationId, async (tx) => {
+      await tx.account.update({ where: { id: user.id }, data: { status: "DEACTIVATED", deactivatedAt: new Date() } });
+      await revokeUserAuthTokens(tx, user.id);
+    });
+
+    try {
+      // Stary obrócony token w 20-sekundowym oknie powtórki -> invalid_grant (bez odpowiedzi z pamięci powtórki)
+      const replayWindowRefresh = await refreshWith(firstTokens.refresh_token);
+      expect(replayWindowRefresh.status).toBe(400);
+      expect(((await replayWindowRefresh.json()) as { error?: string }).error).toBe("invalid_grant");
+
+      // Bieżący token odświeżania -> invalid_grant
+      const currentRefresh = await refreshWith(rotatedTokens.refresh_token);
+      expect(currentRefresh.status).toBe(400);
+      expect(((await currentRefresh.json()) as { error?: string }).error).toBe("invalid_grant");
+
+      // Poprzednia sesja Better Auth została usunięta, a nowe logowanie jest odrzucane
+      expect(await auth.api.getSession({ headers: new Headers({ cookie: sessionCookie }) })).toBeNull();
+      const deniedSignIn = await call("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: PASSWORD }),
+      });
+      expect(deniedSignIn.ok).toBe(false);
+
+      // Po przywróceniu konta ponowne logowanie OAuth i odświeżanie tokenu działają
+      await withOrganization(db, organizationId, (tx) =>
+        tx.account.update({ where: { id: user.id }, data: { status: "ACTIVE", deactivatedAt: null } }),
+      );
+      const restoredTokens = await signInForTokens();
+      expect(restoredTokens.access_token).toBeTruthy();
+      expect(restoredTokens.refresh_token).toBeTruthy();
+      const refreshedAfterRestore = await refreshWith(restoredTokens.refresh_token);
+      expect(refreshedAfterRestore.status).toBe(200);
+    } finally {
+      await withOrganization(db, organizationId, (tx) =>
+        tx.account.update({ where: { id: user.id }, data: { status: "ACTIVE", deactivatedAt: null } }),
       );
     }
   });
