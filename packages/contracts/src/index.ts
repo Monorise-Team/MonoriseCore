@@ -14,7 +14,14 @@ import {
 } from "@monorise-team/permissions";
 import { z } from "zod";
 
-export { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, type CorePermissionKey } from "./permissions.js";
+export {
+  canManageOrganizationAssignments,
+  canManageOrganizationSnapshot,
+  CORE_PERMISSIONS,
+  CORE_ROLE_TEMPLATES,
+  type CorePermissionKey,
+  type RawRoleAssignmentRecord,
+} from "./permissions.js";
 
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
@@ -731,6 +738,9 @@ export const FREE_EMAIL_DOMAINS = new Set([
   "aol.com",
   "proton.me",
   "protonmail.com",
+  "pm.me",
+  "tuta.com",
+  "tutanota.com",
   "gmx.com",
   "gmx.net",
   "zoho.com",
@@ -765,7 +775,13 @@ export function emailDomain(email: string): string {
 }
 
 export function isFreeEmailDomain(domain: string): boolean {
-  return FREE_EMAIL_DOMAINS.has(domain.toLowerCase());
+  const normalized = domain.trim().toLowerCase();
+  if (!normalized) return false;
+  if (FREE_EMAIL_DOMAINS.has(normalized)) return true;
+  for (const free of FREE_EMAIL_DOMAINS) {
+    if (normalized.endsWith(`.${free}`)) return true;
+  }
+  return false;
 }
 
 /** Rekord DNS TXT potwierdzający domenę firmy: `_monorise-verification.<domena>` = `monorise-verification=<kod>`. */

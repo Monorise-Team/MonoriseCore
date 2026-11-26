@@ -14,6 +14,8 @@ import {
   AUDIT_LOG_RETENTION_MS,
   AuditActorType,
   AuditLogEntry,
+  canManageOrganizationAssignments,
+  canManageOrganizationSnapshot,
   CORE_PERMISSIONS,
   CORE_ROLE_TEMPLATES,
   CopyRole,
@@ -90,11 +92,174 @@ describe("adresy e-mail", () => {
     expect(normalizeEmail("  Anna@Acme.com ")).toBe("anna@acme.com");
   });
 
-  it("odrzuca darmowe skrzynki, także polskie", () => {
-    for (const domain of ["gmail.com", "WP.pl", "onet.pl", "interia.pl", "o2.pl"]) {
-      expect(isFreeEmailDomain(domain)).toBe(true);
+  it("odrzuca darmowe skrzynki, polskie, nowe domeny i ich subdomeny", () => {
+    for (const domain of [
+      "gmail.com",
+      "WP.pl",
+      "onet.pl",
+      "interia.pl",
+      "o2.pl",
+      "pm.me",
+      "tuta.com",
+      "tutanota.com",
+      "mail.gmail.com",
+      "sub.a.proton.me",
+      "mail.wp.pl",
+      "  team.pm.me  ",
+      "desk.tuta.com",
+      "legacy.tutanota.com",
+    ]) {
+      expect(isFreeEmailDomain(domain), `Powinno odrzucić ${domain}`).toBe(true);
     }
-    expect(isFreeEmailDomain("acme.com")).toBe(false);
+    for (const allowed of ["acme.com", "notgmail.com", "my-tuta.com", "fpm.me", "company-wp.pl"]) {
+      expect(isFreeEmailDomain(allowed), `Powinno przepuścić ${allowed}`).toBe(false);
+    }
+  });
+});
+
+describe("uprawnienia core.organization.manage", () => {
+  const now = new Date("2026-11-26T12:00:00.000Z");
+
+  it("przyznaje dostęp Ownerowi lub kontu z aktywnym zakresem ORGANIZATION, odrzuca UNIT/RESOURCE, wygasłe i wycofane", () => {
+    expect(
+      canManageOrganizationAssignments({
+        accountId: UUID_1,
+        organizationId: UUID_2,
+        isOwner: true,
+        authzRevision: 0,
+        assignments: [],
+        now,
+      }),
+    ).toBe(true);
+
+    expect(
+      canManageOrganizationAssignments({
+        accountId: UUID_1,
+        organizationId: UUID_2,
+        isOwner: false,
+        authzRevision: 0,
+        assignments: [
+          {
+            scopeType: "ORGANIZATION",
+            scopeId: null,
+            validFrom: null,
+            validUntil: null,
+            role: {
+              archivedAt: null,
+              permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+            },
+          },
+        ],
+        now,
+      }),
+    ).toBe(true);
+
+    // Zakres UNIT lub RESOURCE nie wystarcza dla operacji na poziomie całej firmy
+    for (const scope of [
+      { scopeType: "UNIT" as const, scopeId: UUID_3 },
+      { scopeType: "RESOURCE" as const, scopeId: "res_1" },
+    ]) {
+      expect(
+        canManageOrganizationAssignments({
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          isOwner: false,
+          authzRevision: 0,
+          assignments: [
+            {
+              ...scope,
+              validFrom: null,
+              validUntil: null,
+              role: {
+                archivedAt: null,
+                permissions: [
+                  { permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } },
+                ],
+              },
+            },
+          ],
+          now,
+        }),
+      ).toBe(false);
+    }
+
+    // Zarchiwizowana rola, wycofane uprawnienie, wygasłe lub przyszłe przypisanie -> false
+    const deniedCases = [
+      {
+        role: {
+          archivedAt: new Date("2026-11-25T00:00:00.000Z"),
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: null,
+        validUntil: null,
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [
+            {
+              permission: {
+                key: CORE_PERMISSIONS.keys["organization.manage"],
+                deprecatedAt: new Date("2026-11-25T00:00:00.000Z"),
+              },
+            },
+          ],
+        },
+        validFrom: null,
+        validUntil: null,
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: null,
+        validUntil: new Date("2026-11-26T11:59:59.000Z"),
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: new Date("2026-11-26T12:00:01.000Z"),
+        validUntil: null,
+      },
+    ];
+    for (const c of deniedCases) {
+      expect(
+        canManageOrganizationAssignments({
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          isOwner: false,
+          authzRevision: 0,
+          assignments: [{ scopeType: "ORGANIZATION", scopeId: null, ...c }],
+          now,
+        }),
+      ).toBe(false);
+    }
+
+    // Bezpośrednia ocena gotowej migawki
+    expect(
+      canManageOrganizationSnapshot(
+        {
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          authzRevision: 1,
+          isOwner: false,
+          products: ["core"],
+          grants: [
+            {
+              permission: CORE_PERMISSIONS.keys["organization.manage"],
+              scope: { type: "ORGANIZATION" },
+              validFrom: null,
+              validUntil: null,
+            },
+          ],
+          units: [],
+        },
+        now,
+      ),
+    ).toBe(true);
   });
 });
 
