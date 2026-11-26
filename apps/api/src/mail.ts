@@ -45,13 +45,24 @@ export function isLocalMailSink(smtpUrl: string = currentSmtpUrl()): boolean {
   }
 }
 
+/**
+ * Limity czasu rozmowy z serwerem SMTP. Razem (do ok. 40 s) są krótsze niż dzierżawa zadania kolejki poczty
+ * (`MAIL_LEASE_MS`, 60 s), więc zawieszony serwer nie pozwoli drugiemu procesowi przejąć tego samego zadania
+ * i wysłać drugiego linku w trakcie pierwszej próby. Domyślne limity `nodemailer` sięgają minut.
+ */
+export const SMTP_TIMEOUTS = {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
+} as const;
+
 export async function sendMail(mail: OutgoingMail): Promise<void> {
   const smtpUrl = currentSmtpUrl();
   if (smtpUrl === "memory") {
     memory.push(mail);
     return;
   }
-  const transport = nodemailer.createTransport(smtpUrl);
+  const transport = nodemailer.createTransport({ url: smtpUrl, ...SMTP_TIMEOUTS });
   await transport.sendMail({ from: currentMailFrom(), ...mail });
 }
 

@@ -10,11 +10,13 @@ import {
   MAIL_CLEANUP_MIN_INTERVAL_MS,
   MAIL_CLEANUP_RETENTION_MS,
   MAIL_LAST_ERROR_MAX_LENGTH,
+  MAIL_LEASE_MS,
   MAX_MAIL_OUTBOX_INTERVAL_MS,
   parseMailOutboxIntervalMs,
   startMailOutboxWorker,
   type DeliverPendingMailSummary,
 } from "../src/mail-outbox.js";
+import { SMTP_TIMEOUTS } from "../src/mail.js";
 import { buildServer } from "../src/server.js";
 
 const ORG_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a71";
@@ -406,5 +408,12 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe("limity czasu SMTP", () => {
+  it("kończą próbę wysyłki przed wygaśnięciem dzierżawy zadania", () => {
+    const worstCase = SMTP_TIMEOUTS.connectionTimeout + SMTP_TIMEOUTS.greetingTimeout + SMTP_TIMEOUTS.socketTimeout;
+    expect(worstCase).toBeLessThan(MAIL_LEASE_MS);
   });
 });
