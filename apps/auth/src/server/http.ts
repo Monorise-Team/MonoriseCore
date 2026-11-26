@@ -28,7 +28,7 @@ export function fail(error: unknown) {
     failure = new CoreError("VALIDATION_FAILED", 422, "Nie udało się założyć konta z tymi danymi");
   } else {
     console.error(`[${id}]`, process.env.NODE_ENV === "production" ? (error as Error)?.name : error);
-    failure = new CoreError("INTERNAL", 500, "Wewnętrzny błąd serwera");
+    failure = new CoreError("INTERNAL_ERROR", 500, "Wewnętrzny błąd serwera");
   }
   const body: ApiResponse<null> = {
     data: null,

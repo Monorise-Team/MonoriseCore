@@ -308,7 +308,7 @@ export const ROUTES = {
     responseSchemaName: "HealthResponse",
     responseDescription: "Core API działa poprawnie.",
     errors: {
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   getOpenApi: {
@@ -328,7 +328,7 @@ export const ROUTES = {
     dataSchema: OpenApiDocument,
     responseDescription: "Dokument OpenAPI 3.1 w formacie JSON (bez koperty).",
     errors: {
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   getMe: {
@@ -347,7 +347,7 @@ export const ROUTES = {
     responseDescription: "Dane zalogowanego konta, pracownika i firmy.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   getOrganization: {
@@ -366,7 +366,7 @@ export const ROUTES = {
     responseDescription: "Dane firmy wraz z listą domen.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   transferOrganizationOwner: {
@@ -394,7 +394,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listEmployees: {
@@ -416,7 +416,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   createEmployee: {
@@ -442,7 +442,7 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listInvitations: {
@@ -476,7 +476,7 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   createInvitation: {
@@ -505,7 +505,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   resendInvitation: {
@@ -532,7 +532,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   revokeInvitation: {
@@ -555,7 +555,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listUnits: {
@@ -587,7 +587,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   createUnit: {
@@ -615,7 +615,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   updateUnit: {
@@ -645,7 +645,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listUnitMembers: {
@@ -669,7 +669,7 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   putUnitMember: {
@@ -698,7 +698,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   deleteUnitMember: {
@@ -720,7 +720,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listPermissions: {
@@ -760,7 +760,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   registerProductPermissions: {
@@ -789,7 +789,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   registerProductRoleTemplates: {
@@ -818,7 +818,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listRoles: {
@@ -865,7 +865,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   getRole: {
@@ -887,7 +887,7 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   createRole: {
@@ -915,7 +915,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   updateRole: {
@@ -944,7 +944,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   archiveRole: {
@@ -967,7 +967,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listRoleAssignments: {
@@ -1007,7 +1007,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   createRoleAssignment: {
@@ -1036,7 +1036,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   deleteRoleAssignment: {
@@ -1058,7 +1058,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   getProductPermissionSnapshot: {
@@ -1101,7 +1101,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listProductEvents: {
@@ -1148,7 +1148,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listProductDirectoryUnitMembers: {
@@ -1192,7 +1192,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listProductDirectoryEmployees: {
@@ -1236,7 +1236,7 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listEntitlements: {
@@ -1269,7 +1269,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listAppAccess: {
@@ -1316,7 +1316,7 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   grantAppAccess: {
@@ -1345,7 +1345,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   revokeAppAccess: {
@@ -1369,7 +1369,7 @@ export const ROUTES = {
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
   listAuditLog: {
