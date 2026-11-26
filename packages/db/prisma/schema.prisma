@@ -672,7 +672,10 @@ model AuditLog {
   supportAccessGrantId String?        @db.Uuid
   createdAt            DateTime       @default(now()) @db.Timestamptz(3)
 
-  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "audit_log_org_created_id_idx")
+  @@index([organizationId, actorAccountId, createdAt(sort: Desc), id(sort: Desc)], map: "audit_log_org_actor_created_id_idx")
+  @@index([organizationId, action, createdAt(sort: Desc), id(sort: Desc)], map: "audit_log_org_action_created_id_idx")
+  @@index([organizationId, resourceType, resourceId, createdAt(sort: Desc), id(sort: Desc)], map: "audit_log_org_resource_created_id_idx")
   @@map("audit_log")
   @@schema("public")
 }
