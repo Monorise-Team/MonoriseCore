@@ -17,6 +17,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
   CreateRoleFromScratch,
@@ -25,6 +26,7 @@ import {
   EVENTS_READ_SCOPE,
   DirectoryEmployee,
   DirectoryUnitMember,
+  DomainName,
   DomainStatus,
   Employee,
   EmployeeStatus,
@@ -66,8 +68,10 @@ import {
   UnitStatus,
   UnitType,
   UpdateEmployee,
+  UpdateOrganization,
   UpdateRole,
   UpdateUnit,
+  VerifyOrganizationDomain,
 } from "@core/contracts";
 import { z } from "zod";
 import {
@@ -218,8 +222,12 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("OpenApiDocument", OpenApiDocument);
   register("OrganizationStatus", OrganizationStatus);
   register("DomainStatus", DomainStatus);
+  register("DomainName", DomainName);
   register("OrganizationDomain", OrganizationDomain);
   register("Organization", Organization);
+  register("UpdateOrganization", UpdateOrganization);
+  register("CreateOrganizationDomain", CreateOrganizationDomain);
+  register("VerifyOrganizationDomain", VerifyOrganizationDomain);
   register("OrganizationOwner", OrganizationOwner);
   register("TransferOrganizationOwner", TransferOrganizationOwner);
   register("EmployeeStatus", EmployeeStatus);

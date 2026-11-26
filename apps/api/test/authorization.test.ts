@@ -7,6 +7,7 @@ import {
   assertCanDelegateRole,
   assertCanManageAppAccessForUnits,
   assertCorePermission,
+  canManageOrganization,
   canViewAllAppAccess,
   canViewAllRoleAssignments,
   hasAnyAppAccessManagePermission,
@@ -169,6 +170,40 @@ describe("authorization (reguły Core oparte na @monorise-team/permissions)", ()
     expect(() => assertCanManageAppAccessForUnits(regular, [KRAKOW_ID])).toThrow(PermissionError);
     expect(canViewAllAppAccess(regular)).toBe(false);
     expect(hasAnyAppAccessManagePermission(regular)).toBe(false);
+  });
+
+  it("egzekwuje core.organization.manage wyłącznie w zakresie całej firmy (lub dla Ownera)", () => {
+    const owner = makeSnapshot({ isOwner: true });
+    expect(canManageOrganization(owner)).toBe(true);
+    expect(() => assertCorePermission(owner, CORE_PERMISSIONS.keys["organization.manage"], {})).not.toThrow();
+
+    const orgAdmin = makeSnapshot({
+      grants: [{ permission: CORE_PERMISSIONS.keys["organization.manage"], scope: { type: "ORGANIZATION" } }],
+    });
+    expect(canManageOrganization(orgAdmin)).toBe(true);
+    expect(() => assertCorePermission(orgAdmin, CORE_PERMISSIONS.keys["organization.manage"], {})).not.toThrow();
+
+    const unitScoped = makeSnapshot({
+      grants: [
+        { permission: CORE_PERMISSIONS.keys["organization.manage"], scope: { type: "UNIT", unitId: KRAKOW_ID } },
+      ],
+    });
+    expect(canManageOrganization(unitScoped)).toBe(false);
+    expect(() => assertCorePermission(unitScoped, CORE_PERMISSIONS.keys["organization.manage"], {})).toThrow(
+      PermissionError,
+    );
+
+    const expired = makeSnapshot({
+      grants: [
+        {
+          permission: CORE_PERMISSIONS.keys["organization.manage"],
+          scope: { type: "ORGANIZATION" },
+          validUntil: new Date(Date.now() - 60_000).toISOString(),
+        },
+      ],
+    });
+    expect(canManageOrganization(expired)).toBe(false);
+    expect(canManageOrganization(makeSnapshot())).toBe(false);
   });
 
   it("wyznacza aktywność Entitlement na podstawie statusu oraz przedziału [startsAt, endsAt)", () => {

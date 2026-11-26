@@ -218,4 +218,40 @@ describe("OpenAPI Core API", () => {
     expect("actorDisplayName" in entryProps).toBe(true);
     expect("actionLabel" in entryProps).toBe(true);
   });
+
+  it("dokumentuje edycję firmy i zarządzanie domenami w tagu Organization bez ujawniania verificationTokenHash", () => {
+    expect(document.paths["/core/v1/organization"]?.patch?.operationId).toBe("updateOrganization");
+    expect(document.paths["/core/v1/organization/domains"]?.post?.operationId).toBe("addOrganizationDomain");
+    expect(document.paths["/core/v1/organization/domains/{domainId}/verify"]?.post?.operationId).toBe(
+      "verifyOrganizationDomain",
+    );
+    expect(document.paths["/core/v1/organization/domains/{domainId}"]?.delete?.operationId).toBe(
+      "deleteOrganizationDomain",
+    );
+    expect(document.paths["/core/v1/organization/domains/{domainId}/primary"]?.put?.operationId).toBe(
+      "setPrimaryOrganizationDomain",
+    );
+
+    expect(
+      document.paths["/core/v1/organization/domains/{domainId}"]?.delete?.responses["204"]?.content,
+    ).toBeUndefined();
+    expect(document.components.schemas.DomainName).toBeDefined();
+    expect(document.components.schemas.UpdateOrganization).toBeDefined();
+    expect(document.components.schemas.CreateOrganizationDomain).toBeDefined();
+    expect(document.components.schemas.VerifyOrganizationDomain).toBeDefined();
+    expect(document.components.schemas.OrganizationDomainResponse).toBeDefined();
+
+    const domainProps = (document.components.schemas.OrganizationDomain?.properties ?? {}) as Record<string, unknown>;
+    expect(Object.keys(domainProps).sort()).toEqual([
+      "domain",
+      "id",
+      "isPrimary",
+      "lastCheckedAt",
+      "status",
+      "verificationTxtName",
+      "verificationTxtValue",
+      "verifiedAt",
+    ]);
+    expect("verificationTokenHash" in domainProps).toBe(false);
+  });
 });

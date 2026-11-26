@@ -24,6 +24,8 @@ const app = buildServer({
   verifyToken: createTokenVerifier(tokenOptions),
   verifyMachineToken: createMachineTokenVerifier(tokenOptions),
   authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
+  domainVerificationSecret: required("CORE_DOMAIN_VERIFICATION_SECRET"),
+  devTrustDomains: process.env.CORE_DEV_TRUST_DOMAINS === "1" && process.env.NODE_ENV !== "production",
   logger: true,
 });
 

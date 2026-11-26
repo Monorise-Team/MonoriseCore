@@ -212,6 +212,11 @@ export function assertCorePermission(
   assertCan(snapshot, permission, target);
 }
 
+/** Czy konto może zarządzać danymi firmy i jej domenami (Owner lub `core.organization.manage` w zakresie całej firmy). */
+export function canManageOrganization(snapshot: PermissionSnapshot): boolean {
+  return snapshot.isOwner || can(snapshot, CORE_PERMISSIONS.keys["organization.manage"], {});
+}
+
 /**
  * Sprawdza uprawnienie `core.app_access.manage` dla pracownika o wskazanych jednostkach organizacyjnych:
  * - pracownik w co najmniej jednej jednostce wymaga pokrycia przynajmniej jednej z nich (`{ unitIds }`),

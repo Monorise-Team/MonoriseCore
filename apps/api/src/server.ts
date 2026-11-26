@@ -3,6 +3,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
@@ -25,8 +26,10 @@ import {
   TransferOrganizationOwner,
   UnitStatus,
   UpdateEmployee,
+  UpdateOrganization,
   UpdateRole,
   UpdateUnit,
+  VerifyOrganizationDomain,
   type ApiErrorBody,
   type ApiListResponse,
   type ApiResponse,
@@ -40,7 +43,7 @@ import {
   type Health,
   type MachineTokenClaims,
   type Me,
-  type Organization,
+  type OrganizationDomain,
   type OrganizationOwner,
   type Permission,
   type Role,
@@ -66,10 +69,24 @@ import {
   loadPermissionSnapshot,
   toGrantScope,
 } from "./authorization.js";
+import {
+  addOrganizationDomain,
+  commitVerifyOrganizationDomain,
+  deleteOrganizationDomain,
+  DomainError,
+  getOrganizationForCaller,
+  prepareVerifyOrganizationDomain,
+  setPrimaryOrganizationDomain,
+  updateOrganization,
+  type DomainServiceOptions,
+  type PreparedDomainVerification,
+  type ResolveTxtFn,
+} from "./domains.js";
 import { isEntitlementActive } from "./entitlements.js";
 import { readProductEventFeed } from "./event-feed.js";
 import {
   accountPrincipal,
+  computeRequestHash,
   executeWithIdempotency,
   extractIdempotencyKeyHeader,
   IdempotencyError,
@@ -110,6 +127,12 @@ export interface ServerOptions {
   logger?: boolean;
   /** Adres serwera logowania używany do budowania linków zaproszeń (`CORE_AUTH_URL`). */
   authUrl?: string | undefined;
+  /** Sekret HMAC-SHA256 do wyliczania rekordów DNS TXT domen (`CORE_DOMAIN_VERIFICATION_SECRET`). */
+  domainVerificationSecret?: string | undefined;
+  /** Tylko lokalnie: czy zezwolić na `trustLocally: true` w weryfikacji domeny (`CORE_DEV_TRUST_DOMAINS=1`). */
+  devTrustDomains?: boolean | undefined;
+  /** Nadpisanie funkcji odpytywania DNS TXT (np. w testach). */
+  resolveTxt?: ResolveTxtFn | undefined;
   /** Nadpisanie nadawcy wiadomości e-mail (np. w testach). */
   mailer?: MailSender | undefined;
   /** Nadpisanie bieżącego czasu (do deterministycznych testów wygasania zaproszeń). */
@@ -139,6 +162,7 @@ const RoleIdParams = z.object({ roleId: z.uuid() });
 const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
 const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
 const InvitationIdParams = z.object({ invitationId: z.uuid() });
+const DomainIdParams = z.object({ domainId: z.uuid() });
 const ListInvitationsFilter = z.object({ status: InvitationStatus.optional() });
 const PermissionSnapshotQuery = z.object({
   organizationId: z.uuid(),
@@ -584,12 +608,20 @@ export function buildServer({
   verifyMachineToken,
   logger = false,
   authUrl,
+  domainVerificationSecret = process.env.CORE_DOMAIN_VERIFICATION_SECRET,
+  devTrustDomains = false,
+  resolveTxt,
   mailer,
   now: getNow = () => new Date(),
   onRoute,
 }: ServerOptions): FastifyInstance {
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
   const openApiDocument = buildOpenApiDocument();
+  const domainOptions: DomainServiceOptions = {
+    domainVerificationSecret,
+    devTrustDomains,
+    resolveTxt,
+  };
 
   if (onRoute) {
     app.addHook("onRoute", onRoute);
@@ -616,13 +648,15 @@ export function buildServer({
           ? new ApiFailure(error.status, error.code, error.message, error.details)
           : error instanceof InvitationError
             ? new ApiFailure(error.status, error.code, error.message, error.details)
-            : error instanceof PermissionError
-              ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
-              : statusCode === 404
-                ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-                : statusCode === 400
-                  ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-                  : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
+            : error instanceof DomainError
+              ? new ApiFailure(error.status, error.code, error.message, error.details)
+              : error instanceof PermissionError
+                ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+                : statusCode === 404
+                  ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+                  : statusCode === 400
+                    ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+                    : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -713,9 +747,20 @@ export function buildServer({
    * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx, kroki odłożone przez `defer`
    * przed `COMMIT` i odtwarzanie z `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu.
    */
-  function registerPostRoute<TData>(
+  function registerPostRoute<TData, TPrepared = undefined>(
     route: BearerPostRoute,
-    execute: (ctx: { request: FastifyRequest; who: Caller; tx: Tx; now: Date; defer: DeferFn }) => Promise<TData>,
+    execute: (ctx: {
+      request: FastifyRequest;
+      who: Caller;
+      tx: Tx;
+      now: Date;
+      defer: DeferFn;
+      prepared: TPrepared;
+    }) => Promise<TData>,
+    options?: {
+      /** Krok wykonywany poza długą transakcją (np. zapytanie DNS); pomijany przy odtworzeniu `Idempotency-Key`. */
+      prepare?: (ctx: { request: FastifyRequest; who: Caller; now: Date }) => Promise<TPrepared>;
+    },
   ): void {
     app.route({
       method: route.method,
@@ -726,12 +771,15 @@ export function buildServer({
         const idempotencyKey = parseIdempotencyKeyHeader(extractIdempotencyKeyHeader(request));
 
         if (idempotencyKey === null) {
+          const prepared = options?.prepare
+            ? await options.prepare({ request, who, now: getNow() })
+            : (undefined as TPrepared);
           const data = await withOrganization(db, who.organizationId, async (tx) => {
             const deferred: (() => Promise<void>)[] = [];
             const defer: DeferFn = (fn) => {
               deferred.push(fn);
             };
-            const result = await execute({ request, who, tx, now: getNow(), defer });
+            const result = await execute({ request, who, tx, now: getNow(), defer, prepared });
             for (const fn of deferred) {
               await fn();
             }
@@ -749,6 +797,43 @@ export function buildServer({
             ? (request.params as Record<string, unknown>)
             : undefined;
 
+        if (options?.prepare) {
+          const requestHash = computeRequestHash(route.method, route.path, request.body, params);
+          const existingReplay = await withOrganization(db, who.organizationId, async (tx) => {
+            const existing = await tx.idempotencyKey.findUnique({
+              where: {
+                organizationId_principal_key: {
+                  organizationId: who.organizationId,
+                  principal: accountPrincipal(who.accountId),
+                  key: idempotencyKey,
+                },
+              },
+            });
+            if (!existing || existing.expiresAt.getTime() <= getNow().getTime()) {
+              return null;
+            }
+            if (existing.requestHash !== requestHash) {
+              throw new IdempotencyError(
+                409,
+                "CONFLICT",
+                "Ten klucz Idempotency-Key był już użyty z inną treścią żądania.",
+              );
+            }
+            return { status: existing.responseStatus, body: existing.responseBody };
+          });
+          if (existingReplay) {
+            void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+            if (existingReplay.status === 204) {
+              return reply.status(204).send();
+            }
+            return reply.status(existingReplay.status).send(existingReplay.body);
+          }
+        }
+
+        const prepared = options?.prepare
+          ? await options.prepare({ request, who, now: getNow() })
+          : (undefined as TPrepared);
+
         const outcome = await executeWithIdempotency({
           db,
           organizationId: who.organizationId,
@@ -760,7 +845,7 @@ export function buildServer({
           params,
           getNow,
           run: async (tx, defer, now) => {
-            const data = await execute({ request, who, tx, now, defer });
+            const data = await execute({ request, who, tx, now, defer, prepared });
             return {
               status: route.successStatus,
               body: route.successStatus === 204 ? null : send(request, data),
@@ -827,23 +912,66 @@ export function buildServer({
     handler: async (request) => {
       const who = await caller(request);
       const organization = await withOrganization(db, who.organizationId, (tx) =>
-        tx.organization.findUniqueOrThrow({
-          where: { id: who.organizationId },
-          include: { domains: { orderBy: { createdAt: "asc" } } },
-        }),
+        getOrganizationForCaller(tx, who, domainOptions),
       );
-      return send(request, {
-        id: organization.id,
-        name: organization.name,
-        status: organization.status,
-        createdAt: organization.createdAt.toISOString(),
-        domains: organization.domains.map((d) => ({
-          domain: d.domain,
-          status: d.status,
-          isPrimary: d.isPrimary,
-          verifiedAt: d.verifiedAt?.toISOString() ?? null,
-        })),
-      } satisfies Organization);
+      return send(request, organization);
+    },
+  });
+
+  app.route({
+    method: ROUTES.updateOrganization.method,
+    url: toFastifyPath(ROUTES.updateOrganization.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const body = parseInput(UpdateOrganization, request.body);
+      const updated = await withOrganization(db, who.organizationId, (tx) =>
+        updateOrganization(tx, request, who, body, domainOptions),
+      );
+      return send(request, updated);
+    },
+  });
+
+  registerPostRoute(ROUTES.addOrganizationDomain, async ({ request, who, tx, now }) => {
+    const body = parseInput(CreateOrganizationDomain, request.body);
+    return addOrganizationDomain(tx, request, who, body, now, domainOptions);
+  });
+
+  registerPostRoute<OrganizationDomain, PreparedDomainVerification>(
+    ROUTES.verifyOrganizationDomain,
+    async ({ request, who, tx, now, prepared }) =>
+      commitVerifyOrganizationDomain(tx, request, who, prepared, now, domainOptions),
+    {
+      prepare: async ({ request, who, now }) => {
+        const params = parseInput(DomainIdParams, request.params);
+        const body = parseInput(VerifyOrganizationDomain, request.body === undefined ? {} : request.body);
+        return prepareVerifyOrganizationDomain(db, who, params.domainId, body, now, domainOptions);
+      },
+    },
+  );
+
+  app.route({
+    method: ROUTES.deleteOrganizationDomain.method,
+    url: toFastifyPath(ROUTES.deleteOrganizationDomain.path),
+    handler: async (request, reply) => {
+      const who = await caller(request);
+      const params = parseInput(DomainIdParams, request.params);
+      await withOrganization(db, who.organizationId, (tx) =>
+        deleteOrganizationDomain(tx, request, who, params.domainId),
+      );
+      return reply.status(204).send();
+    },
+  });
+
+  app.route({
+    method: ROUTES.setPrimaryOrganizationDomain.method,
+    url: toFastifyPath(ROUTES.setPrimaryOrganizationDomain.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const params = parseInput(DomainIdParams, request.params);
+      const organization = await withOrganization(db, who.organizationId, (tx) =>
+        setPrimaryOrganizationDomain(tx, request, who, params.domainId, domainOptions),
+      );
+      return send(request, organization);
     },
   });
 

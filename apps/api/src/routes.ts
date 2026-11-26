@@ -9,6 +9,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
   CreateUnit,
@@ -34,6 +35,7 @@ import {
   MAX_PAGE_LIMIT,
   Me,
   Organization,
+  OrganizationDomain,
   OrganizationOwner,
   PageCursor,
   PageLimit,
@@ -54,8 +56,10 @@ import {
   UnitMember,
   UnitStatus,
   UpdateEmployee,
+  UpdateOrganization,
   UpdateRole,
   UpdateUnit,
+  VerifyOrganizationDomain,
   type ErrorCode,
 } from "@core/contracts";
 import { z } from "zod";
@@ -86,7 +90,10 @@ export const TAGS: readonly TagDefinition[] = [
   { name: "System", description: "Stan usługi i opis OpenAPI." },
   { name: "People", description: "Pracownicy i konta; tu także dane zalogowanego konta." },
   { name: "Invitations", description: "Zaproszenia pracowników do aktywacji konta INVITED (ADR-0021)." },
-  { name: "Organization", description: "Firma zalogowanego użytkownika oraz przekazanie roli Ownera." },
+  {
+    name: "Organization",
+    description: "Firma zalogowanego użytkownika, jej dane, domeny e-mail oraz przekazanie roli Ownera.",
+  },
   { name: "Structure", description: "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie." },
   { name: "Permissions", description: "Rejestr uprawnień oraz migawka uprawnień dla produktów (ADR-0036)." },
   {
@@ -242,6 +249,14 @@ const INVITATION_ID_PARAM: ParameterDefinition = {
   schema: UuidParam,
 };
 
+const DOMAIN_ID_PARAM: ParameterDefinition = {
+  name: "domainId",
+  in: "path",
+  required: true,
+  description: "Identyfikator domeny firmy (UUID v7).",
+  schema: UuidParam,
+};
+
 const PAGE_PARAMETERS: readonly ParameterDefinition[] = [
   {
     name: "limit",
@@ -357,7 +372,10 @@ export const ROUTES = {
     operationId: "getOrganization",
     tag: "Organization",
     summary: "Pobierz firmę zalogowanego użytkownika",
-    description: "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania.",
+    description:
+      "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania. " +
+      "Pola `verificationTxtName` i `verificationTxtValue` dla niezweryfikowanych domen są zwracane wyłącznie " +
+      "Ownerowi albo kontom z uprawnieniem `core.organization.manage` w zakresie całej firmy.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -367,6 +385,145 @@ export const ROUTES = {
     responseDescription: "Dane firmy wraz z listą domen.",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  updateOrganization: {
+    method: "PATCH",
+    path: `${API_PREFIX}/organization`,
+    operationId: "updateOrganization",
+    tag: "Organization",
+    summary: "Zmień dane firmy",
+    description:
+      "Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` " +
+      "w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    requestBodySchemaName: "UpdateOrganization",
+    requestBodySchema: UpdateOrganization,
+    requestBodyDescription: "Pola firmy do aktualizacji.",
+    dataSchemaName: "Organization",
+    dataSchema: Organization,
+    responseSchemaName: "OrganizationResponse",
+    responseDescription: "Zaktualizowane dane firmy wraz z listą domen.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  addOrganizationDomain: {
+    method: "POST",
+    path: `${API_PREFIX}/organization/domains`,
+    operationId: "addOrganizationDomain",
+    tag: "Organization",
+    summary: "Dodaj domenę e-mail do firmy",
+    description:
+      "Dodaje niezweryfikowaną domenę (`PENDING`, weryfikacja rekordem DNS TXT, `isPrimary = false`) do firmy " +
+      "i zwraca dane rekordu TXT do publikacji. Odrzuca darmowe skrzynki pocztowe (`422 EMAIL_DOMAIN_NOT_ALLOWED`), " +
+      "domeny zajęte przez jakąkolwiek firmę (`409 CONFLICT` bez ujawniania właściciela, ADR-0019) oraz przekroczenie " +
+      "limitu 20 domen. Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 201,
+    envelope: true,
+    requestBodySchemaName: "CreateOrganizationDomain",
+    requestBodySchema: CreateOrganizationDomain,
+    requestBodyDescription: "Nazwa nowej domeny e-mail firmy.",
+    dataSchemaName: "OrganizationDomain",
+    dataSchema: OrganizationDomain,
+    responseSchemaName: "OrganizationDomainResponse",
+    responseDescription: "Dodana domena firmy z instrukcją rekordu DNS TXT.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED", "EMAIL_DOMAIN_NOT_ALLOWED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  verifyOrganizationDomain: {
+    method: "POST",
+    path: `${API_PREFIX}/organization/domains/{domainId}/verify`,
+    operationId: "verifyOrganizationDomain",
+    tag: "Organization",
+    summary: "Zweryfikuj domenę firmy rekordem DNS TXT",
+    description:
+      "Sprawdza rekord DNS TXT (`_monorise-verification.<domena>`) wskazanej domeny firmy (z limitem czasu 5 s) " +
+      "albo — wyłącznie lokalnie przy `CORE_DEV_TRUST_DOMAINS=1` poza produkcją — potwierdza ją z `trustLocally: true`. " +
+      "Brak pasującego rekordu utrwala `lastCheckedAt` i zwraca `422 VALIDATION_FAILED`. Powtórzenie dla już " +
+      "zweryfikowanej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej " +
+      "firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [DOMAIN_ID_PARAM],
+    requestBodySchemaName: "VerifyOrganizationDomain",
+    requestBodySchema: VerifyOrganizationDomain,
+    requestBodyDescription: "Opcje weryfikacji domeny (lokalne pominięcie DNS przez `trustLocally`).",
+    dataSchemaName: "OrganizationDomain",
+    dataSchema: OrganizationDomain,
+    responseSchemaName: "OrganizationDomainResponse",
+    responseDescription: "Zweryfikowana domena firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  deleteOrganizationDomain: {
+    method: "DELETE",
+    path: `${API_PREFIX}/organization/domains/{domainId}`,
+    operationId: "deleteOrganizationDomain",
+    tag: "Organization",
+    summary: "Usuń niegłówną domenę firmy",
+    description:
+      "Trwale usuwa niegłówną i nieużywaną domenę firmy (zwalniając ją do ponownego użycia). Zwraca `409 CONFLICT`, " +
+      "gdy domena jest domeną główną, ostatnią zweryfikowaną domeną firmy albo gdy jakikolwiek pracownik (`workEmail`), " +
+      "konto (`normalizedEmail`) lub oczekujące zaproszenie używa adresu w tej domenie (ADR-0019). Wymaga uprawnienia " +
+      "`core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 204,
+    envelope: false,
+    parameters: [DOMAIN_ID_PARAM],
+    responseDescription: "Domena firmy została usunięta.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  setPrimaryOrganizationDomain: {
+    method: "PUT",
+    path: `${API_PREFIX}/organization/domains/{domainId}/primary`,
+    operationId: "setPrimaryOrganizationDomain",
+    tag: "Organization",
+    summary: "Ustaw główną domenę firmy",
+    description:
+      "Ustawia wskazaną zweryfikowaną domenę jako główną domenę firmy (`isPrimary = true`), atomowo zdejmując flagę " +
+      "z poprzedniej głównej domeny. Niezweryfikowana domena zwraca `409 CONFLICT`; powtórzenie dla bieżącej głównej " +
+      "domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [DOMAIN_ID_PARAM],
+    dataSchemaName: "Organization",
+    dataSchema: Organization,
+    responseSchemaName: "OrganizationResponse",
+    responseDescription: "Dane firmy ze zaktualizowaną główną domeną.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
       500: ["INTERNAL_ERROR"],
     },
   },

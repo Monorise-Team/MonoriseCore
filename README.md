@@ -19,7 +19,40 @@ pnpm dev
 - Core API: http://localhost:3200/core/v1/health,
 - maile (potwierdzenie adresu): http://localhost:8125.
 
-Lokalnie domenę firmy można potwierdzić bez rekordu DNS (przycisk „Potwierdź bez DNS”).
+Lokalnie domenę firmy można potwierdzić bez rekordu DNS (przycisk „Potwierdź bez DNS”, sterowany zmienną `CORE_DEV_TRUST_DOMAINS=1` w `apps/auth` i `apps/api`).
+
+## Zmienne środowiskowe
+
+Polecenie `pnpm setup:env` tworzy lokalne pliki `.env.local` (istniejących nie nadpisuje) ze wspólnym sekretem `CORE_DOMAIN_VERIFICATION_SECRET` dla `apps/auth` i `apps/api`.
+
+### `apps/auth`
+
+| Zmienna                           | Wymagana | Opis                                                                                                                                     |
+| --------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`              | tak      | Sekret sesji i podpisów Better Auth (nigdy nie trafia do `apps/api`).                                                                    |
+| `CORE_DOMAIN_VERIFICATION_SECRET` | zalecana | Wspólny z `apps/api` sekret HMAC-SHA256 do rekordów DNS TXT weryfikacji domen; gdy nieustawiona, `apps/auth` używa `BETTER_AUTH_SECRET`. |
+| `BETTER_AUTH_URL`                 | nie      | Publiczny adres serwera logowania (`iss` tokenów JWT, domyślnie `http://localhost:3100`).                                                |
+| `CORE_DATABASE_URL`               | tak      | Połączenie PostgreSQL roli `core_app` (bez uprawnień właściciela i `BYPASSRLS`).                                                         |
+| `CORE_TOKEN_AUDIENCE`             | nie      | Odbiorcy tokenów JWT rozdzieleni przecinkami (domyślnie `http://localhost:3200`).                                                        |
+| `CORE_SMTP_URL`                   | nie      | Transport poczty (`smtp://…` albo `memory`, domyślnie `memory`).                                                                         |
+| `CORE_MAIL_FROM`                  | nie      | Nadawca wiadomości e-mail (domyślnie `Monorise <no-reply@monorise.studio>`).                                                             |
+| `CORE_DEV_TRUST_DOMAINS`          | nie      | `1` poza produkcją (`NODE_ENV !== "production"`) włącza potwierdzanie głównej domeny bez DNS (`trustLocally: true`).                     |
+
+### `apps/api`
+
+| Zmienna                                | Wymagana | Opis                                                                                                                            |
+| -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `CORE_DATABASE_URL`                    | tak      | Połączenie PostgreSQL roli `core_app` (wszystkie dane firm przez RLS).                                                          |
+| `CORE_DOMAIN_VERIFICATION_SECRET`      | tak      | Wspólny z `apps/auth` sekret HMAC-SHA256 do wyliczania rekordów DNS TXT weryfikacji domen firmy.                                |
+| `CORE_AUTH_ISSUER`                     | tak      | Wystawca tokenów JWT (`iss`, np. `http://localhost:3100`).                                                                      |
+| `CORE_AUTH_JWKS_URL`                   | tak      | Adres kluczy publicznych JWKS serwera logowania.                                                                                |
+| `CORE_AUTH_URL`                        | nie      | Adres serwera logowania do linków zaproszeń (domyślnie `CORE_AUTH_ISSUER`).                                                     |
+| `CORE_API_AUDIENCE`                    | tak      | Oczekiwany odbiorca tokenów JWT (`aud`, np. `http://localhost:3200`).                                                           |
+| `CORE_SMTP_URL`                        | nie      | Transport poczty dla zaproszeń (`smtp://…` albo `memory`).                                                                      |
+| `CORE_MAIL_FROM`                       | nie      | Nadawca wiadomości e-mail (domyślnie `Monorise <no-reply@monorise.studio>`).                                                    |
+| `CORE_DEV_TRUST_DOMAINS`               | nie      | `1` poza produkcją (`NODE_ENV !== "production"`) włącza lokalne potwierdzanie domen (`trustLocally: true`) w `POST .../verify`. |
+| `CORE_OUTBOX_PUBLISH_INTERVAL_MS`      | nie      | Odstęp wysyłki zdarzeń outbox w ms (domyślnie `1000`, `0` wyłącza).                                                             |
+| `CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS` | nie      | Odstęp sprzątania wygasłych kluczy `Idempotency-Key` w ms (domyślnie 1 godzina, `0` wyłącza).                                   |
 
 ## Logowanie produktów przez Core
 
@@ -50,7 +83,8 @@ Każda firma ma jednego Ownera (`Organization.ownerAccountId`, ustawianego przy 
 
 Dostępne endpointy Core API (`/core/v1`):
 
-- `GET /core/v1/me`, `GET /core/v1/organization` — konto (z `isOwner`), pracownik i firma,
+- `GET /core/v1/me`, `GET /core/v1/organization`, `PATCH /core/v1/organization` — konto (z `isOwner`), pracownik oraz odczyt i zmiana nazwy firmy (`core.organization.manage` w zakresie `ORGANIZATION` albo Owner),
+- `POST /core/v1/organization/domains`, `POST /core/v1/organization/domains/{domainId}/verify`, `PUT /core/v1/organization/domains/{domainId}/primary`, `DELETE /core/v1/organization/domains/{domainId}` — zarządzanie domenami e-mail firmy (limit 20 domen, weryfikacja DNS TXT lub lokalne `trustLocally`, atomowa zmiana głównej domeny, blokada usunięcia głównej, ostatniej zweryfikowanej i używanej domeny; wymaga `core.organization.manage` w zakresie `ORGANIZATION` albo Ownera; w `GET /core/v1/organization` instrukcje DNS TXT dla niezweryfikowanych domen widzą wyłącznie konta z tym uprawnieniem albo Owner),
 - `GET /core/v1/employees`, `POST /core/v1/employees`, `PATCH /core/v1/employees/{employeeId}` — stronicowana lista, dodawanie i edycja danych pracowników (z weryfikacją domeny `workEmail` i synchronizacją nazwy konta logowania),
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
