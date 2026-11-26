@@ -6,6 +6,7 @@ import {
   domainOwner,
   hashToken,
   invitationByTokenHash,
+  releaseCompetingDomainClaims,
   uuidv7,
   withOrganization,
 } from "../src/index.js";
@@ -405,7 +406,8 @@ describe("separacja firm (RLS)", () => {
       organizationStatus: "PENDING_VERIFICATION",
     });
     expect(await accountClaims(db, uuidv7())).toBeNull();
-    expect(await domainOwner(db, acme.domain.toUpperCase())).toEqual({ organizationId: acme.id, status: "PENDING" });
+    // Zasada „wygrywa weryfikacja”: domain_owner zwraca wyłącznie domeny ze statusem VERIFIED
+    expect(await domainOwner(db, acme.domain.toUpperCase())).toBeNull();
     expect(await domainOwner(db, "nieznana-domena.test")).toBeNull();
   });
 });
@@ -1967,8 +1969,8 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
   });
 });
 
-describe("domeny firm (częściowy indeks jednej domeny głównej i RLS)", () => {
-  it("egzekwuje co najwyżej jedną domenę główną na firmę oraz izoluje UPDATE/DELETE między firmami", async () => {
+describe("domeny firm (indeksy „wygrywa weryfikacja”, jedna domena główna, RLS i zwalnianie roszczeń)", () => {
+  it("egzekwuje SELECT/UPDATE/DELETE RLS, unikalność per firma i co najwyżej jedną domenę główną", async () => {
     const acmeSecondId = uuidv7();
     const acmeThirdId = uuidv7();
     const acmeSecondDomain = `sec-${acmeSecondId.slice(-8)}.acme.test`;
@@ -1979,6 +1981,18 @@ describe("domeny firm (częściowy indeks jednej domeny głównej i RLS)", () =>
     );
 
     try {
+      // SELECT RLS: bez kontekstu firmy brak wierszy; firma Acme widzi tylko własne domeny, nigdy Globex
+      expect(await db.organizationDomain.findMany()).toEqual([]);
+      const acmeDomains = await withOrganization(db, acme.id, (tx) => tx.organizationDomain.findMany());
+      expect(acmeDomains.length).toBeGreaterThanOrEqual(1);
+      expect(acmeDomains.every((d) => d.organizationId === acme.id)).toBe(true);
+      expect(acmeDomains.map((d) => d.id)).not.toContain(globexPrimary.id);
+      expect(
+        await withOrganization(db, acme.id, (tx) =>
+          tx.organizationDomain.findUnique({ where: { id: globexPrimary.id } }),
+        ),
+      ).toBeNull();
+
       // Próba dodania drugiej domeny głównej w tej samej firmie -> naruszenie częściowego indeksu unikalnego
       await expect(
         withOrganization(db, acme.id, (tx) =>
@@ -2018,6 +2032,22 @@ describe("domeny firm (częściowy indeks jednej domeny głównej i RLS)", () =>
           },
         });
       });
+
+      // Duplikat tej samej domeny (bez względu na wielkość liter) w obrębie jednej firmy -> odrzucony
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.organizationDomain.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              domain: acmeThirdDomain.toUpperCase(),
+              status: "PENDING",
+              verificationMethod: "DNS_TXT",
+              isPrimary: false,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/organization_domains_organizationId_domain_key|unique|duplicate/i);
 
       // Próba ustawienia isPrimary = true bez wcześniejszego zdjęcia flagi z obecnej głównej -> błąd unikalności
       await expect(
@@ -2063,6 +2093,144 @@ describe("domeny firm (częściowy indeks jednej domeny głównej i RLS)", () =>
       await withOrganization(db, acme.id, (tx) =>
         tx.organizationDomain.deleteMany({ where: { id: { in: [acmeSecondId, acmeThirdId] } } }),
       );
+    }
+  });
+
+  it("wspiera zasadę „wygrywa weryfikacja”, globalną unikalność wyłącznie VERIFIED oraz bezpieczne releaseCompetingDomainClaims", async () => {
+    const sharedDomain = `shared-${uuidv7().slice(-8)}.claim.test`;
+    const acmeClaimId = uuidv7();
+    const globexClaimId = uuidv7();
+    const pendingOrgId = uuidv7();
+    const pendingPrimaryId = uuidv7();
+    const pendingEmpId = uuidv7();
+    const pendingAccId = uuidv7();
+    const pendingEmail = `signup@${sharedDomain}`;
+
+    await db.authUser.create({
+      data: { id: pendingAccId, name: "Anna Signup", email: pendingEmail, emailVerified: true },
+    });
+
+    try {
+      // Trzy firmy równocześnie zgłaszają niezweryfikowane roszczenie do tej samej domeny:
+      // Acme (niegłówna PENDING), Globex (niegłówna FAILED) oraz PendingSignup (główna PENDING — rejestracja w toku)
+      await withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.create({
+          data: {
+            id: acmeClaimId,
+            organizationId: acme.id,
+            domain: sharedDomain,
+            status: "PENDING",
+            verificationMethod: "DNS_TXT",
+            isPrimary: false,
+          },
+        }),
+      );
+      await withOrganization(db, globex.id, (tx) =>
+        tx.organizationDomain.create({
+          data: {
+            id: globexClaimId,
+            organizationId: globex.id,
+            domain: sharedDomain.toUpperCase(),
+            status: "FAILED",
+            verificationMethod: "DNS_TXT",
+            isPrimary: false,
+          },
+        }),
+      );
+      await withOrganization(db, pendingOrgId, async (tx) => {
+        await tx.organization.create({
+          data: { id: pendingOrgId, name: "PendingSignup", createdVia: "SELF_SIGNUP", status: "PENDING_VERIFICATION" },
+        });
+        await tx.organizationDomain.create({
+          data: {
+            id: pendingPrimaryId,
+            organizationId: pendingOrgId,
+            domain: sharedDomain,
+            status: "PENDING",
+            verificationMethod: "DNS_TXT",
+            isPrimary: true,
+          },
+        });
+        await tx.employee.create({
+          data: { id: pendingEmpId, organizationId: pendingOrgId, firstName: "Anna", lastName: "Signup" },
+        });
+        await tx.account.create({
+          data: {
+            id: pendingAccId,
+            organizationId: pendingOrgId,
+            employeeId: pendingEmpId,
+            email: pendingEmail,
+            normalizedEmail: pendingEmail,
+            status: "ACTIVE",
+          },
+        });
+        await tx.organization.update({ where: { id: pendingOrgId }, data: { ownerAccountId: pendingAccId } });
+      });
+
+      // Dopóki nikt nie zweryfikował domeny, domain_owner zwraca null
+      expect(await domainOwner(db, sharedDomain.toUpperCase())).toBeNull();
+
+      // releaseCompetingDomainClaims wymaga kontekstu firmy oraz posiadania zweryfikowanego wiersza
+      await expect(releaseCompetingDomainClaims(db, sharedDomain)).rejects.toThrow(/Brak kontekstu firmy/i);
+      await expect(
+        withOrganization(db, acme.id, (tx) => releaseCompetingDomainClaims(tx, sharedDomain)),
+      ).rejects.toThrow(/nie ma zweryfikowanej domeny/i);
+
+      // Acme weryfikuje domenę -> domain_owner zwraca Acme (VERIFIED)
+      await withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.update({
+          where: { id: acmeClaimId },
+          data: { status: "VERIFIED", verifiedAt: new Date() },
+        }),
+      );
+      expect(await domainOwner(db, sharedDomain.toUpperCase())).toEqual({
+        organizationId: acme.id,
+        status: "VERIFIED",
+      });
+
+      // Częściowy indeks unikalny blokuje ustawienie VERIFIED dla innej firmy na tej samej domenie
+      await expect(
+        withOrganization(db, globex.id, (tx) =>
+          tx.organizationDomain.update({
+            where: { id: globexClaimId },
+            data: { status: "VERIFIED", verifiedAt: new Date() },
+          }),
+        ),
+      ).rejects.toThrow(/organization_domains_domain_verified_key|unique|duplicate/i);
+
+      // releaseCompetingDomainClaims usuwa wyłącznie niegłówne, niezweryfikowane roszczenia innych firm (Globex),
+      // ale zostawia główną niezweryfikowaną domenę rejestracji w toku (PendingSignup) oraz wiersz Acme
+      const removedCount = await withOrganization(db, acme.id, (tx) =>
+        releaseCompetingDomainClaims(tx, sharedDomain.toUpperCase()),
+      );
+      expect(removedCount).toBe(1);
+
+      expect(
+        await withOrganization(db, globex.id, (tx) =>
+          tx.organizationDomain.findUnique({ where: { id: globexClaimId } }),
+        ),
+      ).toBeNull();
+
+      const preservedPendingPrimary = await withOrganization(db, pendingOrgId, (tx) =>
+        tx.organizationDomain.findUnique({ where: { id: pendingPrimaryId } }),
+      );
+      expect(preservedPendingPrimary?.status).toBe("PENDING");
+      expect(preservedPendingPrimary?.isPrimary).toBe(true);
+
+      // Próba późniejszej weryfikacji przez PendingSignup również zostaje zablokowana indeksem VERIFIED
+      await expect(
+        withOrganization(db, pendingOrgId, (tx) =>
+          tx.organizationDomain.update({
+            where: { id: pendingPrimaryId },
+            data: { status: "VERIFIED", verifiedAt: new Date() },
+          }),
+        ),
+      ).rejects.toThrow(/organization_domains_domain_verified_key|unique|duplicate/i);
+    } finally {
+      await withOrganization(db, acme.id, (tx) => tx.organizationDomain.deleteMany({ where: { id: acmeClaimId } }));
+      await withOrganization(db, globex.id, (tx) => tx.organizationDomain.deleteMany({ where: { id: globexClaimId } }));
+      await withOrganization(db, pendingOrgId, (tx) => tx.organization.deleteMany({ where: { id: pendingOrgId } }));
+      await db.authUser.deleteMany({ where: { id: pendingAccId } });
     }
   });
 });

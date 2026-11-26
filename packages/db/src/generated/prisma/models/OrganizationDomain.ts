@@ -15,7 +15,10 @@ import type * as Prisma from "../internal/prismaNamespace.js"
 /**
  * Model OrganizationDomain
  * Domena e-mail przypisana do firmy (ADR-0019).
- * Co najwyżej jedna domena główna (`isPrimary = true`) na firmę (częściowy indeks unikalny w migracji).
+ * Zasada „wygrywa weryfikacja”: wiele firm może mieć niezweryfikowane roszczenie (PENDING/FAILED)
+ * do tej samej domeny; globalna unikalność dotyczy wyłącznie statusu VERIFIED (częściowy indeks
+ * `organization_domains_domain_verified_key`), a jedna firma ma co najwyżej jedną domenę główną
+ * (`organization_domains_organizationId_primary_key`).
  */
 export type OrganizationDomainModel = runtime.Types.Result.DefaultSelection<Prisma.$OrganizationDomainPayload>
 
@@ -242,11 +245,12 @@ export type OrganizationDomainOrderByWithRelationInput = {
 
 export type OrganizationDomainWhereUniqueInput = Prisma.AtLeast<{
   id?: string
-  domain?: string
+  organizationId_domain?: Prisma.OrganizationDomainOrganizationIdDomainCompoundUniqueInput
   AND?: Prisma.OrganizationDomainWhereInput | Prisma.OrganizationDomainWhereInput[]
   OR?: Prisma.OrganizationDomainWhereInput[]
   NOT?: Prisma.OrganizationDomainWhereInput | Prisma.OrganizationDomainWhereInput[]
   organizationId?: Prisma.UuidFilter<"OrganizationDomain"> | string
+  domain?: Prisma.StringFilter<"OrganizationDomain"> | string
   status?: Prisma.EnumDomainStatusFilter<"OrganizationDomain"> | $Enums.DomainStatus
   verificationMethod?: Prisma.EnumDomainVerificationMethodFilter<"OrganizationDomain"> | $Enums.DomainVerificationMethod
   verificationTokenHash?: Prisma.StringNullableFilter<"OrganizationDomain"> | string | null
@@ -255,7 +259,7 @@ export type OrganizationDomainWhereUniqueInput = Prisma.AtLeast<{
   isPrimary?: Prisma.BoolFilter<"OrganizationDomain"> | boolean
   createdAt?: Prisma.DateTimeFilter<"OrganizationDomain"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
-}, "id" | "domain">
+}, "id" | "organizationId_domain">
 
 export type OrganizationDomainOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -387,6 +391,11 @@ export type OrganizationDomainListRelationFilter = {
 
 export type OrganizationDomainOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
+}
+
+export type OrganizationDomainOrganizationIdDomainCompoundUniqueInput = {
+  organizationId: string
+  domain: string
 }
 
 export type OrganizationDomainCountOrderByAggregateInput = {

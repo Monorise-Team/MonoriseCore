@@ -85,7 +85,10 @@ export type Organization = Prisma.OrganizationModel
 /**
  * Model OrganizationDomain
  * Domena e-mail przypisana do firmy (ADR-0019).
- * Co najwyżej jedna domena główna (`isPrimary = true`) na firmę (częściowy indeks unikalny w migracji).
+ * Zasada „wygrywa weryfikacja”: wiele firm może mieć niezweryfikowane roszczenie (PENDING/FAILED)
+ * do tej samej domeny; globalna unikalność dotyczy wyłącznie statusu VERIFIED (częściowy indeks
+ * `organization_domains_domain_verified_key`), a jedna firma ma co najwyżej jedną domenę główną
+ * (`organization_domains_organizationId_primary_key`).
  */
 export type OrganizationDomain = Prisma.OrganizationDomainModel
 /**
