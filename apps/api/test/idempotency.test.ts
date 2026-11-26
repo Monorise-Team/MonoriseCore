@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { grantEntitlement } from "../src/entitlements.js";
 import { accountPrincipal, executeWithIdempotency } from "../src/idempotency.js";
 import type { OutgoingMail } from "../src/mail.js";
+import { deliverPendingMail } from "../src/mail-outbox.js";
 import { registerCorePermissions } from "../src/permissions-registry.js";
 import { buildServer } from "../src/server.js";
 import { createMachineTokenVerifier, createTokenVerifier } from "../src/tokens.js";
@@ -53,7 +54,6 @@ let acmeRegular: Identity;
 let acmeManagerRoleId: string;
 
 const mailerCalls: OutgoingMail[] = [];
-let nextMailError: Error | null = null;
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -155,15 +155,6 @@ beforeAll(async () => {
     db,
     verifyToken: createTokenVerifier(tokenOptions),
     verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-    authUrl: AUTH_URL,
-    mailer: async (mail) => {
-      mailerCalls.push(mail);
-      if (nextMailError) {
-        const err = nextMailError;
-        nextMailError = null;
-        throw err;
-      }
-    },
     now: () => currentNow,
   });
 
@@ -211,7 +202,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mailerCalls.length = 0;
-  nextMailError = null;
   currentNow = new Date("2026-11-25T10:00:00.000Z");
 });
 
@@ -291,31 +281,28 @@ describe("Nagłówek Idempotency-Key dla operacji POST Core API (MonoriseCore#30
     expect(units[0]?.id).toBe(first.json().data.id);
   });
 
-  it("powtórzone zaproszenie i /resend nie dublują e-maila, a błąd mailera wycofuje transakcję i pozwala na ponowienie z tym samym kluczem", async () => {
+  it("powtórzone zaproszenie i /resend nie dublują zadania w mail_outbox ani wysłanego e-maila", async () => {
     const ownerToken = await token(acme);
     const inviteKey = `inv-${uuidv7()}`;
     const email = `zaproszony-${uuidv7().slice(-6)}@${acme.domain}`;
     const invitePayload = { email, firstName: "Karol", lastName: "Zaproszony" };
+    const testMailer = async (mail: OutgoingMail) => {
+      mailerCalls.push(mail);
+    };
 
-    // Błąd mailera przy tworzeniu -> 500, brak zapisanego zaproszenia i brak zapisanego klucza
-    nextMailError = new Error("SMTP niedostępny");
-    const failedInvite = await post("/core/v1/invitations", ownerToken, invitePayload, inviteKey);
-    expect(failedInvite.statusCode).toBe(500);
-    expect(mailerCalls).toHaveLength(1);
-
-    const afterFailedCreate = await withOrganization(db, acme.id, (tx) =>
-      tx.invitation.findMany({ where: { normalizedEmail: email } }),
-    );
-    expect(afterFailedCreate).toHaveLength(0);
-
-    // Ponowienie z tym samym kluczem po usunięciu błędu mailera -> 201 i dokładnie 1 nowy e-mail
-    mailerCalls.length = 0;
+    // Utworzenie zaproszenia kolejkuje dokładnie 1 zadanie w mail_outbox bez wywołania SMTP w trakcie żądania
     const firstInvite = await post("/core/v1/invitations", ownerToken, invitePayload, inviteKey);
     expect(firstInvite.statusCode).toBe(201);
     expect(firstInvite.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
-    expect(mailerCalls).toHaveLength(1);
+    expect(firstInvite.json().data.delivery).toEqual({
+      status: "PENDING",
+      attempts: 0,
+      lastAttemptAt: null,
+      sentAt: null,
+    });
+    expect(mailerCalls).toHaveLength(0);
 
-    // Powtórka tworzenia -> ta sama odpowiedź, Idempotency-Replayed: true, brak drugiego e-maila
+    // Powtórka tworzenia -> ta sama odpowiedź, Idempotency-Replayed: true, brak drugiego zadania w mail_outbox
     const replayInvite = await post(
       "/core/v1/invitations",
       ownerToken,
@@ -325,7 +312,6 @@ describe("Nagłówek Idempotency-Key dla operacji POST Core API (MonoriseCore#30
     expect(replayInvite.statusCode).toBe(201);
     expect(replayInvite.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBe("true");
     expect(replayInvite.json()).toEqual(firstInvite.json());
-    expect(mailerCalls).toHaveLength(1);
 
     // Konto bez uprawnienia core.employees.manage wysyłające cudzy klucz i treść dostaje 403, nigdy powtórkę
     const regularToken = await token(acmeRegular);
@@ -333,29 +319,37 @@ describe("Nagłówek Idempotency-Key dla operacji POST Core API (MonoriseCore#30
     expect(unauthorizedReplay.statusCode).toBe(403);
     expect(unauthorizedReplay.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
     expect(unauthorizedReplay.json().error.code).toBe("PERMISSION_DENIED");
-    expect(mailerCalls).toHaveLength(1);
 
-    // /resend: błąd mailera wycofuje transakcję -> ponowienie z tym samym kluczem udaje się, a kolejna powtórka nie wysyła maila
     const invitationId = firstInvite.json().data.id as string;
+    const jobsAfterCreate = await withOrganization(db, acme.id, (tx) =>
+      tx.mailOutbox.findMany({ where: { invitationId } }),
+    );
+    expect(jobsAfterCreate).toHaveLength(1);
+
+    await deliverPendingMail(db, { authUrl: AUTH_URL, mailer: testMailer, now: currentNow });
+    expect(mailerCalls.filter((m) => m.to === email)).toHaveLength(1);
+
+    // /resend z Idempotency-Key: pierwsze wywołanie kolejkuje 1 nowe zadanie, powtórka nie dubluje
     const resendKey = `resend-${uuidv7()}`;
     mailerCalls.length = 0;
 
-    nextMailError = new Error("SMTP chwilowo niedostępny");
-    const failedResend = await post(`/core/v1/invitations/${invitationId}/resend`, ownerToken, undefined, resendKey);
-    expect(failedResend.statusCode).toBe(500);
-    expect(mailerCalls).toHaveLength(1);
-
-    mailerCalls.length = 0;
     const firstResend = await post(`/core/v1/invitations/${invitationId}/resend`, ownerToken, undefined, resendKey);
     expect(firstResend.statusCode).toBe(200);
     expect(firstResend.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBeUndefined();
-    expect(mailerCalls).toHaveLength(1);
+    expect(mailerCalls).toHaveLength(0);
 
     const replayResend = await post(`/core/v1/invitations/${invitationId}/resend`, ownerToken, undefined, resendKey);
     expect(replayResend.statusCode).toBe(200);
     expect(replayResend.headers[IDEMPOTENCY_REPLAYED_HEADER.toLowerCase()]).toBe("true");
     expect(replayResend.json()).toEqual(firstResend.json());
-    expect(mailerCalls).toHaveLength(1);
+
+    const pendingJobsAfterResend = await withOrganization(db, acme.id, (tx) =>
+      tx.mailOutbox.findMany({ where: { invitationId, status: "PENDING" } }),
+    );
+    expect(pendingJobsAfterResend).toHaveLength(1);
+
+    await deliverPendingMail(db, { authUrl: AUTH_URL, mailer: testMailer, now: currentNow });
+    expect(mailerCalls.filter((m) => m.to === email)).toHaveLength(1);
 
     // Ten sam klucz /resend dla innego invitationId -> 409 CONFLICT
     const otherTargetResend = await post(`/core/v1/invitations/${uuidv7()}/resend`, ownerToken, undefined, resendKey);

@@ -770,6 +770,23 @@ function createInMemoryDomainDb() {
             return { ...row, account: { employeeId: row.employeeId } };
           },
         },
+        mailOutbox: {
+          create: async ({
+            data,
+          }: {
+            data: {
+              id: string;
+              status?: "PENDING" | "SENT" | "FAILED" | "CANCELLED";
+              attempts?: number;
+            };
+          }) => ({
+            id: data.id,
+            status: data.status ?? "PENDING",
+            attempts: data.attempts ?? 0,
+            lastAttemptAt: null,
+            sentAt: null,
+          }),
+        },
         idempotencyKey: {
           findUnique: async ({
             where,
@@ -853,7 +870,6 @@ function buildTestApp(
     domainVerificationSecret: options.domainVerificationSecret ?? SECRET,
     devTrustDomains: options.devTrustDomains ?? false,
     resolveTxt: options.resolveTxt,
-    mailer: async () => undefined,
     now: options.now,
   });
 }

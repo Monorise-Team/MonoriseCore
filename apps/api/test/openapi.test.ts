@@ -284,4 +284,22 @@ describe("OpenAPI Core API", () => {
       expect(operation?.responses["500"]).toBeDefined();
     }
   });
+
+  it("dokumentuje stan dostarczenia Invitation.delivery (InvitationDelivery / MailDeliveryStatus) bez ujawniania lastError i tokenów", () => {
+    const invitationProps = (document.components.schemas.Invitation?.properties ?? {}) as Record<string, unknown>;
+    expect(invitationProps.delivery).toEqual({ $ref: "#/components/schemas/InvitationDelivery" });
+    expect("token" in invitationProps).toBe(false);
+    expect("tokenHash" in invitationProps).toBe(false);
+
+    const deliverySchema = document.components.schemas.InvitationDelivery;
+    expect(deliverySchema).toBeDefined();
+    const deliveryProps = (deliverySchema?.properties ?? {}) as Record<string, unknown>;
+    expect(Object.keys(deliveryProps).sort()).toEqual(["attempts", "lastAttemptAt", "sentAt", "status"]);
+    expect("lastError" in deliveryProps).toBe(false);
+
+    expect(document.components.schemas.MailDeliveryStatus).toEqual({
+      type: "string",
+      enum: ["PENDING", "SENT", "FAILED", "CANCELLED"],
+    });
+  });
 });

@@ -15,7 +15,6 @@ import { createMachineTokenVerifier, createTokenVerifier } from "../src/tokens.j
 
 const ISSUER = "http://localhost:3100";
 const AUDIENCE = "http://localhost:3200";
-const AUTH_URL = "http://localhost:3100";
 const DOMAIN_SECRET = "test-domain-verification-secret-0123456789";
 
 const db = createDb(
@@ -194,7 +193,6 @@ beforeAll(async () => {
     db,
     verifyToken: createTokenVerifier(tokenOptions),
     verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-    authUrl: AUTH_URL,
     domainVerificationSecret: DOMAIN_SECRET,
     devTrustDomains: false,
     resolveTxt,
@@ -204,7 +202,6 @@ beforeAll(async () => {
     db,
     verifyToken: createTokenVerifier(tokenOptions),
     verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-    authUrl: AUTH_URL,
     domainVerificationSecret: DOMAIN_SECRET,
     devTrustDomains: true,
     resolveTxt,

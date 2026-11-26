@@ -8,7 +8,6 @@ import { createMachineTokenVerifier, createTokenVerifier } from "../src/tokens.j
 
 const ISSUER = "http://localhost:3100";
 const AUDIENCE = "http://localhost:3200";
-const AUTH_URL = "http://localhost:3100";
 
 const db = createDb(
   process.env.CORE_TEST_APP_DATABASE_URL ?? "postgresql://core_app:core_app@localhost:5433/monorise_core_test",
@@ -154,7 +153,6 @@ beforeAll(async () => {
     db,
     verifyToken: createTokenVerifier(tokenOptions),
     verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-    authUrl: AUTH_URL,
   });
 
   acme = await createCompany("Acme");
