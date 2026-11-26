@@ -92,17 +92,17 @@ import {
   extractIdempotencyKeyHeader,
   IdempotencyError,
   parseIdempotencyKeyHeader,
-  type DeferFn,
 } from "./idempotency.js";
 import {
   createInvitation,
   InvitationError,
+  MAIL_OUTBOX_DELIVERY_SELECT,
   resendInvitation,
   revokeInvitation,
   serializeInvitation,
   type InvitationActor,
 } from "./invitations.js";
-import type { MailSender } from "./mail.js";
+import type { MailOutboxWorker } from "./mail-outbox.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
@@ -126,16 +126,14 @@ export interface ServerOptions {
   verifyToken: TokenVerifier;
   verifyMachineToken: MachineTokenVerifier;
   logger?: boolean;
-  /** Adres serwera logowania używany do budowania linków zaproszeń (`CORE_AUTH_URL`). */
-  authUrl?: string | undefined;
   /** Sekret HMAC-SHA256 do wyliczania rekordów DNS TXT domen (`CORE_DOMAIN_VERIFICATION_SECRET`). */
   domainVerificationSecret?: string | undefined;
   /** Tylko lokalnie: czy zezwolić na `trustLocally: true` w weryfikacji domeny (`CORE_DEV_TRUST_DOMAINS=1`). */
   devTrustDomains?: boolean | undefined;
   /** Nadpisanie funkcji odpytywania DNS TXT (np. w testach). */
   resolveTxt?: ResolveTxtFn | undefined;
-  /** Nadpisanie nadawcy wiadomości e-mail (np. w testach). */
-  mailer?: MailSender | undefined;
+  /** Opcjonalny worker kolejki poczty budzony po zatwierdzeniu tworzenia lub ponowienia zaproszenia. */
+  mailOutboxWorker?: Pick<MailOutboxWorker, "wake"> | undefined;
   /** Nadpisanie bieżącego czasu (do deterministycznych testów wygasania zaproszeń). */
   now?: (() => Date) | undefined;
   /** Opcjonalny hook wywoływany przy rejestracji każdej ścieżki Fastify (używany w testach OpenAPI). */
@@ -616,14 +614,14 @@ export function buildServer({
   verifyToken,
   verifyMachineToken,
   logger = false,
-  authUrl,
   domainVerificationSecret = process.env.CORE_DOMAIN_VERIFICATION_SECRET,
   devTrustDomains = false,
   resolveTxt,
-  mailer,
-  now: getNow = () => new Date(),
+  mailOutboxWorker,
+  now: customNow,
   onRoute,
 }: ServerOptions): FastifyInstance {
+  const getNow = customNow ?? (() => new Date());
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
   const openApiDocument = buildOpenApiDocument();
   const domainOptions: DomainServiceOptions = {
@@ -753,22 +751,18 @@ export function buildServer({
   /**
    * Wspólna rejestracja operacji tworzących (`POST`) z katalogu `ROUTES`: uwierzytelnia konto,
    * obsługuje opcjonalny nagłówek `Idempotency-Key` w tej samej transakcji `withOrganization`
-   * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx, kroki odłożone przez `defer`
-   * przed `COMMIT` i odtwarzanie z `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu.
+   * (blokada doradcza, wykrywanie konfliktu `409`, zapis odpowiedzi 2xx i odtwarzanie z
+   * `Idempotency-Replayed: true`) oraz wysyła kopertę sukcesu. Opcjonalne `onCommit` uruchamia się
+   * dopiero po zatwierdzeniu transakcji (nigdy przy wycofaniu ani odtworzeniu z `Idempotency-Key`).
    */
   function registerPostRoute<TData, TPrepared = undefined>(
     route: BearerPostRoute,
-    execute: (ctx: {
-      request: FastifyRequest;
-      who: Caller;
-      tx: Tx;
-      now: Date;
-      defer: DeferFn;
-      prepared: TPrepared;
-    }) => Promise<TData>,
+    execute: (ctx: { request: FastifyRequest; who: Caller; tx: Tx; now: Date; prepared: TPrepared }) => Promise<TData>,
     options?: {
       /** Krok wykonywany poza długą transakcją (np. zapytanie DNS); pomijany przy odtworzeniu `Idempotency-Key`. */
       prepare?: (ctx: { request: FastifyRequest; who: Caller; now: Date }) => Promise<TPrepared>;
+      /** Krok po zatwierdzeniu transakcji (np. wybudzenie workera kolejki poczty); pomijany przy powtórce. */
+      onCommit?: (ctx: { request: FastifyRequest; who: Caller }) => void | Promise<void>;
     },
   ): void {
     app.route({
@@ -783,17 +777,10 @@ export function buildServer({
           const prepared = options?.prepare
             ? await options.prepare({ request, who, now: getNow() })
             : (undefined as TPrepared);
-          const data = await withOrganization(db, who.organizationId, async (tx) => {
-            const deferred: (() => Promise<void>)[] = [];
-            const defer: DeferFn = (fn) => {
-              deferred.push(fn);
-            };
-            const result = await execute({ request, who, tx, now: getNow(), defer, prepared });
-            for (const fn of deferred) {
-              await fn();
-            }
-            return result;
-          });
+          const data = await withOrganization(db, who.organizationId, (tx) =>
+            execute({ request, who, tx, now: getNow(), prepared }),
+          );
+          await options?.onCommit?.({ request, who });
           // Żadna obecna trasa POST nie zwraca 204, ale przy przyszłej 204 No Content nie wysyłamy ciała.
           if (route.successStatus === 204) {
             return reply.status(204).send();
@@ -853,8 +840,8 @@ export function buildServer({
           body: request.body,
           params,
           getNow,
-          run: async (tx, defer, now) => {
-            const data = await execute({ request, who, tx, now, defer, prepared });
+          run: async (tx, now) => {
+            const data = await execute({ request, who, tx, now, prepared });
             return {
               status: route.successStatus,
               body: route.successStatus === 204 ? null : send(request, data),
@@ -864,6 +851,8 @@ export function buildServer({
 
         if (outcome.replayed) {
           void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+        } else {
+          await options?.onCommit?.({ request, who });
         }
         // Żadna obecna trasa POST nie zwraca 204, ale przy przyszłej 204 No Content nie wysyłamy ciała.
         if (outcome.status === 204) {
@@ -1327,7 +1316,14 @@ export function buildServer({
         assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
         return tx.invitation.findMany({
           ...(Object.keys(where).length > 0 ? { where } : {}),
-          include: { account: { select: { employeeId: true } } },
+          include: {
+            account: { select: { employeeId: true } },
+            mailOutbox: {
+              select: MAIL_OUTBOX_DELIVERY_SELECT,
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 1,
+            },
+          },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         });
@@ -1342,41 +1338,51 @@ export function buildServer({
     },
   });
 
-  registerPostRoute(ROUTES.createInvitation, async ({ request, who, tx, now, defer }) => {
-    const body = parseInput(CreateInvitation, request.body);
-    const snapshot = await loadPermissionSnapshot(tx, who);
-    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
-    const result = await createInvitation(tx, {
-      organizationId: who.organizationId,
-      email: body.email,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      employeeId: body.employeeId,
-      invitedBy: who.accountId,
-      actor: invitationActorFromRequest(request, who),
-      now,
-      authUrl,
-      mailer,
-      defer,
-    });
-    return result.invitation;
-  });
+  registerPostRoute(
+    ROUTES.createInvitation,
+    async ({ request, who, tx, now }) => {
+      const body = parseInput(CreateInvitation, request.body);
+      const snapshot = await loadPermissionSnapshot(tx, who);
+      assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+      const result = await createInvitation(tx, {
+        organizationId: who.organizationId,
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        employeeId: body.employeeId,
+        invitedBy: who.accountId,
+        actor: invitationActorFromRequest(request, who),
+        now: customNow ? now : undefined,
+      });
+      return result.invitation;
+    },
+    {
+      onCommit: () => {
+        mailOutboxWorker?.wake();
+      },
+    },
+  );
 
-  registerPostRoute(ROUTES.resendInvitation, async ({ request, who, tx, now, defer }) => {
-    const params = parseInput(InvitationIdParams, request.params);
-    const snapshot = await loadPermissionSnapshot(tx, who);
-    assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
-    const result = await resendInvitation(tx, {
-      organizationId: who.organizationId,
-      invitationId: params.invitationId,
-      actor: invitationActorFromRequest(request, who),
-      now,
-      authUrl,
-      mailer,
-      defer,
-    });
-    return result.invitation;
-  });
+  registerPostRoute(
+    ROUTES.resendInvitation,
+    async ({ request, who, tx, now }) => {
+      const params = parseInput(InvitationIdParams, request.params);
+      const snapshot = await loadPermissionSnapshot(tx, who);
+      assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+      const result = await resendInvitation(tx, {
+        organizationId: who.organizationId,
+        invitationId: params.invitationId,
+        actor: invitationActorFromRequest(request, who),
+        now: customNow ? now : undefined,
+      });
+      return result.invitation;
+    },
+    {
+      onCommit: () => {
+        mailOutboxWorker?.wake();
+      },
+    },
+  );
 
   app.route({
     method: ROUTES.revokeInvitation.method,
@@ -1384,7 +1390,7 @@ export function buildServer({
     handler: async (request, reply) => {
       const who = await caller(request);
       const params = parseInput(InvitationIdParams, request.params);
-      const currentTime = getNow();
+      const explicitNow = customNow?.();
 
       await withOrganization(db, who.organizationId, async (tx) => {
         const snapshot = await loadPermissionSnapshot(tx, who);
@@ -1393,7 +1399,7 @@ export function buildServer({
           organizationId: who.organizationId,
           invitationId: params.invitationId,
           actor: invitationActorFromRequest(request, who),
-          now: currentTime,
+          now: explicitNow,
         });
       });
 

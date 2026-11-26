@@ -115,7 +115,6 @@ beforeAll(async () => {
     db,
     verifyToken: createTokenVerifier(tokenOptions),
     verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-    authUrl: ISSUER,
   });
 
   await db.product.create({

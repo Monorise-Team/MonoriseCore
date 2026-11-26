@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   accountClaims,
+  claimMailOutboxJobs,
   cleanupExpiredIdempotencyKeys,
+  cleanupMailOutbox,
   createDb,
   domainOwner,
   hashToken,
@@ -2231,6 +2233,202 @@ describe("domeny firm (indeksy „wygrywa weryfikacja”, jedna domena główna,
       await withOrganization(db, globex.id, (tx) => tx.organizationDomain.deleteMany({ where: { id: globexClaimId } }));
       await withOrganization(db, pendingOrgId, (tx) => tx.organization.deleteMany({ where: { id: pendingOrgId } }));
       await db.authUser.deleteMany({ where: { id: pendingAccId } });
+    }
+  });
+});
+
+describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SECURITY DEFINER)", () => {
+  it("izoluje zadania firm przez RLS, wymusza złożony FK do invitations, blokuje DELETE i obsługuje claim/cleanup", async () => {
+    const acmeEmpId = uuidv7();
+    const acmeAccId = uuidv7();
+    const acmeInvId = uuidv7();
+    const acmeEmail = `outbox-acme-${acmeAccId.slice(-6)}@${acme.domain}`;
+    const globexEmpId = uuidv7();
+    const globexAccId = uuidv7();
+    const globexInvId = uuidv7();
+    const globexEmail = `outbox-globex-${globexAccId.slice(-6)}@${globex.domain}`;
+    const acmeJobId = uuidv7();
+    const globexJobId = uuidv7();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.authUser.create({ data: { id: acmeAccId, name: "Jan Acme", email: acmeEmail, emailVerified: false } });
+    await db.authUser.create({
+      data: { id: globexAccId, name: "Jan Globex", email: globexEmail, emailVerified: false },
+    });
+
+    try {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.employee.create({
+          data: { id: acmeEmpId, organizationId: acme.id, firstName: "Jan", lastName: "Acme" },
+        });
+        await tx.account.create({
+          data: {
+            id: acmeAccId,
+            organizationId: acme.id,
+            employeeId: acmeEmpId,
+            email: acmeEmail,
+            normalizedEmail: acmeEmail,
+            status: "INVITED",
+          },
+        });
+        await tx.invitation.create({
+          data: {
+            id: acmeInvId,
+            organizationId: acme.id,
+            accountId: acmeAccId,
+            email: acmeEmail,
+            normalizedEmail: acmeEmail,
+            tokenHash: hashToken(`rls-mail-acme-${acmeInvId}`),
+            status: "PENDING",
+            expiresAt,
+          },
+        });
+        await tx.mailOutbox.create({
+          data: {
+            id: acmeJobId,
+            organizationId: acme.id,
+            kind: "INVITATION",
+            invitationId: acmeInvId,
+            status: "PENDING",
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.employee.create({
+          data: { id: globexEmpId, organizationId: globex.id, firstName: "Jan", lastName: "Globex" },
+        });
+        await tx.account.create({
+          data: {
+            id: globexAccId,
+            organizationId: globex.id,
+            employeeId: globexEmpId,
+            email: globexEmail,
+            normalizedEmail: globexEmail,
+            status: "INVITED",
+          },
+        });
+        await tx.invitation.create({
+          data: {
+            id: globexInvId,
+            organizationId: globex.id,
+            accountId: globexAccId,
+            email: globexEmail,
+            normalizedEmail: globexEmail,
+            tokenHash: hashToken(`rls-mail-globex-${globexInvId}`),
+            status: "PENDING",
+            expiresAt,
+          },
+        });
+        await tx.mailOutbox.create({
+          data: {
+            id: globexJobId,
+            organizationId: globex.id,
+            kind: "INVITATION",
+            invitationId: globexInvId,
+            status: "PENDING",
+          },
+        });
+      });
+
+      // Izolacja RLS i brak widoczności bez kontekstu firmy
+      const acmeVisible = await withOrganization(db, acme.id, (tx) => tx.mailOutbox.findMany());
+      expect(acmeVisible.map((row) => row.id)).toEqual([acmeJobId]);
+      expect(await db.mailOutbox.findMany()).toEqual([]);
+
+      // Złożony klucz obcy odrzuca zaproszenie z innej firmy
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              kind: "INVITATION",
+              invitationId: globexInvId,
+              status: "PENDING",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/mail_outbox_organizationId_invitationId_fkey|foreign key|violates/i);
+
+      // CHECKi spójności i ograniczenie długości lastError
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.update({ where: { id: acmeJobId }, data: { status: "SENT", sentAt: null } }),
+        ),
+      ).rejects.toThrow(/mail_outbox_status_sent_consistency|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.update({ where: { id: acmeJobId }, data: { lastError: "x".repeat(501) } }),
+        ),
+      ).rejects.toThrow(/mail_outbox_last_error_length|check constraint|violates/i);
+
+      // core_app nie może bezpośrednio usuwać wierszy
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.mailOutbox.delete({ where: { id: acmeJobId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // PUBLIC nie ma EXECUTE na funkcjach SECURITY DEFINER, a core_app ma
+      const [privs] = await db.$queryRaw<
+        { claim_public: boolean; cleanup_public: boolean; claim_app: boolean; cleanup_app: boolean }[]
+      >`
+        SELECT
+          has_function_privilege('public', 'public.mail_outbox_claim(integer, integer)', 'EXECUTE') AS claim_public,
+          has_function_privilege('public', 'public.mail_outbox_cleanup(integer)', 'EXECUTE') AS cleanup_public,
+          has_function_privilege('core_app', 'public.mail_outbox_claim(integer, integer)', 'EXECUTE') AS claim_app,
+          has_function_privilege('core_app', 'public.mail_outbox_cleanup(integer)', 'EXECUTE') AS cleanup_app`;
+      expect(privs).toEqual({
+        claim_public: false,
+        cleanup_public: false,
+        claim_app: true,
+        cleanup_app: true,
+      });
+
+      // Walidacja zakresów p_limit i p_lease_ms w funkcjach SECURITY DEFINER
+      await expect(claimMailOutboxJobs(db, { limit: 0, leaseMs: 60_000 })).rejects.toThrow(/p_limit/i);
+      await expect(claimMailOutboxJobs(db, { limit: 1001, leaseMs: 60_000 })).rejects.toThrow(/p_limit/i);
+      await expect(claimMailOutboxJobs(db, { limit: 10, leaseMs: 0 })).rejects.toThrow(/p_lease_ms/i);
+      await expect(claimMailOutboxJobs(db, { limit: 10, leaseMs: 3_600_001 })).rejects.toThrow(/p_lease_ms/i);
+      await expect(cleanupMailOutbox(db, 0)).rejects.toThrow(/p_limit/i);
+      await expect(cleanupMailOutbox(db, 10001)).rejects.toThrow(/p_limit/i);
+
+      // Funkcja SECURITY DEFINER mail_outbox_claim rezerwuje gotowe zadania ponad granicą firm według now() bazy
+      const claimed = await claimMailOutboxJobs(db, { limit: 10, leaseMs: 90_000 });
+      expect(claimed.map((row) => row.id).sort()).toEqual([acmeJobId, globexJobId].sort());
+      expect(claimed.every((row) => row.attempts === 1 && row.kind === "INVITATION")).toBe(true);
+
+      // Oznaczamy jedno zadanie jako SENT sprzed 31 dni (przez zegar bazy) i sprzątamy przez mail_outbox_cleanup
+      await withOrganization(
+        ownerDb,
+        acme.id,
+        (tx) =>
+          tx.$executeRaw`
+          UPDATE "public"."mail_outbox"
+          SET "status" = 'SENT',
+              "sentAt" = now() - interval '31 days',
+              "lockedUntil" = NULL,
+              "createdAt" = now() - interval '31 days',
+              "updatedAt" = now() - interval '31 days'
+          WHERE "id" = ${acmeJobId}::uuid`,
+      );
+      expect(await cleanupMailOutbox(db, 100)).toBeGreaterThanOrEqual(1);
+      expect(
+        await withOrganization(db, acme.id, (tx) => tx.mailOutbox.findUnique({ where: { id: acmeJobId } })),
+      ).toBeNull();
+      expect(
+        await withOrganization(db, globex.id, (tx) => tx.mailOutbox.findUnique({ where: { id: globexJobId } })),
+      ).not.toBeNull();
+    } finally {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.account.deleteMany({ where: { id: acmeAccId } });
+        await tx.employee.deleteMany({ where: { id: acmeEmpId } });
+      });
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.account.deleteMany({ where: { id: globexAccId } });
+        await tx.employee.deleteMany({ where: { id: globexEmpId } });
+      });
+      await db.authUser.deleteMany({ where: { id: { in: [acmeAccId, globexAccId] } } });
     }
   });
 });

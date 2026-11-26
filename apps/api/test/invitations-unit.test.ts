@@ -1,6 +1,11 @@
 import { hashToken } from "@core/db";
 import { describe, expect, it } from "vitest";
-import { buildInviteUrl, effectiveInvitationStatus } from "../src/invitations.js";
+import {
+  buildInviteUrl,
+  effectiveInvitationStatus,
+  resolveAuthUrl,
+  serializeInvitationDelivery,
+} from "../src/invitations.js";
 import { invitationMail, isLocalMailSink } from "../src/mail.js";
 
 describe("zaproszenia — testy jednostkowe bez bazy", () => {
@@ -18,6 +23,16 @@ describe("zaproszenia — testy jednostkowe bez bazy", () => {
   it("buduje link aktywacyjny i wiadomość e-mail z nazwą firmy oraz zapraszającego", () => {
     const url = buildInviteUrl("abc_123-XYZ", "https://auth.monorise.studio///");
     expect(url).toBe("https://auth.monorise.studio/invite?token=abc_123-XYZ");
+
+    // Puste lub białe CORE_AUTH_URL wraca do CORE_AUTH_ISSUER, a ostatecznie do localhost:3100
+    expect(
+      resolveAuthUrl("   ", {
+        CORE_AUTH_URL: "  ",
+        CORE_AUTH_ISSUER: "https://issuer.monorise.studio///",
+      }),
+    ).toBe("https://issuer.monorise.studio");
+    expect(resolveAuthUrl(undefined, { CORE_AUTH_URL: "", CORE_AUTH_ISSUER: "   " })).toBe("http://localhost:3100");
+    expect(resolveAuthUrl(undefined, { CORE_AUTH_URL: " https://auth.acme.test/ " })).toBe("https://auth.acme.test");
 
     const withInviter = invitationMail({
       to: "jan@acme.test",
@@ -55,5 +70,44 @@ describe("zaproszenia — testy jednostkowe bez bazy", () => {
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
     expect(h1).not.toBe(hashToken("inny-token"));
+  });
+
+  it("serializuje stan wysyłki z kolejki mail_outbox i nie ujawnia wewnętrznych błędów", () => {
+    expect(serializeInvitationDelivery(undefined)).toEqual({
+      status: null,
+      attempts: 0,
+      lastAttemptAt: null,
+      sentAt: null,
+    });
+
+    const rowWithInternalError = {
+      status: "FAILED" as const,
+      attempts: 8,
+      lastAttemptAt: new Date("2026-11-26T12:00:00.000Z"),
+      sentAt: null,
+      lastError: "550 Relay access denied",
+    };
+    const serialized = serializeInvitationDelivery(rowWithInternalError);
+    expect(serialized).toEqual({
+      status: "FAILED",
+      attempts: 8,
+      lastAttemptAt: "2026-11-26T12:00:00.000Z",
+      sentAt: null,
+    });
+    expect("lastError" in serialized).toBe(false);
+
+    expect(
+      serializeInvitationDelivery({
+        status: "SENT",
+        attempts: 1,
+        lastAttemptAt: new Date("2026-11-26T12:01:00.000Z"),
+        sentAt: new Date("2026-11-26T12:01:01.000Z"),
+      }),
+    ).toEqual({
+      status: "SENT",
+      attempts: 1,
+      lastAttemptAt: "2026-11-26T12:01:00.000Z",
+      sentAt: "2026-11-26T12:01:01.000Z",
+    });
   });
 });

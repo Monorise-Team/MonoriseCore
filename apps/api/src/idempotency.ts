@@ -17,9 +17,6 @@ export const MAX_IDEMPOTENCY_CLEANUP_INTERVAL_MS = 2_147_483_647;
 /** Ile wygasłych kluczy usuwamy w jednej transakcji (`idempotency_keys_cleanup_expired`). */
 export const IDEMPOTENCY_CLEANUP_BATCH_SIZE = 1000;
 
-/** Rejestruje krok wykonywany w tej samej transakcji po zapisaniu klucza `Idempotency-Key` (nigdy przy powtórce). */
-export type DeferFn = (fn: () => Promise<void>) => void;
-
 export class IdempotencyError extends Error {
   constructor(
     readonly status: 400 | 409,
@@ -181,7 +178,7 @@ export interface ExecuteWithIdempotencyInput {
   params?: Record<string, unknown> | undefined;
   /** Zegar wywoływany po przejęciu blokady doradczej (do deterministycznych testów wygasania). */
   getNow?: (() => Date) | undefined;
-  run: (tx: Tx, defer: DeferFn, now: Date) => Promise<IdempotentExecutionResult>;
+  run: (tx: Tx, now: Date) => Promise<IdempotentExecutionResult>;
 }
 
 export interface ExecuteWithIdempotencyOutcome {
@@ -195,11 +192,10 @@ export interface ExecuteWithIdempotencyOutcome {
  * `(organizationId, principal, key)`:
  * - po przejęciu blokady pobiera bieżący czas (`getNow`),
  * - jeśli klucz istnieje, nie wygasł i ma ten sam `requestHash` -> zwraca zapisaną odpowiedź (`replayed: true`)
- *   bez wywoływania `run` ani kroków odłożonych przez `defer`,
+ *   bez wywoływania `run`,
  * - jeśli klucz istnieje, nie wygasł i ma inny `requestHash` -> rzuca `409 CONFLICT`,
- * - jeśli klucz nie istnieje albo wygasł -> uruchamia `run(tx, defer, now)`, zapisuje odpowiedź 2xx w tej samej
- *   transakcji, a na końcu (przed `COMMIT`) uruchamia kolejno funkcje zarejestrowane przez `defer`.
- * Błąd w `run` lub w funkcji z `defer` wycofuje całą transakcję, więc klucz nie jest zapisywany i klient może ponowić żądanie.
+ * - jeśli klucz nie istnieje albo wygasł -> uruchamia `run(tx, now)` i zapisuje odpowiedź 2xx w tej samej transakcji.
+ * Błąd w `run` wycofuje całą transakcję, więc klucz nie jest zapisywany i klient może ponowić żądanie.
  */
 export async function executeWithIdempotency({
   db,
@@ -237,12 +233,7 @@ export async function executeWithIdempotency({
       };
     }
 
-    const deferred: (() => Promise<void>)[] = [];
-    const defer: DeferFn = (fn) => {
-      deferred.push(fn);
-    };
-
-    const result = await run(tx, defer, now);
+    const result = await run(tx, now);
 
     if (result.status >= 200 && result.status < 300) {
       const expiresAt = new Date(now.getTime() + IDEMPOTENCY_KEY_TTL_MS);
@@ -272,10 +263,6 @@ export async function executeWithIdempotency({
         },
         update: recordData,
       });
-    }
-
-    for (const fn of deferred) {
-      await fn();
     }
 
     return {

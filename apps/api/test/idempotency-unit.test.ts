@@ -48,7 +48,7 @@ function deferred<T = void>() {
 
 /**
  * Mock PrismaClient w pamięci z transakcyjną kolejką blokad `pg_advisory_xact_lock`,
- * pozwalający deterministycznie testować współbieżność, kolejność `defer` i ścieżkę HTTP bez bazy.
+ * pozwalający deterministycznie testować współbieżność, wycofanie i ścieżkę HTTP bez bazy.
  */
 function createInMemoryIdempotencyDb(options?: { onUpsert?: () => void }) {
   const keys = new Map<string, StoredKeyRow>();
@@ -283,76 +283,63 @@ describe("Idempotency-Key — testy jednostkowe bez bazy", () => {
     expect(r1).not.toBe(r2);
   });
 
-  it("uruchamia kroki defer po zapisaniu klucza Idempotency-Key, nigdy przy powtórce, a błąd w defer wycofuje zapis klucza", async () => {
+  it("wycofuje zapis klucza przy błędzie w run, zapisuje klucz przy sukcesie i nie wywołuje run przy powtórce", async () => {
     const events: string[] = [];
     const { db, keys } = createInMemoryIdempotencyDb({ onUpsert: () => events.push("upsert") });
     const now = new Date("2026-11-25T12:00:00.000Z");
 
-    // 1. Błąd w defer wycofuje całą transakcję -> brak zapisanego klucza
+    // 1. Błąd w run wycofuje całą transakcję -> brak zapisanego klucza
     await expect(
       executeWithIdempotency({
         db,
         organizationId: ORG_ID,
         principal: accountPrincipal(ACC_ID),
-        key: "defer-rollback",
+        key: "run-rollback",
         method: "POST",
         pathTemplate: "/core/v1/invitations",
         body: { email: "jan@acme.test" },
         getNow: () => now,
-        run: async (_tx, defer) => {
+        run: async () => {
           events.push("run-fail");
-          defer(async () => {
-            events.push("defer-fail");
-            throw new Error("SMTP niedostępny");
-          });
-          return { status: 201, body: { data: { id: "inv-1" } } };
+          throw new Error("błąd zapisu w transakcji");
         },
       }),
-    ).rejects.toThrow("SMTP niedostępny");
-    expect(events).toEqual(["run-fail", "upsert", "defer-fail"]);
+    ).rejects.toThrow("błąd zapisu w transakcji");
+    expect(events).toEqual(["run-fail"]);
     expect(keys.size).toBe(0);
 
-    // 2. Ponowienie z tym samym kluczem uruchamia run, zapisuje klucz, a potem wykonuje defer w kolejności
+    // 2. Ponowienie z tym samym kluczem uruchamia run i zapisuje klucz
     events.length = 0;
     const ok = await executeWithIdempotency({
       db,
       organizationId: ORG_ID,
       principal: accountPrincipal(ACC_ID),
-      key: "defer-rollback",
+      key: "run-rollback",
       method: "POST",
       pathTemplate: "/core/v1/invitations",
       body: { email: "jan@acme.test" },
       getNow: () => now,
-      run: async (_tx, defer) => {
+      run: async () => {
         events.push("run-ok");
-        defer(async () => {
-          events.push("defer-1");
-        });
-        defer(async () => {
-          events.push("defer-2");
-        });
         return { status: 201, body: { data: { id: "inv-2" } } };
       },
     });
     expect(ok).toEqual({ replayed: false, status: 201, body: { data: { id: "inv-2" } } });
-    expect(events).toEqual(["run-ok", "upsert", "defer-1", "defer-2"]);
+    expect(events).toEqual(["run-ok", "upsert"]);
 
-    // 3. Powtórka nie wywołuje ani run, ani defer
+    // 3. Powtórka zwraca zapisany wynik i nie wywołuje run
     events.length = 0;
     const replay = await executeWithIdempotency({
       db,
       organizationId: ORG_ID,
       principal: accountPrincipal(ACC_ID),
-      key: "defer-rollback",
+      key: "run-rollback",
       method: "POST",
       pathTemplate: "/core/v1/invitations",
       body: { email: "jan@acme.test" },
       getNow: () => now,
-      run: async (_tx, defer) => {
+      run: async () => {
         events.push("should-not-run");
-        defer(async () => {
-          events.push("should-not-defer");
-        });
         return { status: 201, body: { data: { id: "inv-3" } } };
       },
     });

@@ -43,12 +43,14 @@ import {
   IDEMPOTENCY_REPLAYED_HEADER,
   IdempotencyKeyHeader,
   Invitation,
+  InvitationDelivery,
   InvitationStatus,
   INVITATION_TTL_DAYS,
   INVITATION_TTL_MS,
   isFreeEmailDomain,
   ListAuditLogQuery,
   MachineTokenClaims,
+  MailDeliveryStatus,
   MAX_ORGANIZATION_DOMAINS,
   MAX_PAGE_LIMIT,
   MAX_PERMISSION_MANIFEST_ENTRIES,
@@ -795,6 +797,32 @@ describe("kontrakty", () => {
     expect(INVITATION_TTL_DAYS).toBe(7);
     expect(INVITATION_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000);
     expect(InvitationStatus.parse("PENDING")).toBe("PENDING");
+    expect(MailDeliveryStatus.parse("PENDING")).toBe("PENDING");
+    expect(MailDeliveryStatus.parse("SENT")).toBe("SENT");
+    expect(MailDeliveryStatus.parse("FAILED")).toBe("FAILED");
+    expect(MailDeliveryStatus.parse("CANCELLED")).toBe("CANCELLED");
+
+    expect(
+      InvitationDelivery.parse({
+        status: null,
+        attempts: 0,
+        lastAttemptAt: null,
+        sentAt: null,
+      }),
+    ).toEqual({
+      status: null,
+      attempts: 0,
+      lastAttemptAt: null,
+      sentAt: null,
+    });
+    expect(
+      InvitationDelivery.safeParse({
+        status: "SENT",
+        attempts: -1,
+        lastAttemptAt: null,
+        sentAt: null,
+      }).success,
+    ).toBe(false);
 
     expect(
       CreateInvitation.parse({
@@ -828,6 +856,12 @@ describe("kontrakty", () => {
         expiresAt: "2026-12-02T12:00:00.000Z",
         invitedByAccountId: null,
         acceptedAt: null,
+        delivery: {
+          status: "PENDING",
+          attempts: 0,
+          lastAttemptAt: null,
+          sentAt: null,
+        },
         createdAt: "2026-11-25T12:00:00.000Z",
         updatedAt: "2026-11-25T12:00:00.000Z",
       }).invitedByAccountId,

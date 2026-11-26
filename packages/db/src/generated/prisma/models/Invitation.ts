@@ -241,6 +241,7 @@ export type InvitationWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Invitation"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   account?: Prisma.XOR<Prisma.AccountScalarRelationFilter, Prisma.AccountWhereInput>
+  mailOutbox?: Prisma.MailOutboxListRelationFilter
 }
 
 export type InvitationOrderByWithRelationInput = {
@@ -258,11 +259,13 @@ export type InvitationOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
   account?: Prisma.AccountOrderByWithRelationInput
+  mailOutbox?: Prisma.MailOutboxOrderByRelationAggregateInput
 }
 
 export type InvitationWhereUniqueInput = Prisma.AtLeast<{
   id?: string
   tokenHash?: string
+  organizationId_id?: Prisma.InvitationOrganizationIdIdCompoundUniqueInput
   AND?: Prisma.InvitationWhereInput | Prisma.InvitationWhereInput[]
   OR?: Prisma.InvitationWhereInput[]
   NOT?: Prisma.InvitationWhereInput | Prisma.InvitationWhereInput[]
@@ -278,7 +281,8 @@ export type InvitationWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"Invitation"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
   account?: Prisma.XOR<Prisma.AccountScalarRelationFilter, Prisma.AccountWhereInput>
-}, "id" | "tokenHash">
+  mailOutbox?: Prisma.MailOutboxListRelationFilter
+}, "id" | "tokenHash" | "organizationId_id">
 
 export type InvitationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -329,6 +333,7 @@ export type InvitationCreateInput = {
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutInvitationsInput
   account: Prisma.AccountCreateNestedOneWithoutInvitationsInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationUncheckedCreateInput = {
@@ -344,6 +349,7 @@ export type InvitationUncheckedCreateInput = {
   acceptedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationUpdateInput = {
@@ -359,6 +365,7 @@ export type InvitationUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutInvitationsNestedInput
   account?: Prisma.AccountUpdateOneRequiredWithoutInvitationsNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationUncheckedUpdateInput = {
@@ -374,6 +381,7 @@ export type InvitationUncheckedUpdateInput = {
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationCreateManyInput = {
@@ -429,6 +437,11 @@ export type InvitationOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
 }
 
+export type InvitationOrganizationIdIdCompoundUniqueInput = {
+  organizationId: string
+  id: string
+}
+
 export type InvitationCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   organizationId?: Prisma.SortOrder
@@ -472,6 +485,11 @@ export type InvitationMinOrderByAggregateInput = {
   acceptedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+}
+
+export type InvitationScalarRelationFilter = {
+  is?: Prisma.InvitationWhereInput
+  isNot?: Prisma.InvitationWhereInput
 }
 
 export type InvitationCreateNestedManyWithoutOrganizationInput = {
@@ -562,6 +580,20 @@ export type EnumInvitationStatusFieldUpdateOperationsInput = {
   set?: $Enums.InvitationStatus
 }
 
+export type InvitationCreateNestedOneWithoutMailOutboxInput = {
+  create?: Prisma.XOR<Prisma.InvitationCreateWithoutMailOutboxInput, Prisma.InvitationUncheckedCreateWithoutMailOutboxInput>
+  connectOrCreate?: Prisma.InvitationCreateOrConnectWithoutMailOutboxInput
+  connect?: Prisma.InvitationWhereUniqueInput
+}
+
+export type InvitationUpdateOneRequiredWithoutMailOutboxNestedInput = {
+  create?: Prisma.XOR<Prisma.InvitationCreateWithoutMailOutboxInput, Prisma.InvitationUncheckedCreateWithoutMailOutboxInput>
+  connectOrCreate?: Prisma.InvitationCreateOrConnectWithoutMailOutboxInput
+  upsert?: Prisma.InvitationUpsertWithoutMailOutboxInput
+  connect?: Prisma.InvitationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.InvitationUpdateToOneWithWhereWithoutMailOutboxInput, Prisma.InvitationUpdateWithoutMailOutboxInput>, Prisma.InvitationUncheckedUpdateWithoutMailOutboxInput>
+}
+
 export type InvitationCreateWithoutOrganizationInput = {
   id: string
   email: string
@@ -574,6 +606,7 @@ export type InvitationCreateWithoutOrganizationInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   account: Prisma.AccountCreateNestedOneWithoutInvitationsInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationUncheckedCreateWithoutOrganizationInput = {
@@ -588,6 +621,7 @@ export type InvitationUncheckedCreateWithoutOrganizationInput = {
   acceptedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationCreateOrConnectWithoutOrganizationInput = {
@@ -646,6 +680,7 @@ export type InvitationCreateWithoutAccountInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutInvitationsInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationUncheckedCreateWithoutAccountInput = {
@@ -659,6 +694,7 @@ export type InvitationUncheckedCreateWithoutAccountInput = {
   acceptedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutInvitationInput
 }
 
 export type InvitationCreateOrConnectWithoutAccountInput = {
@@ -687,6 +723,82 @@ export type InvitationUpdateManyWithWhereWithoutAccountInput = {
   data: Prisma.XOR<Prisma.InvitationUpdateManyMutationInput, Prisma.InvitationUncheckedUpdateManyWithoutAccountInput>
 }
 
+export type InvitationCreateWithoutMailOutboxInput = {
+  id: string
+  email: string
+  normalizedEmail: string
+  tokenHash: string
+  status?: $Enums.InvitationStatus
+  expiresAt: Date | string
+  invitedByAccountId?: string | null
+  acceptedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  organization: Prisma.OrganizationCreateNestedOneWithoutInvitationsInput
+  account: Prisma.AccountCreateNestedOneWithoutInvitationsInput
+}
+
+export type InvitationUncheckedCreateWithoutMailOutboxInput = {
+  id: string
+  organizationId: string
+  accountId: string
+  email: string
+  normalizedEmail: string
+  tokenHash: string
+  status?: $Enums.InvitationStatus
+  expiresAt: Date | string
+  invitedByAccountId?: string | null
+  acceptedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type InvitationCreateOrConnectWithoutMailOutboxInput = {
+  where: Prisma.InvitationWhereUniqueInput
+  create: Prisma.XOR<Prisma.InvitationCreateWithoutMailOutboxInput, Prisma.InvitationUncheckedCreateWithoutMailOutboxInput>
+}
+
+export type InvitationUpsertWithoutMailOutboxInput = {
+  update: Prisma.XOR<Prisma.InvitationUpdateWithoutMailOutboxInput, Prisma.InvitationUncheckedUpdateWithoutMailOutboxInput>
+  create: Prisma.XOR<Prisma.InvitationCreateWithoutMailOutboxInput, Prisma.InvitationUncheckedCreateWithoutMailOutboxInput>
+  where?: Prisma.InvitationWhereInput
+}
+
+export type InvitationUpdateToOneWithWhereWithoutMailOutboxInput = {
+  where?: Prisma.InvitationWhereInput
+  data: Prisma.XOR<Prisma.InvitationUpdateWithoutMailOutboxInput, Prisma.InvitationUncheckedUpdateWithoutMailOutboxInput>
+}
+
+export type InvitationUpdateWithoutMailOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  tokenHash?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumInvitationStatusFieldUpdateOperationsInput | $Enums.InvitationStatus
+  expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  invitedByAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutInvitationsNestedInput
+  account?: Prisma.AccountUpdateOneRequiredWithoutInvitationsNestedInput
+}
+
+export type InvitationUncheckedUpdateWithoutMailOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  accountId?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  tokenHash?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumInvitationStatusFieldUpdateOperationsInput | $Enums.InvitationStatus
+  expiresAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  invitedByAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type InvitationCreateManyOrganizationInput = {
   id: string
   accountId: string
@@ -713,6 +825,7 @@ export type InvitationUpdateWithoutOrganizationInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   account?: Prisma.AccountUpdateOneRequiredWithoutInvitationsNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationUncheckedUpdateWithoutOrganizationInput = {
@@ -727,6 +840,7 @@ export type InvitationUncheckedUpdateWithoutOrganizationInput = {
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationUncheckedUpdateManyWithoutOrganizationInput = {
@@ -768,6 +882,7 @@ export type InvitationUpdateWithoutAccountInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutInvitationsNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationUncheckedUpdateWithoutAccountInput = {
@@ -781,6 +896,7 @@ export type InvitationUncheckedUpdateWithoutAccountInput = {
   acceptedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutInvitationNestedInput
 }
 
 export type InvitationUncheckedUpdateManyWithoutAccountInput = {
@@ -796,6 +912,35 @@ export type InvitationUncheckedUpdateManyWithoutAccountInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
+
+/**
+ * Count Type InvitationCountOutputType
+ */
+
+export type InvitationCountOutputType = {
+  mailOutbox: number
+}
+
+export type InvitationCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  mailOutbox?: boolean | InvitationCountOutputTypeCountMailOutboxArgs
+}
+
+/**
+ * InvitationCountOutputType without action
+ */
+export type InvitationCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the InvitationCountOutputType
+   */
+  select?: Prisma.InvitationCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * InvitationCountOutputType without action
+ */
+export type InvitationCountOutputTypeCountMailOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.MailOutboxWhereInput
+}
 
 
 export type InvitationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -813,6 +958,8 @@ export type InvitationSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   account?: boolean | Prisma.AccountDefaultArgs<ExtArgs>
+  mailOutbox?: boolean | Prisma.Invitation$mailOutboxArgs<ExtArgs>
+  _count?: boolean | Prisma.InvitationCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["invitation"]>
 
 export type InvitationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -868,6 +1015,8 @@ export type InvitationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs
 export type InvitationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   account?: boolean | Prisma.AccountDefaultArgs<ExtArgs>
+  mailOutbox?: boolean | Prisma.Invitation$mailOutboxArgs<ExtArgs>
+  _count?: boolean | Prisma.InvitationCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type InvitationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
@@ -883,6 +1032,7 @@ export type $InvitationPayload<ExtArgs extends runtime.Types.Extensions.Internal
   objects: {
     organization: Prisma.$OrganizationPayload<ExtArgs>
     account: Prisma.$AccountPayload<ExtArgs>
+    mailOutbox: Prisma.$MailOutboxPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1293,6 +1443,7 @@ export interface Prisma__InvitationClient<T, Null = never, ExtArgs extends runti
   readonly [Symbol.toStringTag]: "PrismaPromise"
   organization<T extends Prisma.OrganizationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.OrganizationDefaultArgs<ExtArgs>>): Prisma.Prisma__OrganizationClient<runtime.Types.Result.GetResult<Prisma.$OrganizationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   account<T extends Prisma.AccountDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.AccountDefaultArgs<ExtArgs>>): Prisma.Prisma__AccountClient<runtime.Types.Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  mailOutbox<T extends Prisma.Invitation$mailOutboxArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Invitation$mailOutboxArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$MailOutboxPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1732,6 +1883,30 @@ export type InvitationDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.In
    * Limit how many Invitations to delete.
    */
   limit?: number
+}
+
+/**
+ * Invitation.mailOutbox
+ */
+export type Invitation$mailOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the MailOutbox
+   */
+  select?: Prisma.MailOutboxSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the MailOutbox
+   */
+  omit?: Prisma.MailOutboxOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MailOutboxInclude<ExtArgs> | null
+  where?: Prisma.MailOutboxWhereInput
+  orderBy?: Prisma.MailOutboxOrderByWithRelationInput | Prisma.MailOutboxOrderByWithRelationInput[]
+  cursor?: Prisma.MailOutboxWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.MailOutboxScalarFieldEnum | Prisma.MailOutboxScalarFieldEnum[]
 }
 
 /**

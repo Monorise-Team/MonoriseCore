@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "./generated/prisma/client.js";
-import type { AccountStatus, DomainStatus, OrganizationStatus } from "./generated/prisma/enums.js";
+import type { AccountStatus, DomainStatus, MailKind, OrganizationStatus } from "./generated/prisma/enums.js";
 
 export * from "./generated/prisma/enums.js";
 export { Prisma, PrismaClient } from "./generated/prisma/client.js";
@@ -215,6 +215,38 @@ export async function invitationByTokenHash(
 export async function cleanupExpiredIdempotencyKeys(db: PrismaClient | Tx, limit = 1000): Promise<number> {
   const rows = await db.$queryRaw<{ deleted: number }[]>`
     SELECT "public"."idempotency_keys_cleanup_expired"(${limit}::integer) AS deleted`;
+  return rows[0]?.deleted ?? 0;
+}
+
+export interface ClaimedMailOutboxJob {
+  id: string;
+  organizationId: string;
+  kind: MailKind;
+  invitationId: string;
+  attempts: number;
+}
+
+/**
+ * Atomowo rezerwuje porcję gotowych zadań z kolejki poczty (`public.mail_outbox_claim`, `SECURITY DEFINER`),
+ * zawsze według zegara bazy `now()`, ustawiając dzierżawę `lockedUntil` i podbijając `attempts` oraz `lastAttemptAt`.
+ */
+export async function claimMailOutboxJobs(
+  db: PrismaClient | Tx,
+  options: { limit?: number | undefined; leaseMs?: number | undefined } = {},
+): Promise<ClaimedMailOutboxJob[]> {
+  const limit = options.limit ?? 20;
+  const leaseMs = options.leaseMs ?? 90_000;
+  return db.$queryRaw<ClaimedMailOutboxJob[]>`
+    SELECT * FROM "public"."mail_outbox_claim"(${limit}::integer, ${leaseMs}::integer)`;
+}
+
+/**
+ * Usuwa porcję zadań `SENT`, `CANCELLED` oraz zastąpionych `FAILED` starszych niż 30 dni ponad granicą firm
+ * (`public.mail_outbox_cleanup`, `SECURITY DEFINER`, zawsze według zegara bazy `now()`).
+ */
+export async function cleanupMailOutbox(db: PrismaClient | Tx, limit = 1000): Promise<number> {
+  const rows = await db.$queryRaw<{ deleted: number }[]>`
+    SELECT "public"."mail_outbox_cleanup"(${limit}::integer) AS deleted`;
   return rows[0]?.deleted ?? 0;
 }
 

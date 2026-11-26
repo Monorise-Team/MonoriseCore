@@ -714,7 +714,8 @@ export const ROUTES = {
     tag: "Invitations",
     summary: "Lista zaproszeń pracowników firmy",
     description:
-      "Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`), " +
+      "Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`) " +
+      "wraz ze stanem wysyłki e-maila (`delivery` z najnowszego zadania w kolejce `mail_outbox`, bez wewnętrznych błędów SMTP), " +
       "opcjonalnie filtrowaną statusem. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
@@ -748,9 +749,11 @@ export const ROUTES = {
     tag: "Invitations",
     summary: "Zaproś pracownika e-mailem",
     description:
-      "Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), generuje jednorazowy link " +
-      "aktywacyjny ważny 7 dni i wysyła wiadomość e-mail (ADR-0021). Adres musi należeć do zweryfikowanej domeny firmy. " +
-      "Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+      "Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), zaproszenie ważne 7 dni " +
+      "oraz zadanie wysyłki wiadomości e-mail w transakcyjnej kolejce `mail_outbox` (`delivery.status = PENDING`, ADR-0021). " +
+      "Wiadomość jest wysyłana po zatwierdzeniu transakcji przez worker z automatycznymi ponowieniami, więc błąd SMTP " +
+      "nie wycofuje zaproszenia; jednorazowy token powstaje dopiero w chwili wysyłki. Adres musi należeć do zweryfikowanej " +
+      "domeny firmy. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 201,
     envelope: true,
@@ -760,7 +763,7 @@ export const ROUTES = {
     dataSchemaName: "Invitation",
     dataSchema: Invitation,
     responseSchemaName: "InvitationResponse",
-    responseDescription: "Utworzone zaproszenie (bez tokenu aktywacyjnego).",
+    responseDescription: "Utworzone zaproszenie ze stanem kolejki wysyłki (bez tokenu aktywacyjnego).",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
@@ -777,9 +780,10 @@ export const ROUTES = {
     tag: "Invitations",
     summary: "Wyślij ponownie zaproszenie pracownika",
     description:
-      "Generuje nowy 7-dniowy link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED` (unieważnia poprzedni " +
-      "link), ustawia status `PENDING` i wysyła nowy e-mail. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy " +
-      "albo roli Ownera.",
+      "Natychmiast unieważnia poprzedni link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED`, ustawia " +
+      "nowy 7-dniowy termin ważności i status `PENDING`, anuluje poprzednie oczekujące zadania w kolejce `mail_outbox` " +
+      "oraz kolejkuje nową wysyłkę wiadomości e-mail (`delivery.status = PENDING`). Wymaga uprawnienia " +
+      "`core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -787,7 +791,8 @@ export const ROUTES = {
     dataSchemaName: "Invitation",
     dataSchema: Invitation,
     responseSchemaName: "InvitationResponse",
-    responseDescription: "Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego).",
+    responseDescription:
+      "Zaktualizowane zaproszenie z nowym terminem ważności i stanem kolejki (bez tokenu aktywacyjnego).",
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
@@ -804,8 +809,9 @@ export const ROUTES = {
     tag: "Invitations",
     summary: "Cofnij oczekujące zaproszenie",
     description:
-      "Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` (konto pozostaje w statusie `INVITED`, a zaproszenie " +
-      "można później wysłać ponownie). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+      "Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` i anuluje jego oczekujące zadania wysyłki " +
+      "w kolejce `mail_outbox` (`CANCELLED`). Konto pozostaje w statusie `INVITED`, a zaproszenie można później " +
+      "wysłać ponownie. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 204,
     envelope: false,

@@ -425,7 +425,8 @@ export const ModelName = {
   Entitlement: 'Entitlement',
   AppAccess: 'AppAccess',
   OutboxEvent: 'OutboxEvent',
-  IdempotencyKey: 'IdempotencyKey'
+  IdempotencyKey: 'IdempotencyKey',
+  MailOutbox: 'MailOutbox'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -441,7 +442,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "invitation" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog" | "entitlement" | "appAccess" | "outboxEvent" | "idempotencyKey"
+    modelProps: "authUser" | "authSession" | "authCredential" | "authVerification" | "authJwks" | "authOAuthClient" | "authOAuthResource" | "authOAuthClientResource" | "authOAuthRefreshToken" | "authOAuthAccessToken" | "authOAuthConsent" | "authOAuthClientAssertion" | "organization" | "organizationDomain" | "employee" | "account" | "invitation" | "organizationUnit" | "unitMembership" | "product" | "permission" | "role" | "rolePermission" | "roleAssignment" | "auditLog" | "entitlement" | "appAccess" | "outboxEvent" | "idempotencyKey" | "mailOutbox"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -2591,6 +2592,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    MailOutbox: {
+      payload: Prisma.$MailOutboxPayload<ExtArgs>
+      fields: Prisma.MailOutboxFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.MailOutboxFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.MailOutboxFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        findFirst: {
+          args: Prisma.MailOutboxFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.MailOutboxFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        findMany: {
+          args: Prisma.MailOutboxFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>[]
+        }
+        create: {
+          args: Prisma.MailOutboxCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        createMany: {
+          args: Prisma.MailOutboxCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.MailOutboxCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>[]
+        }
+        delete: {
+          args: Prisma.MailOutboxDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        update: {
+          args: Prisma.MailOutboxUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        deleteMany: {
+          args: Prisma.MailOutboxDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.MailOutboxUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.MailOutboxUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>[]
+        }
+        upsert: {
+          args: Prisma.MailOutboxUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$MailOutboxPayload>
+        }
+        aggregate: {
+          args: Prisma.MailOutboxAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMailOutbox>
+        }
+        groupBy: {
+          args: Prisma.MailOutboxGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MailOutboxGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.MailOutboxCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.MailOutboxCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -3106,6 +3181,26 @@ export const IdempotencyKeyScalarFieldEnum = {
 export type IdempotencyKeyScalarFieldEnum = (typeof IdempotencyKeyScalarFieldEnum)[keyof typeof IdempotencyKeyScalarFieldEnum]
 
 
+export const MailOutboxScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  kind: 'kind',
+  invitationId: 'invitationId',
+  status: 'status',
+  attempts: 'attempts',
+  nextAttemptAt: 'nextAttemptAt',
+  lockedUntil: 'lockedUntil',
+  lastAttemptAt: 'lastAttemptAt',
+  sentAt: 'sentAt',
+  failedAt: 'failedAt',
+  lastError: 'lastError',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type MailOutboxScalarFieldEnum = (typeof MailOutboxScalarFieldEnum)[keyof typeof MailOutboxScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -3454,6 +3549,34 @@ export type ListBigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMod
 
 
 /**
+ * Reference to a field of type 'MailKind'
+ */
+export type EnumMailKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MailKind'>
+    
+
+
+/**
+ * Reference to a field of type 'MailKind[]'
+ */
+export type ListEnumMailKindFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MailKind[]'>
+    
+
+
+/**
+ * Reference to a field of type 'MailStatus'
+ */
+export type EnumMailStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MailStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'MailStatus[]'
+ */
+export type ListEnumMailStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'MailStatus[]'>
+    
+
+
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -3646,6 +3769,7 @@ export type GlobalOmitConfig = {
   appAccess?: Prisma.AppAccessOmit
   outboxEvent?: Prisma.OutboxEventOmit
   idempotencyKey?: Prisma.IdempotencyKeyOmit
+  mailOutbox?: Prisma.MailOutboxOmit
 }
 
 /* Types for Logging */

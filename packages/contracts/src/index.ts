@@ -660,6 +660,18 @@ export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
 export const InvitationStatus = z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]);
 export type InvitationStatus = z.infer<typeof InvitationStatus>;
 
+export const MailDeliveryStatus = z.enum(["PENDING", "SENT", "FAILED", "CANCELLED"]);
+export type MailDeliveryStatus = z.infer<typeof MailDeliveryStatus>;
+
+/** Stan wysyłki wiadomości e-mail z kolejki `mail_outbox` (bez wewnętrznych szczegółów błędu SMTP). */
+export const InvitationDelivery = z.object({
+  status: MailDeliveryStatus.nullable(),
+  attempts: z.number().int().nonnegative(),
+  lastAttemptAt: z.string().nullable(),
+  sentAt: z.string().nullable(),
+});
+export type InvitationDelivery = z.infer<typeof InvitationDelivery>;
+
 export const Invitation = z.object({
   id: z.uuid(),
   accountId: z.uuid(),
@@ -669,6 +681,7 @@ export const Invitation = z.object({
   expiresAt: z.string(),
   invitedByAccountId: z.uuid().nullable(),
   acceptedAt: z.string().nullable(),
+  delivery: InvitationDelivery,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
