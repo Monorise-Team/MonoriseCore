@@ -17,7 +17,7 @@ pnpm dev
 
 - logowanie i zakładanie firmy: http://localhost:3100,
 - Core API: http://localhost:3200/core/v1/health,
-- maile (potwierdzenie adresu): http://localhost:8125.
+- maile (potwierdzenie adresu, zmiana hasła, zaproszenia): http://localhost:8125.
 
 Lokalnie domenę firmy można potwierdzić bez rekordu DNS (przycisk „Potwierdź bez DNS”, sterowany zmienną `CORE_DEV_TRUST_DOMAINS=1` w `apps/auth` i `apps/api`).
 
@@ -54,6 +54,13 @@ Polecenie `pnpm setup:env` tworzy lokalne pliki `.env.local` (istniejących nie 
 | `CORE_OUTBOX_PUBLISH_INTERVAL_MS`      | nie      | Odstęp wysyłki zdarzeń outbox w ms (domyślnie `1000`, `0` wyłącza).                                                                                          |
 | `CORE_MAIL_OUTBOX_INTERVAL_MS`         | nie      | Odstęp pracy workera transakcyjnej kolejki poczty (`mail_outbox`) w ms (domyślnie `1000`, `0` wyłącza).                                                      |
 | `CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS` | nie      | Odstęp sprzątania wygasłych kluczy `Idempotency-Key` w ms (domyślnie 1 godzina, `0` wyłącza).                                                                |
+
+## Logowanie i zmiana hasła (`apps/auth`)
+
+Ekran logowania (`/sign-in`) pozwala zalogować się adresem e-mail i hasłem, założyć firmę (`/sign-up`) albo rozpocząć zmianę zapomnianego hasła („Nie pamiętam hasła” → `/forgot-password`).
+
+- **Jednolita odpowiedź bez wyroczni czasowej**: formularz `/forgot-password` zawsze pokazuje ten sam komunikat niezależnie od tego, czy konto istnieje. Wiadomości logowania (potwierdzenie adresu e-mail przy rejestracji oraz reset hasła) są wysyłane od razu w tle z 3 szybkimi próbami (`0 s`, `2 s`, `5 s`, limit 30 s na próbę i krótsze limity gniazda SMTP), poza kolejką `mail_outbox` (ta służy wyłącznie do zaproszeń). Endpoint żądania resetu chroni wbudowany limit częstotliwości Better Auth.
+- **Jednorazowy link i unieważnienie sesji**: link na `/reset-password?token=…` jest ważny 30 minut i działa raz. Po ustawieniu nowego hasła (12–128 znaków) kończone są wszystkie sesje Better Auth oraz tokeny dostępu i odświeżania OAuth (`revokeUserAuthTokens`), a do dziennika firmy trafia wpis `account.password_reset` (bez haseł i tokenów).
 
 ## Logowanie produktów przez Core
 

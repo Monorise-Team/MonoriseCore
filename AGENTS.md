@@ -71,7 +71,7 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-- `apps/auth`: Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M).
+- `apps/auth`: Next.js + Better Auth: logowanie, reset hasła (`/forgot-password`, `/reset-password`), zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M).
 - `apps/api`: Core API w Fastify (`/core/v1`, ADR-0044): RLS, `Idempotency-Key`; firmy, domeny, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka.
 - `packages/db`: Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `MailOutbox`, `AuditLog`, `IdempotencyKey`), RLS, `withOrganization`.
 - `packages/contracts`: schematy Zod i typy API, pola tokenów, `CORE_PERMISSIONS`, darmowe domeny pocztowe.

@@ -6,7 +6,15 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export function SignInForm({ activated = false, clientId }: { activated?: boolean; clientId?: string }) {
+export function SignInForm({
+  activated = false,
+  passwordReset = false,
+  clientId,
+}: {
+  activated?: boolean;
+  passwordReset?: boolean;
+  clientId?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,6 +54,11 @@ export function SignInForm({ activated = false, clientId }: { activated?: boolea
           Konto zostało aktywowane. Możesz się teraz zalogować.
         </p>
       ) : null}
+      {passwordReset ? (
+        <p role="status" className="rounded-lg bg-bg-tertiary p-3 text-sm text-text-primary">
+          Hasło zostało zmienione. Możesz się teraz zalogować nowym hasłem.
+        </p>
+      ) : null}
       <form className="flex flex-col gap-3" onSubmit={submit}>
         <TextField
           label="Adres e-mail"
@@ -63,6 +76,11 @@ export function SignInForm({ activated = false, clientId }: { activated?: boolea
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+        <div className="flex justify-end">
+          <Link className="text-sm text-accent underline-offset-2 hover:underline" href="/forgot-password">
+            Nie pamiętam hasła
+          </Link>
+        </div>
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         <Button type="submit" variant="primary" size="lg" disabled={busy}>
           {busy ? "Logowanie…" : "Zaloguj się"}
