@@ -39,7 +39,9 @@ import {
   Health,
   IDEMPOTENCY_REPLAYED_HEADER,
   Invitation,
+  InvitationDelivery,
   InvitationStatus,
+  MailDeliveryStatus,
   Me,
   Organization,
   OrganizationDomain,
@@ -235,6 +237,8 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("CreateEmployee", CreateEmployee);
   register("UpdateEmployee", UpdateEmployee);
   register("InvitationStatus", InvitationStatus);
+  register("MailDeliveryStatus", MailDeliveryStatus);
+  register("InvitationDelivery", InvitationDelivery);
   register("Invitation", Invitation);
   register("CreateInvitation", CreateInvitation);
   register("AccountStatus", AccountStatus);

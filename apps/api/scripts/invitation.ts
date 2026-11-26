@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import { createDb } from "@core/db";
 import { createInvitationByOrganization } from "../src/invitations.js";
 import { isLocalMailSink } from "../src/mail.js";
+import { claimMailJobById, deliverMailJob } from "../src/mail-outbox.js";
 
 function usage(): never {
   console.error(
@@ -66,8 +67,24 @@ try {
       `(id=${result.invitation.id}, accountId=${result.invitation.accountId}, ` +
       `employeeId=${result.invitation.employeeId}, ważne do=${result.invitation.expiresAt}).`,
   );
-  if (isLocalMailSink()) {
-    console.log(`Link aktywacyjny (tylko lokalnie): ${result.inviteUrl}`);
+
+  const claimed = await claimMailJobById(db, result.organizationId, result.mailJobId);
+  if (!claimed) {
+    console.log("Wiadomość zaproszenia została już podjęta do wysyłki przez worker Core API.");
+  } else {
+    const delivery = await deliverMailJob(db, claimed, {
+      authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
+    });
+    if (delivery.status === "SENT") {
+      if (delivery.inviteUrl && isLocalMailSink()) {
+        console.log(`Link aktywacyjny (tylko lokalnie): ${delivery.inviteUrl}`);
+      }
+    } else {
+      console.error(
+        `Zaproszenie zostało zapisane, ale bezpośrednia wysyłka wiadomości nie powiodła się (status: ${delivery.status}). ` +
+          "Kolejka poczty Core API ponowi wysyłkę automatycznie.",
+      );
+    }
   }
 } finally {
   await db.$disconnect();

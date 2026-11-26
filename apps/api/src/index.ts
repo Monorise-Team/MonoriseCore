@@ -1,6 +1,7 @@
 import { createDb, isDevTrustDomainsEnabled, resolveDomainVerificationSecret } from "@core/db";
 import { startOutboxPublisher } from "./event-feed.js";
 import { parseIdempotencyCleanupIntervalMs, startIdempotencyCleanup } from "./idempotency.js";
+import { parseMailOutboxIntervalMs, startMailOutboxWorker, type MailOutboxWorker } from "./mail-outbox.js";
 import { registerCorePermissions } from "./permissions-registry.js";
 import { registerCoreRoleTemplates } from "./role-templates-registry.js";
 import { buildServer } from "./server.js";
@@ -13,19 +14,28 @@ function required(name: string): string {
 }
 
 const db = createDb(required("CORE_DATABASE_URL"));
+const authIssuer = required("CORE_AUTH_ISSUER");
+const authUrl = process.env.CORE_AUTH_URL ?? authIssuer;
 const tokenOptions = {
   keys: remoteKeys(required("CORE_AUTH_JWKS_URL")),
-  issuer: required("CORE_AUTH_ISSUER"),
+  issuer: authIssuer,
   audience: required("CORE_API_AUDIENCE"),
 };
+
+const mailOutboxIntervalMs = parseMailOutboxIntervalMs(process.env.CORE_MAIL_OUTBOX_INTERVAL_MS);
+const idempotencyCleanupIntervalMs = parseIdempotencyCleanupIntervalMs(
+  process.env.CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
+);
+
+let mailOutboxWorker: MailOutboxWorker | undefined;
 
 const app = buildServer({
   db,
   verifyToken: createTokenVerifier(tokenOptions),
   verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-  authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
   domainVerificationSecret: resolveDomainVerificationSecret({ env: process.env }),
   devTrustDomains: isDevTrustDomainsEnabled(process.env),
+  mailOutboxWorker: { wake: () => mailOutboxWorker?.wake() },
   logger: true,
 });
 
@@ -46,10 +56,20 @@ if (publishIntervalMs > 0) {
   app.addHook("onClose", async () => stopPublisher());
 }
 
+// Transakcyjna kolejka wysyłki poczty (MonoriseCore#60); 0 wyłącza (np. gdy wysyła inna instancja)
+if (mailOutboxIntervalMs > 0) {
+  mailOutboxWorker = startMailOutboxWorker({
+    db,
+    intervalMs: mailOutboxIntervalMs,
+    authUrl,
+    onError: (error) => app.log.error({ err: error }, "wysyłka poczty z kolejki outbox nie powiodła się"),
+  });
+  app.addHook("onClose", async () => {
+    await mailOutboxWorker?.stop();
+  });
+}
+
 // Sprzątanie wygasłych kluczy powtórzeń Idempotency-Key (MonoriseCore#30); 0 wyłącza
-const idempotencyCleanupIntervalMs = parseIdempotencyCleanupIntervalMs(
-  process.env.CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
-);
 if (idempotencyCleanupIntervalMs > 0) {
   const stopIdempotencyCleanup = startIdempotencyCleanup({
     db,
