@@ -183,17 +183,34 @@ export type MachineTokenClaims = z.infer<typeof MachineTokenClaims>;
 
 // ── Firmy ───────────────────────────────────────────────────────────────────────────────────────
 
+export const MAX_ORGANIZATION_DOMAINS = 20;
+
 export const OrganizationStatus = z.enum(["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED", "OFFBOARDING", "DELETED"]);
 export type OrganizationStatus = z.infer<typeof OrganizationStatus>;
 
 export const DomainStatus = z.enum(["PENDING", "VERIFIED", "FAILED", "REVOKED"]);
 export type DomainStatus = z.infer<typeof DomainStatus>;
 
+/** Nazwa domeny e-mail firmy (małe litery, co najmniej jedna kropka, TLD z liter). */
+export const DOMAIN_NAME_REGEX = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+export const DomainName = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(4, "Nazwa domeny jest za krótka")
+  .max(253, "Nazwa domeny jest za długa")
+  .regex(DOMAIN_NAME_REGEX, "Podaj poprawną nazwę domeny");
+export type DomainName = z.infer<typeof DomainName>;
+
 export const OrganizationDomain = z.object({
+  id: z.uuid(),
   domain: z.string(),
   status: DomainStatus,
   isPrimary: z.boolean(),
   verifiedAt: z.string().nullable(),
+  lastCheckedAt: z.string().nullable(),
+  verificationTxtName: z.string().nullable(),
+  verificationTxtValue: z.string().nullable(),
 });
 export type OrganizationDomain = z.infer<typeof OrganizationDomain>;
 
@@ -205,6 +222,27 @@ export const Organization = z.object({
   createdAt: z.string(),
 });
 export type Organization = z.infer<typeof Organization>;
+
+export const UpdateOrganization = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+  })
+  .strict();
+export type UpdateOrganization = z.infer<typeof UpdateOrganization>;
+
+export const CreateOrganizationDomain = z
+  .object({
+    domain: DomainName,
+  })
+  .strict();
+export type CreateOrganizationDomain = z.infer<typeof CreateOrganizationDomain>;
+
+export const VerifyOrganizationDomain = z
+  .object({
+    trustLocally: z.boolean().optional(),
+  })
+  .strict();
+export type VerifyOrganizationDomain = z.infer<typeof VerifyOrganizationDomain>;
 
 export const OrganizationOwner = z.object({
   ownerAccountId: z.uuid(),

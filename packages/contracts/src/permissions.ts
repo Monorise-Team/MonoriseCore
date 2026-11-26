@@ -11,6 +11,7 @@ export const CORE_PERMISSIONS = definePermissions("core", {
   "roles.assign": "Nadawanie i odbieranie ról w swoim zakresie",
   "app_access.manage": "Włączanie i wyłączanie aplikacji pracownikom",
   "audit.read": "Przegląd dziennika zdarzeń firmy",
+  "organization.manage": "Zmiana danych firmy i zarządzanie jej domenami",
 });
 
 export type CorePermissionKey = PermissionKeyOf<typeof CORE_PERMISSIONS>;
