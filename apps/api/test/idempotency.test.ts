@@ -326,6 +326,15 @@ describe("Nagłówek Idempotency-Key dla operacji POST Core API (MonoriseCore#30
     );
     expect(jobsAfterCreate).toHaveLength(1);
 
+    await withOrganization(
+      ownerDb,
+      acme.id,
+      (tx) =>
+        tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "nextAttemptAt" = now() - interval '1 second'
+        WHERE "status" = 'PENDING' AND "nextAttemptAt" > now()`,
+    );
     await deliverPendingMail(db, { authUrl: AUTH_URL, mailer: testMailer, now: currentNow });
     expect(mailerCalls.filter((m) => m.to === email)).toHaveLength(1);
 
@@ -348,6 +357,15 @@ describe("Nagłówek Idempotency-Key dla operacji POST Core API (MonoriseCore#30
     );
     expect(pendingJobsAfterResend).toHaveLength(1);
 
+    await withOrganization(
+      ownerDb,
+      acme.id,
+      (tx) =>
+        tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "nextAttemptAt" = now() - interval '1 second'
+        WHERE "status" = 'PENDING' AND "nextAttemptAt" > now()`,
+    );
     await deliverPendingMail(db, { authUrl: AUTH_URL, mailer: testMailer, now: currentNow });
     expect(mailerCalls.filter((m) => m.to === email)).toHaveLength(1);
 

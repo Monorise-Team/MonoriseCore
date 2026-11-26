@@ -142,6 +142,24 @@ function extractTokenFromMail(to: string): string {
   return rawToken!;
 }
 
+/**
+ * Testy zaproszeń używają przesuwanego zegara `currentNow` (np. +8 dni). Ponieważ `mail_outbox_claim`
+ * zawsze porównuje z rzeczywistym `now()` PostgreSQL, cofamy `nextAttemptAt` oczekujących zadań
+ * firmy `acme` w przeszłość przed uruchomieniem `deliverPendingMail`.
+ */
+async function deliverAcmePendingMail() {
+  await withOrganization(
+    ownerDb,
+    acme.id,
+    (tx) =>
+      tx.$executeRaw`
+      UPDATE "public"."mail_outbox"
+      SET "nextAttemptAt" = now() - interval '1 second'
+      WHERE "status" = 'PENDING' AND "nextAttemptAt" > now()`,
+  );
+  return deliverPendingMail(db, { authUrl: AUTH_URL, now: currentNow });
+}
+
 beforeAll(async () => {
   process.env.CORE_SMTP_URL = "memory";
   await registerCorePermissions(db);
@@ -270,8 +288,8 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
 
     // W trakcie żądania HTTP żaden e-mail jeszcze nie wychodzi — dostarcza go kolejka mail_outbox po COMMIT
     expect(sentMails()).toHaveLength(0);
-    const deliverySummary = await deliverPendingMail(db, { authUrl: AUTH_URL, now: currentNow });
-    expect(deliverySummary).toMatchObject({ claimed: 1, sent: 1, retried: 0, failed: 0, cancelled: 0 });
+    const deliverySummary = await deliverAcmePendingMail();
+    expect(deliverySummary).toMatchObject({ claimed: 1, sent: 1, retried: 0, failed: 0, cancelled: 0, skipped: 0 });
 
     // Lista pracowników pokazuje stan konta: zaproszony Jan (INVITED) i aktywna Anna (ACTIVE)
     const employees = (await request("GET", "/core/v1/employees?limit=100", ownerToken)).json().data as Array<{
@@ -294,12 +312,13 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
       id: string;
       delivery: { status: string | null; attempts: number; lastAttemptAt: string | null; sentAt: string | null };
     }>;
-    expect(listedAfterSend.find((row) => row.id === inv.id)?.delivery).toEqual({
+    const sentDelivery = listedAfterSend.find((row) => row.id === inv.id)?.delivery;
+    expect(sentDelivery).toMatchObject({
       status: "SENT",
       attempts: 1,
-      lastAttemptAt: currentNow.toISOString(),
       sentAt: currentNow.toISOString(),
     });
+    expect(typeof sentDelivery?.lastAttemptAt).toBe("string");
 
     // W bazie: auth.users (bez hasła, emailVerified=false), account (INVITED), invitation (tylko hashToken)
     const authUser = await db.authUser.findUniqueOrThrow({
@@ -500,7 +519,7 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
     });
     expect(createRes.statusCode).toBe(201);
     const inv = createRes.json().data;
-    await deliverPendingMail(db, { authUrl: AUTH_URL, now: currentNow });
+    await deliverAcmePendingMail();
     const firstToken = extractTokenFromMail(inv.email);
 
     expect(await invitationByTokenHash(db, hashToken(firstToken))).toEqual({
@@ -533,7 +552,7 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
     expect(Date.parse(resendRes.json().data.expiresAt) - currentNow.getTime()).toBe(INVITATION_TTL_MS);
     expect(await invitationByTokenHash(db, hashToken(firstToken))).toBeNull();
 
-    await deliverPendingMail(db, { authUrl: AUTH_URL, now: currentNow });
+    await deliverAcmePendingMail();
     const secondToken = extractTokenFromMail(inv.email);
     expect(secondToken).not.toBe(firstToken);
     expect(await invitationByTokenHash(db, hashToken(firstToken))).toBeNull();
@@ -560,7 +579,7 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
     expect(resendRevoked.json().data.status).toBe("PENDING");
     expect(await invitationByTokenHash(db, hashToken(secondToken))).toBeNull();
 
-    await deliverPendingMail(db, { authUrl: AUTH_URL, now: currentNow });
+    await deliverAcmePendingMail();
     const thirdToken = extractTokenFromMail(inv.email);
     expect(await invitationByTokenHash(db, hashToken(secondToken))).toBeNull();
     expect(await invitationByTokenHash(db, hashToken(thirdToken))).toEqual({
