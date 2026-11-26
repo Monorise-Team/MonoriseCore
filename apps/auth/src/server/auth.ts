@@ -8,8 +8,13 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
 import { config } from "./config";
 import { db } from "./db";
-import { linkMail, sendMail } from "./mail";
+import { linkMail, passwordResetMail, sendMailInBackground } from "./mail";
 import { hashClientSecret, PRODUCT_MACHINE_SCOPES, PRODUCT_SCOPES } from "./oauth-clients";
+import {
+  canRequestPasswordReset,
+  handlePasswordReset,
+  PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
+} from "./password-reset";
 
 /** Firmy w tych stanach nie logują się (wstrzymanie, usunięcie). */
 const BLOCKED_ORGANIZATIONS = new Set(["SUSPENDED", "DELETED"]);
@@ -38,12 +43,31 @@ export const auth = betterAuth({
     minPasswordLength: 12,
     maxPasswordLength: 128,
     autoSignIn: false,
+    // Link do zmiany hasła ważny 30 minut i jednorazowy; po zmianie kończymy wszystkie sesje (02-identity/flows.md)
+    resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, token }) => {
+      if (!(await canRequestPasswordReset(user.id))) {
+        await db.authVerification.deleteMany({ where: { identifier: `reset-password:${token}` } });
+        return;
+      }
+      const resetUrl = new URL("/reset-password", config.authUrl);
+      resetUrl.searchParams.set("token", token);
+      // Wysyłka w tle bez await — czas odpowiedzi nie zdradza, czy konto istnieje
+      void sendMailInBackground(passwordResetMail(user.email, resetUrl.toString()), "password-reset");
+    },
+    onPasswordReset: async ({ user }, request) => {
+      await handlePasswordReset(user.id, {
+        ipAddress: request?.headers.get("x-forwarded-for") ?? request?.headers.get("x-real-ip"),
+        userAgent: request?.headers.get("user-agent"),
+      });
+    },
   },
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendMail(
+      void sendMailInBackground(
         linkMail(
           user.email,
           "Potwierdź adres e-mail w Monorise",
@@ -51,6 +75,7 @@ export const auth = betterAuth({
           "Potwierdź adres",
           url,
         ),
+        "email-verification",
       );
     },
   },
