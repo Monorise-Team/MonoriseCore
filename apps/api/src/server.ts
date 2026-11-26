@@ -3,6 +3,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -12,12 +13,14 @@ import {
   EVENTS_READ_SCOPE,
   ProductEventsQuery,
   EntitlementStatus,
+  getNotificationCategory,
   IDEMPOTENCY_REPLAYED_HEADER,
   InvitationStatus,
   isFreeEmailDomain,
   ListAuditLogQuery,
   MAX_DIRECTORY_FILTER_IDS,
   normalizeEmail,
+  NOTIFICATIONS_SEND_SCOPE,
   PageQuery,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
@@ -26,6 +29,7 @@ import {
   TransferOrganizationOwner,
   UnitStatus,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -87,6 +91,7 @@ import { isEntitlementActive } from "./entitlements.js";
 import { readProductEventFeed } from "./event-feed.js";
 import {
   accountPrincipal,
+  clientPrincipal,
   computeRequestHash,
   executeWithIdempotency,
   extractIdempotencyKeyHeader,
@@ -103,6 +108,16 @@ import {
   type InvitationActor,
 } from "./invitations.js";
 import type { MailOutboxWorker } from "./mail-outbox.js";
+import {
+  createNotification,
+  listNotificationPreferencesForAccount,
+  NotificationError,
+  resolveNotificationsUnsubscribeSecret,
+  unsubscribeNotificationByToken,
+  updateNotificationPreferenceForAccount,
+  validateActionUrlOrigin,
+  type NotificationAuditMeta,
+} from "./notifications.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
@@ -128,6 +143,8 @@ export interface ServerOptions {
   logger?: boolean;
   /** Sekret HMAC-SHA256 do wyliczania rekordów DNS TXT domen (`CORE_DOMAIN_VERIFICATION_SECRET`). */
   domainVerificationSecret?: string | undefined;
+  /** Sekret HMAC-SHA256 do podpisywania tokenów wypisania z powiadomień (`CORE_NOTIFICATIONS_UNSUBSCRIBE_SECRET`). */
+  notificationsUnsubscribeSecret?: string | undefined;
   /** Tylko lokalnie: czy zezwolić na `trustLocally: true` w weryfikacji domeny (`CORE_DEV_TRUST_DOMAINS=1`). */
   devTrustDomains?: boolean | undefined;
   /** Nadpisanie funkcji odpytywania DNS TXT (np. w testach). */
@@ -162,6 +179,7 @@ const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
 const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
 const InvitationIdParams = z.object({ invitationId: z.uuid() });
 const DomainIdParams = z.object({ domainId: z.uuid() });
+const OrganizationIdParams = z.object({ organizationId: z.uuid() });
 const ListInvitationsFilter = z.object({ status: InvitationStatus.optional() });
 const PermissionSnapshotQuery = z.object({
   organizationId: z.uuid(),
@@ -615,6 +633,7 @@ export function buildServer({
   verifyMachineToken,
   logger = false,
   domainVerificationSecret = process.env.CORE_DOMAIN_VERIFICATION_SECRET,
+  notificationsUnsubscribeSecret,
   devTrustDomains = false,
   resolveTxt,
   mailOutboxWorker,
@@ -622,7 +641,11 @@ export function buildServer({
   onRoute,
 }: ServerOptions): FastifyInstance {
   const getNow = customNow ?? (() => new Date());
-  const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
+  const app = Fastify({
+    logger,
+    routerOptions: { maxParamLength: 1024 },
+    genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`,
+  });
   const openApiDocument = buildOpenApiDocument();
   const domainOptions: DomainServiceOptions = {
     domainVerificationSecret: domainVerificationSecret?.trim() || undefined,
@@ -633,6 +656,27 @@ export function buildServer({
   if (onRoute) {
     app.addHook("onRoute", onRoute);
   }
+
+  // RFC 8058: klienci pocztowi wysyłają jednoklikowe wypisanie z nagłówkiem application/x-www-form-urlencoded.
+  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_request, body, done) => {
+    done(null, typeof body === "string" ? body : body.toString("utf8"));
+  });
+
+  const getUnsubscribeSecret = (): string =>
+    notificationsUnsubscribeSecret?.trim() ||
+    resolveNotificationsUnsubscribeSecret({
+      env: process.env,
+      fallbackSecret: domainVerificationSecret,
+    });
+
+  const auditMetaFromRequest = (request: FastifyRequest): NotificationAuditMeta => {
+    const header = request.headers["user-agent"];
+    return {
+      ipAddress: request.ip || null,
+      userAgent: typeof header === "string" && header.length > 0 ? header : null,
+      requestId: request.id,
+    };
+  };
 
   const send = <T>(request: FastifyRequest, data: T): ApiResponse<T> => ({
     data,
@@ -657,13 +701,15 @@ export function buildServer({
             ? new ApiFailure(error.status, error.code, error.message, error.details)
             : error instanceof DomainError
               ? new ApiFailure(error.status, error.code, error.message, error.details)
-              : error instanceof PermissionError
-                ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
-                : statusCode === 404
-                  ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-                  : statusCode === 400
-                    ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-                    : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
+              : error instanceof NotificationError
+                ? new ApiFailure(error.status, error.code, error.message, error.details)
+                : error instanceof PermissionError
+                  ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+                  : statusCode === 404
+                    ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+                    : statusCode === 400
+                      ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+                      : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -2764,6 +2810,160 @@ export function buildServer({
       });
 
       return sendList(request, items, nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.sendNotification.method,
+    url: toFastifyPath(ROUTES.sendNotification.path),
+    config: { idempotent: true },
+    handler: async (request, reply) => {
+      const machine = await machineCaller(request, NOTIFICATIONS_SEND_SCOPE);
+      const idempotencyKey = parseIdempotencyKeyHeader(extractIdempotencyKeyHeader(request));
+      const params = parseInput(OrganizationIdParams, request.params);
+
+      const product = await db.product.findUnique({
+        where: { registrationClientId: machine.clientId },
+        select: { id: true, key: true, name: true },
+      });
+      if (!product) {
+        throw new ApiFailure(403, "PERMISSION_DENIED", "Ten klient nie jest przypisany do żadnego produktu");
+      }
+
+      const runSend = async (tx: Tx, now: Date) => {
+        const body = parseInput(CreateNotification, request.body);
+        const categoryDef = getNotificationCategory(body.category);
+        if (!categoryDef) {
+          throw new ApiFailure(422, "VALIDATION_FAILED", "Nieznana kategoria powiadomień", [
+            { field: "category", message: "Nieznana kategoria powiadomień" },
+          ]);
+        }
+        if (categoryDef.channel !== "notifications" || categoryDef.product !== product.key) {
+          throw new ApiFailure(403, "PERMISSION_DENIED", "Ten produkt nie może wysyłać powiadomień w tej kategorii");
+        }
+
+        const normalizedActionUrl = body.actionUrl ?? null;
+        if (normalizedActionUrl !== null) {
+          const oauthClient = await tx.authOAuthClient.findUnique({
+            where: { clientId: machine.clientId },
+            select: { uri: true },
+          });
+          validateActionUrlOrigin(normalizedActionUrl, oauthClient?.uri ?? null);
+        }
+
+        return createNotification(tx, {
+          organizationId: params.organizationId,
+          productId: product.id,
+          productKey: product.key,
+          category: categoryDef.key,
+          recipientAccountId: body.recipientAccountId,
+          title: body.title,
+          body: body.body,
+          actionUrl: normalizedActionUrl,
+          now: customNow ? now : undefined,
+        });
+      };
+
+      if (idempotencyKey === null) {
+        const created = await withOrganization(db, params.organizationId, (tx) => runSend(tx, getNow()));
+        if (created.queued) {
+          mailOutboxWorker?.wake();
+        }
+        return reply.status(ROUTES.sendNotification.successStatus).send(send(request, created.result));
+      }
+
+      const routeParams =
+        request.params && typeof request.params === "object" ? (request.params as Record<string, unknown>) : undefined;
+      let queued = false;
+      const outcome = await executeWithIdempotency({
+        db,
+        organizationId: params.organizationId,
+        principal: clientPrincipal(machine.clientId),
+        key: idempotencyKey,
+        method: ROUTES.sendNotification.method,
+        pathTemplate: ROUTES.sendNotification.path,
+        body: request.body,
+        params: routeParams,
+        getNow,
+        run: async (tx, now) => {
+          const created = await runSend(tx, now);
+          queued = created.queued;
+          return {
+            status: ROUTES.sendNotification.successStatus,
+            body: send(request, created.result),
+          };
+        },
+      });
+
+      if (outcome.replayed) {
+        void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+      } else if (queued) {
+        mailOutboxWorker?.wake();
+      }
+      return reply.status(outcome.status).send(outcome.body);
+    },
+  });
+
+  app.route({
+    method: ROUTES.listMyNotificationPreferences.method,
+    url: toFastifyPath(ROUTES.listMyNotificationPreferences.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const now = getNow();
+      const items = await withOrganization(db, who.organizationId, (tx) =>
+        listNotificationPreferencesForAccount(tx, {
+          organizationId: who.organizationId,
+          accountId: who.accountId,
+          now,
+        }),
+      );
+      return send(request, items);
+    },
+  });
+
+  app.route({
+    method: ROUTES.updateMyNotificationPreference.method,
+    url: toFastifyPath(ROUTES.updateMyNotificationPreference.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const rawCategory = (request.params as { category?: unknown } | undefined)?.category;
+      if (typeof rawCategory !== "string" || !rawCategory) {
+        throw new ApiFailure(422, "VALIDATION_FAILED", "Nieznana kategoria powiadomień", [
+          { field: "category", message: "Nieznana kategoria powiadomień" },
+        ]);
+      }
+      const body = parseInput(UpdateNotificationPreference, request.body);
+      const now = getNow();
+      const updated = await withOrganization(db, who.organizationId, (tx) =>
+        updateNotificationPreferenceForAccount(tx, {
+          organizationId: who.organizationId,
+          accountId: who.accountId,
+          category: rawCategory,
+          enabled: body.enabled,
+          now,
+          auditMeta: auditMetaFromRequest(request),
+          source: "api",
+        }),
+      );
+      return send(request, updated);
+    },
+  });
+
+  app.route({
+    method: ROUTES.unsubscribeNotification.method,
+    url: toFastifyPath(ROUTES.unsubscribeNotification.path),
+    handler: async (request) => {
+      const rawToken = (request.params as { token?: unknown } | undefined)?.token;
+      if (typeof rawToken !== "string" || !rawToken) {
+        throw new ApiFailure(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+      }
+      const result = await unsubscribeNotificationByToken(db, {
+        token: rawToken,
+        secret: getUnsubscribeSecret(),
+        now: getNow(),
+        auditMeta: auditMetaFromRequest(request),
+      });
+      return send(request, result);
     },
   });
 

@@ -17,6 +17,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -43,6 +44,13 @@ import {
   InvitationStatus,
   MailDeliveryStatus,
   Me,
+  NotificationCategoryKey,
+  NotificationMailChannel,
+  NotificationPreference,
+  NotificationResult,
+  NotificationSkipReason,
+  NotificationStatus,
+  NOTIFICATIONS_SEND_SCOPE,
   Organization,
   OrganizationDomain,
   OrganizationOwner,
@@ -69,7 +77,9 @@ import {
   UnitMembershipRole,
   UnitStatus,
   UnitType,
+  UnsubscribeNotificationResult,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -281,6 +291,15 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("PermissionSnapshot", PermissionSnapshot);
   register("DirectoryUnitMember", DirectoryUnitMember);
   register("DirectoryEmployee", DirectoryEmployee);
+  register("NotificationCategoryKey", NotificationCategoryKey);
+  register("NotificationMailChannel", NotificationMailChannel);
+  register("NotificationStatus", NotificationStatus);
+  register("NotificationSkipReason", NotificationSkipReason);
+  register("CreateNotification", CreateNotification);
+  register("NotificationResult", NotificationResult);
+  register("NotificationPreference", NotificationPreference);
+  register("UpdateNotificationPreference", UpdateNotificationPreference);
+  register("UnsubscribeNotificationResult", UnsubscribeNotificationResult);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -528,6 +547,8 @@ export function buildOpenApiDocument(): OpenApiSpec {
                 [PERMISSIONS_READ_SCOPE]: "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
                 [DIRECTORY_READ_SCOPE]: "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu.",
                 [EVENTS_READ_SCOPE]: "Odczyt kanału zdarzeń Core dla firm z dostępem do produktu.",
+                [NOTIFICATIONS_SEND_SCOPE]:
+                  "Zlecanie wysyłki powiadomień e-mail produktu przez moduł powiadomień Core.",
               },
             },
           },

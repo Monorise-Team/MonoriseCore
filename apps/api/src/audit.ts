@@ -65,6 +65,7 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   "app_access.revoked": "Wyłączono dostęp do aplikacji",
   "entitlement.granted": "Przyznano firmie dostęp do produktu",
   "entitlement.ended": "Zakończono dostęp firmy do produktu",
+  "notification.preference_changed": "Zmieniono ustawienia powiadomień",
 };
 
 const SENSITIVE_METADATA_KEY_RE = /token|secret|password|hash|authorization|cookie/i;

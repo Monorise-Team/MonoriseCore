@@ -1,3 +1,4 @@
+import { getNotificationCategory, type NotificationCategoryKey } from "@core/contracts";
 import {
   claimMailOutboxJobs,
   cleanupMailOutbox,
@@ -15,7 +16,15 @@ import {
   lockInvitation,
   resolveInviterName,
 } from "./invitations.js";
-import { invitationMail, sendMail, type MailSender } from "./mail.js";
+import { invitationMail, notificationMail, sendMail, sendNotificationMail, type MailSender } from "./mail.js";
+import {
+  buildUnsubscribeUrl,
+  checkRecipientProductAccess,
+  createUnsubscribeToken,
+  isEmailPreferenceEnabled,
+  lockNotification,
+  resolveNotificationsUnsubscribeSecret,
+} from "./notifications.js";
 
 /** Domyślny odstęp pętli workera kolejki poczty (1 s). */
 export const DEFAULT_MAIL_OUTBOX_INTERVAL_MS = 1000;
@@ -69,7 +78,12 @@ export interface ClaimMailJobsOptions {
 
 export interface DeliverMailJobOptions {
   authUrl?: string | undefined;
+  apiUrl?: string | undefined;
+  notificationsUnsubscribeSecret?: string | undefined;
+  /** Transport kanału logowania (zaproszenia). */
   mailer?: MailSender | undefined;
+  /** Transport osobnego kanału powiadomień produktów. */
+  notificationsMailer?: MailSender | undefined;
   leaseMs?: number | undefined;
   /** Opcjonalny zegar (wyłącznie do testów — produkcja zawsze używa `now()` z PostgreSQL). */
   now?: Date | undefined;
@@ -82,7 +96,10 @@ export interface DeliverMailJobResult {
 
 export interface DeliverPendingMailOptions extends ClaimMailJobsOptions {
   authUrl?: string | undefined;
+  apiUrl?: string | undefined;
+  notificationsUnsubscribeSecret?: string | undefined;
   mailer?: MailSender | undefined;
+  notificationsMailer?: MailSender | undefined;
   /** Opcjonalny zegar (wyłącznie do testów — nigdy nie trafia do `mail_outbox_claim`). */
   now?: Date | (() => Date) | undefined;
   onError?: ((error: unknown) => void) | undefined;
@@ -100,7 +117,7 @@ export interface DeliverPendingMailSummary {
 export interface MailOutboxWorker {
   /** Zatrzymuje harmonogram i czeka na zakończenie trwającego przebiegu. */
   stop: () => Promise<void>;
-  /** Natychmiast wybudza worker (np. po zapisaniu nowego zaproszenia), bez nakładania przebiegów. */
+  /** Natychmiast wybudza worker (np. po zapisaniu nowego zaproszenia lub powiadomienia), bez nakładania przebiegów. */
   wake: () => void;
 }
 
@@ -109,7 +126,10 @@ export interface MailOutboxWorkerOptions {
   /** Odstęp między przebiegami (ms). */
   intervalMs: number;
   authUrl?: string | undefined;
+  apiUrl?: string | undefined;
+  notificationsUnsubscribeSecret?: string | undefined;
   mailer?: MailSender | undefined;
+  notificationsMailer?: MailSender | undefined;
   batchSize?: number | undefined;
   maxBatchesPerTick?: number | undefined;
   leaseMs?: number | undefined;
@@ -174,6 +194,112 @@ async function readDbNow(tx: Tx): Promise<Date> {
   return rows[0]?.now ?? new Date();
 }
 
+async function cancelJobFenced(tx: Tx, job: ClaimedMailJob, explicitNow: Date | undefined): Promise<number> {
+  return explicitNow !== undefined
+    ? tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = ${explicitNow}::timestamptz
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`
+    : tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = now()
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`;
+}
+
+async function renewJobLeaseFenced(
+  tx: Tx,
+  job: ClaimedMailJob,
+  leaseMs: number,
+  explicitNow: Date | undefined,
+): Promise<number> {
+  return explicitNow !== undefined
+    ? tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "lockedUntil" = ${explicitNow}::timestamptz + (${leaseMs}::integer * interval '1 millisecond'),
+            "updatedAt" = ${explicitNow}::timestamptz
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`
+    : tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "lockedUntil" = now() + (${leaseMs}::integer * interval '1 millisecond'),
+            "updatedAt" = now()
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`;
+}
+
+async function markJobFailedFenced(
+  tx: Tx,
+  job: ClaimedMailJob,
+  lastError: string,
+  explicitNow: Date | undefined,
+): Promise<number> {
+  return explicitNow !== undefined
+    ? tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'FAILED',
+            "failedAt" = ${explicitNow}::timestamptz,
+            "lockedUntil" = NULL,
+            "lastError" = ${lastError}::text,
+            "updatedAt" = ${explicitNow}::timestamptz
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`
+    : tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'FAILED',
+            "failedAt" = now(),
+            "lockedUntil" = NULL,
+            "lastError" = ${lastError}::text,
+            "updatedAt" = now()
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`;
+}
+
+async function scheduleJobRetryFenced(
+  tx: Tx,
+  job: ClaimedMailJob,
+  backoffMs: number,
+  lastError: string,
+  explicitNow: Date | undefined,
+): Promise<number> {
+  return explicitNow !== undefined
+    ? tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'PENDING',
+            "nextAttemptAt" = ${explicitNow}::timestamptz + (${backoffMs}::integer * interval '1 millisecond'),
+            "lockedUntil" = NULL,
+            "lastError" = ${lastError}::text,
+            "updatedAt" = ${explicitNow}::timestamptz
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`
+    : tx.$executeRaw`
+        UPDATE "public"."mail_outbox"
+        SET "status" = 'PENDING',
+            "nextAttemptAt" = now() + (${backoffMs}::integer * interval '1 millisecond'),
+            "lockedUntil" = NULL,
+            "lastError" = ${lastError}::text,
+            "updatedAt" = now()
+        WHERE "id" = ${job.id}::uuid
+          AND "organizationId" = ${job.organizationId}::uuid
+          AND "status" = 'PENDING'
+          AND "attempts" = ${job.attempts}::integer`;
+}
+
 /**
  * Atomowo pobiera porcję gotowych zadań z kolejki `public.mail_outbox` (`mail_outbox_claim`, `FOR UPDATE SKIP LOCKED`),
  * zawsze według zegara bazy `now()`, ustawiając dzierżawę `lockedUntil` oraz podbijając `attempts` i `lastAttemptAt`.
@@ -211,7 +337,7 @@ export async function claimMailJobById(
               AND "organizationId" = ${organizationId}::uuid
               AND "status" = 'PENDING'
               AND ("lockedUntil" IS NULL OR "lockedUntil" < ${explicitNow}::timestamptz)
-            RETURNING "id", "organizationId", "kind", "invitationId", "attempts"`
+            RETURNING "id", "organizationId", "kind", "invitationId", "notificationId", "attempts"`
         : await tx.$queryRaw<ClaimedMailJob[]>`
             UPDATE "public"."mail_outbox"
             SET "lockedUntil" = now() + (${leaseMs}::integer * interval '1 millisecond'),
@@ -222,7 +348,7 @@ export async function claimMailJobById(
               AND "organizationId" = ${organizationId}::uuid
               AND "status" = 'PENDING'
               AND ("lockedUntil" IS NULL OR "lockedUntil" < now())
-            RETURNING "id", "organizationId", "kind", "invitationId", "attempts"`;
+            RETURNING "id", "organizationId", "kind", "invitationId", "notificationId", "attempts"`;
     return rows[0] ?? null;
   });
 }
@@ -231,25 +357,33 @@ type PreparedDelivery =
   | { action: "skip" }
   | { action: "cancelled" }
   | {
-      action: "send";
+      action: "send_invitation";
       to: string;
       organizationName: string;
       inviterName: string | null;
       inviteUrl: string;
+    }
+  | {
+      action: "send_notification";
+      to: string;
+      organizationId: string;
+      accountId: string;
+      organizationName: string;
+      productName: string;
+      category: NotificationCategoryKey;
+      categoryName: string;
+      title: string;
+      body: string;
+      actionUrl: string | null;
     };
 
 /**
  * Dostarcza pojedyncze zarezerwowane zadanie z `mail_outbox` z ogrodzeniem (fencing) po numerze próby `job.attempts`:
- * 1. W krótkiej transakcji `withOrganization` z blokadą `lockInvitation` sprawdza, czy zadanie nadal ma
- *    `status = PENDING` i `attempts = job.attempts`. Jeśli nie — pomija bez modyfikacji (`SKIPPED`).
- *    Gdy zaproszenie jest nieaktualne (nie-`PENDING`, wygasłe lub konto nie-`INVITED`), oznacza zadanie `CANCELLED`
- *    (również z warunkiem `status = PENDING AND attempts = job.attempts`). W przeciwnym razie odnawia dzierżawę
- *    (`lockedUntil = now() + leaseMs`, ogrodzone tym samym warunkiem), generuje świeży token aktywacyjny,
- *    zapisuje jego skrót SHA-256 (bez zmiany `expiresAt`) i zamyka transakcję przed rozmową z serwerem SMTP.
- * 2. Poza jakąkolwiek transakcją bazy wysyła wiadomość e-mail przez `mailer`.
- * 3. W nowej krótkiej transakcji (zawsze z warunkiem `status = PENDING AND attempts = job.attempts`) oznacza zadanie
- *    jako `SENT`, albo przy błędzie planuje ponowienie z backoffem (`PENDING`) bądź oznacza jako `FAILED`
- *    po `MAIL_MAX_ATTEMPTS` (8) próbach. Spóźniony worker po wygaśnięciu dzierżawy nigdy nie nadpisze nowszej próby.
+ * - dla `INVITATION`: weryfikuje aktualność zaproszenia, odnawia dzierżawę, generuje świeży token i wysyła kanałem logowania;
+ * - dla `NOTIFICATION`: ponownie sprawdza dostęp i preferencję odbiorcy w chwili wysyłki (wyłączona -> oznacza powiadomienie
+ *   `SKIPPED`/`PREFERENCE_OFF` i zamyka wiersz kolejki jako `CANCELLED` bez wysyłki), odnawia dzierżawę, renderuje wspólny
+ *   układ z nagłówkami RFC 8058 i wysyła osobnym kanałem powiadomień;
+ * - po sukcesie lub po ostatniej nieudanej próbie atomowo aktualizuje `mail_outbox` i (dla powiadomień) `notifications`.
  */
 export async function deliverMailJob(
   db: PrismaClient,
@@ -260,7 +394,19 @@ export async function deliverMailJob(
   const explicitNow = options.now;
 
   const prepared: PreparedDelivery = await withOrganization(db, job.organizationId, async (tx) => {
-    await lockInvitation(tx, job.invitationId);
+    if (job.kind === "INVITATION") {
+      if (!job.invitationId) {
+        const cancelled = await cancelJobFenced(tx, job, explicitNow);
+        return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+      }
+      await lockInvitation(tx, job.invitationId);
+    } else {
+      if (!job.notificationId) {
+        const cancelled = await cancelJobFenced(tx, job, explicitNow);
+        return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+      }
+      await lockNotification(tx, job.notificationId);
+    }
 
     const currentJob = await tx.mailOutbox.findUnique({
       where: { id: job.id },
@@ -275,7 +421,7 @@ export async function deliverMailJob(
     switch (job.kind) {
       case "INVITATION": {
         const invitation = await tx.invitation.findUnique({
-          where: { id: job.invitationId },
+          where: { id: job.invitationId! },
           select: {
             id: true,
             email: true,
@@ -292,44 +438,12 @@ export async function deliverMailJob(
           effectiveInvitationStatus(invitation.status, invitation.expiresAt, effectiveNow) !== "PENDING" ||
           invitation.account.status !== "INVITED"
         ) {
-          const cancelled =
-            explicitNow !== undefined
-              ? await tx.$executeRaw`
-                  UPDATE "public"."mail_outbox"
-                  SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = ${explicitNow}::timestamptz
-                  WHERE "id" = ${job.id}::uuid
-                    AND "organizationId" = ${job.organizationId}::uuid
-                    AND "status" = 'PENDING'
-                    AND "attempts" = ${job.attempts}::integer`
-              : await tx.$executeRaw`
-                  UPDATE "public"."mail_outbox"
-                  SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = now()
-                  WHERE "id" = ${job.id}::uuid
-                    AND "organizationId" = ${job.organizationId}::uuid
-                    AND "status" = 'PENDING'
-                    AND "attempts" = ${job.attempts}::integer`;
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
           return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
         }
 
         // Odnawiamy dzierżawę z ogrodzeniem po numerze próby, żeby zadanie czekające w porcji dostało pełny czas.
-        const renewed =
-          explicitNow !== undefined
-            ? await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "lockedUntil" = ${explicitNow}::timestamptz + (${leaseMs}::integer * interval '1 millisecond'),
-                    "updatedAt" = ${explicitNow}::timestamptz
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`
-            : await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "lockedUntil" = now() + (${leaseMs}::integer * interval '1 millisecond'),
-                    "updatedAt" = now()
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`;
+        const renewed = await renewJobLeaseFenced(tx, job, leaseMs, explicitNow);
         if (renewed === 0) {
           return { action: "skip" };
         }
@@ -342,11 +456,102 @@ export async function deliverMailJob(
         });
         const inviterName = await resolveInviterName(tx, invitation.invitedByAccountId);
         return {
-          action: "send",
+          action: "send_invitation",
           to: invitation.email,
           organizationName: invitation.organization.name,
           inviterName,
           inviteUrl: buildInviteUrl(token, options.authUrl),
+        };
+      }
+
+      case "NOTIFICATION": {
+        const notification = await tx.notification.findUnique({
+          where: { id: job.notificationId! },
+          select: {
+            id: true,
+            product: true,
+            category: true,
+            recipientAccountId: true,
+            title: true,
+            body: true,
+            actionUrl: true,
+            status: true,
+            organization: { select: { name: true } },
+          },
+        });
+
+        if (!notification || notification.status !== "QUEUED") {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+        }
+
+        const categoryDef = getNotificationCategory(notification.category);
+        const product = await tx.product.findUnique({
+          where: { key: notification.product },
+          select: { id: true, key: true, name: true },
+        });
+        if (!categoryDef || !product) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+        }
+
+        const activeEntitlement = await tx.entitlement.findFirst({
+          where: {
+            productId: product.id,
+            status: "ACTIVE",
+            startsAt: { lte: effectiveNow },
+            OR: [{ endsAt: null }, { endsAt: { gt: effectiveNow } }],
+          },
+          select: { id: true },
+        });
+        const access = activeEntitlement
+          ? await checkRecipientProductAccess(tx, notification.recipientAccountId, product.id)
+          : { hasAccess: false, email: null };
+
+        if (!access.hasAccess || !access.email) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          if (cancelled === 0) return { action: "skip" };
+          await tx.notification.updateMany({
+            where: { id: notification.id, status: "QUEUED" },
+            data: { status: "SKIPPED", skipReason: "NO_ACCESS" },
+          });
+          return { action: "cancelled" };
+        }
+
+        // Ponowne sprawdzenie preferencji w chwili wysyłki (ADR-0048): wyłączona -> SKIPPED/PREFERENCE_OFF bez wysyłki.
+        const enabled = await isEmailPreferenceEnabled(
+          tx,
+          job.organizationId,
+          notification.recipientAccountId,
+          notification.category,
+        );
+        if (!enabled) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          if (cancelled === 0) return { action: "skip" };
+          await tx.notification.updateMany({
+            where: { id: notification.id, status: "QUEUED" },
+            data: { status: "SKIPPED", skipReason: "PREFERENCE_OFF" },
+          });
+          return { action: "cancelled" };
+        }
+
+        const renewed = await renewJobLeaseFenced(tx, job, leaseMs, explicitNow);
+        if (renewed === 0) {
+          return { action: "skip" };
+        }
+
+        return {
+          action: "send_notification",
+          to: access.email,
+          organizationId: job.organizationId,
+          accountId: notification.recipientAccountId,
+          organizationName: notification.organization.name,
+          productName: product.name,
+          category: categoryDef.key,
+          categoryName: categoryDef.name,
+          title: notification.title,
+          body: notification.body,
+          actionUrl: notification.actionUrl,
         };
       }
     }
@@ -359,148 +564,196 @@ export async function deliverMailJob(
     return { status: "CANCELLED" };
   }
 
-  const mailer = options.mailer ?? sendMail;
   try {
-    await mailer(
-      invitationMail({
-        to: prepared.to,
-        organizationName: prepared.organizationName,
-        inviterName: prepared.inviterName,
-        inviteUrl: prepared.inviteUrl,
-      }),
-    );
+    if (prepared.action === "send_invitation") {
+      const mailer = options.mailer ?? sendMail;
+      await mailer(
+        invitationMail({
+          to: prepared.to,
+          organizationName: prepared.organizationName,
+          inviterName: prepared.inviterName,
+          inviteUrl: prepared.inviteUrl,
+        }),
+      );
+    } else {
+      const unsubscribeSecret = options.notificationsUnsubscribeSecret ?? resolveNotificationsUnsubscribeSecret();
+      const unsubscribeToken = createUnsubscribeToken(
+        {
+          organizationId: prepared.organizationId,
+          accountId: prepared.accountId,
+          category: prepared.category,
+        },
+        unsubscribeSecret,
+      );
+      const unsubscribeUrl = buildUnsubscribeUrl(unsubscribeToken, options.apiUrl);
+      const notificationsMailer = options.notificationsMailer ?? sendNotificationMail;
+      await notificationsMailer(
+        notificationMail({
+          to: prepared.to,
+          productName: prepared.productName,
+          organizationName: prepared.organizationName,
+          categoryName: prepared.categoryName,
+          title: prepared.title,
+          body: prepared.body,
+          actionUrl: prepared.actionUrl,
+          unsubscribeUrl,
+        }),
+      );
+    }
   } catch (error) {
     const lastError = formatMailError(error);
     const reachedMax = job.attempts >= MAIL_MAX_ATTEMPTS;
     const backoffMs = computeMailBackoffMs(job.attempts);
 
     const failureStatus = await withOrganization(db, job.organizationId, async (tx) => {
-      const invitation = await tx.invitation.findUnique({
-        where: { id: job.invitationId },
-        select: {
-          status: true,
-          expiresAt: true,
-          account: { select: { status: true } },
-        },
+      if (job.kind === "INVITATION") {
+        const invitation = await tx.invitation.findUnique({
+          where: { id: job.invitationId! },
+          select: {
+            status: true,
+            expiresAt: true,
+            account: { select: { status: true } },
+          },
+        });
+        const effectiveNow = explicitNow ?? (await readDbNow(tx));
+        if (
+          !invitation ||
+          effectiveInvitationStatus(invitation.status, invitation.expiresAt, effectiveNow) !== "PENDING" ||
+          invitation.account.status !== "INVITED"
+        ) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
+        }
+
+        if (reachedMax) {
+          const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
+          return affected === 0 ? ("SKIPPED" as const) : ("FAILED" as const);
+        }
+
+        const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
+        return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
+      }
+
+      await lockNotification(tx, job.notificationId!);
+      const notification = await tx.notification.findUnique({
+        where: { id: job.notificationId! },
+        select: { id: true, recipientAccountId: true, category: true, status: true },
       });
-      const effectiveNow = explicitNow ?? (await readDbNow(tx));
-      if (
-        !invitation ||
-        effectiveInvitationStatus(invitation.status, invitation.expiresAt, effectiveNow) !== "PENDING" ||
-        invitation.account.status !== "INVITED"
-      ) {
-        const cancelled =
-          explicitNow !== undefined
-            ? await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = ${explicitNow}::timestamptz
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`
-            : await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = now()
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`;
+      if (!notification || notification.status !== "QUEUED") {
+        const cancelled = await cancelJobFenced(tx, job, explicitNow);
         return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
       }
 
-      if (reachedMax) {
-        const affected =
-          explicitNow !== undefined
-            ? await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "status" = 'FAILED',
-                    "failedAt" = ${explicitNow}::timestamptz,
-                    "lockedUntil" = NULL,
-                    "lastError" = ${lastError}::text,
-                    "updatedAt" = ${explicitNow}::timestamptz
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`
-            : await tx.$executeRaw`
-                UPDATE "public"."mail_outbox"
-                SET "status" = 'FAILED',
-                    "failedAt" = now(),
-                    "lockedUntil" = NULL,
-                    "lastError" = ${lastError}::text,
-                    "updatedAt" = now()
-                WHERE "id" = ${job.id}::uuid
-                  AND "organizationId" = ${job.organizationId}::uuid
-                  AND "status" = 'PENDING'
-                  AND "attempts" = ${job.attempts}::integer`;
-        return affected === 0 ? ("SKIPPED" as const) : ("FAILED" as const);
+      const stillEnabled = await isEmailPreferenceEnabled(
+        tx,
+        job.organizationId,
+        notification.recipientAccountId,
+        notification.category,
+      );
+      if (!stillEnabled) {
+        const cancelled = await cancelJobFenced(tx, job, explicitNow);
+        if (cancelled === 0) return "SKIPPED" as const;
+        await tx.notification.updateMany({
+          where: { id: notification.id, status: "QUEUED" },
+          data: { status: "SKIPPED", skipReason: "PREFERENCE_OFF" },
+        });
+        return "CANCELLED" as const;
       }
 
-      const affected =
-        explicitNow !== undefined
-          ? await tx.$executeRaw`
-              UPDATE "public"."mail_outbox"
-              SET "status" = 'PENDING',
-                  "nextAttemptAt" = ${explicitNow}::timestamptz + (${backoffMs}::integer * interval '1 millisecond'),
-                  "lockedUntil" = NULL,
-                  "lastError" = ${lastError}::text,
-                  "updatedAt" = ${explicitNow}::timestamptz
-              WHERE "id" = ${job.id}::uuid
-                AND "organizationId" = ${job.organizationId}::uuid
-                AND "status" = 'PENDING'
-                AND "attempts" = ${job.attempts}::integer`
-          : await tx.$executeRaw`
-              UPDATE "public"."mail_outbox"
-              SET "status" = 'PENDING',
-                  "nextAttemptAt" = now() + (${backoffMs}::integer * interval '1 millisecond'),
-                  "lockedUntil" = NULL,
-                  "lastError" = ${lastError}::text,
-                  "updatedAt" = now()
-              WHERE "id" = ${job.id}::uuid
-                AND "organizationId" = ${job.organizationId}::uuid
-                AND "status" = 'PENDING'
-                AND "attempts" = ${job.attempts}::integer`;
+      if (reachedMax) {
+        const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
+        if (affected === 0) return "SKIPPED" as const;
+        await tx.notification.updateMany({
+          where: { id: notification.id, status: "QUEUED" },
+          data: { status: "FAILED" },
+        });
+        return "FAILED" as const;
+      }
+
+      const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
       return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
     });
 
     return { status: failureStatus };
   }
 
-  // Semantyka dostarczania co najmniej raz (at-least-once): jeśli serwer SMTP przyjął wiadomość,
-  // ale poniższy zapis statusu SENT nie powiedzie się (np. chwilowy brak połączenia z bazą),
-  // dzierżawa lockedUntil wygaśnie i kolejna próba wygeneruje nowy token oraz wyśle nowy link —
-  // poprzedni link przestanie działać z chwilą nadpisania tokenHash, a spóźniony worker zostanie
-  // pominięty dzięki ogrodzeniu po numerze próby (attempts = job.attempts).
-  const markedSent = await withOrganization(db, job.organizationId, (tx) =>
-    explicitNow !== undefined
-      ? tx.$executeRaw`
-          UPDATE "public"."mail_outbox"
-          SET "status" = 'SENT',
-              "sentAt" = ${explicitNow}::timestamptz,
-              "lockedUntil" = NULL,
-              "lastError" = NULL,
-              "updatedAt" = ${explicitNow}::timestamptz
-          WHERE "id" = ${job.id}::uuid
-            AND "organizationId" = ${job.organizationId}::uuid
-            AND "status" = 'PENDING'
-            AND "attempts" = ${job.attempts}::integer`
-      : tx.$executeRaw`
-          UPDATE "public"."mail_outbox"
-          SET "status" = 'SENT',
-              "sentAt" = now(),
-              "lockedUntil" = NULL,
-              "lastError" = NULL,
-              "updatedAt" = now()
-          WHERE "id" = ${job.id}::uuid
-            AND "organizationId" = ${job.organizationId}::uuid
-            AND "status" = 'PENDING'
-            AND "attempts" = ${job.attempts}::integer`,
-  );
-  if (markedSent === 0) {
-    return { status: "SKIPPED" };
+  // Semantyka dostarczania co najmniej raz (at-least-once): ogrodzenie po (status = PENDING, attempts = job.attempts)
+  // gwarantuje, że spóźniony worker po wygaśnięciu dzierżawy nigdy nie nadpisze nowszej próby.
+  if (prepared.action === "send_invitation") {
+    const markedSent = await withOrganization(db, job.organizationId, (tx) =>
+      explicitNow !== undefined
+        ? tx.$executeRaw`
+            UPDATE "public"."mail_outbox"
+            SET "status" = 'SENT',
+                "sentAt" = ${explicitNow}::timestamptz,
+                "lockedUntil" = NULL,
+                "lastError" = NULL,
+                "updatedAt" = ${explicitNow}::timestamptz
+            WHERE "id" = ${job.id}::uuid
+              AND "organizationId" = ${job.organizationId}::uuid
+              AND "status" = 'PENDING'
+              AND "attempts" = ${job.attempts}::integer`
+        : tx.$executeRaw`
+            UPDATE "public"."mail_outbox"
+            SET "status" = 'SENT',
+                "sentAt" = now(),
+                "lockedUntil" = NULL,
+                "lastError" = NULL,
+                "updatedAt" = now()
+            WHERE "id" = ${job.id}::uuid
+              AND "organizationId" = ${job.organizationId}::uuid
+              AND "status" = 'PENDING'
+              AND "attempts" = ${job.attempts}::integer`,
+    );
+    if (markedSent === 0) {
+      return { status: "SKIPPED" };
+    }
+    return { status: "SENT", inviteUrl: prepared.inviteUrl };
   }
 
-  return { status: "SENT", inviteUrl: prepared.inviteUrl };
+  const notificationSent = await withOrganization(db, job.organizationId, async (tx) => {
+    await lockNotification(tx, job.notificationId!);
+    const rows =
+      explicitNow !== undefined
+        ? await tx.$queryRaw<{ sentAt: Date }[]>`
+            UPDATE "public"."mail_outbox"
+            SET "status" = 'SENT',
+                "sentAt" = ${explicitNow}::timestamptz,
+                "lockedUntil" = NULL,
+                "lastError" = NULL,
+                "updatedAt" = ${explicitNow}::timestamptz
+            WHERE "id" = ${job.id}::uuid
+              AND "organizationId" = ${job.organizationId}::uuid
+              AND "status" = 'PENDING'
+              AND "attempts" = ${job.attempts}::integer
+            RETURNING "sentAt"`
+        : await tx.$queryRaw<{ sentAt: Date }[]>`
+            UPDATE "public"."mail_outbox"
+            SET "status" = 'SENT',
+                "sentAt" = now(),
+                "lockedUntil" = NULL,
+                "lastError" = NULL,
+                "updatedAt" = now()
+            WHERE "id" = ${job.id}::uuid
+              AND "organizationId" = ${job.organizationId}::uuid
+              AND "status" = 'PENDING'
+              AND "attempts" = ${job.attempts}::integer
+            RETURNING "sentAt"`;
+    const row = rows[0];
+    if (!row) {
+      return false;
+    }
+    await tx.notification.updateMany({
+      where: { id: job.notificationId!, status: "QUEUED" },
+      data: { status: "SENT", sentAt: row.sentAt },
+    });
+    return true;
+  });
+
+  if (!notificationSent) {
+    return { status: "SKIPPED" };
+  }
+  return { status: "SENT" };
 }
 
 /**
@@ -531,7 +784,10 @@ export async function deliverPendingMail(
     try {
       const outcome = await deliverMailJob(db, job, {
         authUrl: options.authUrl,
+        apiUrl: options.apiUrl,
+        notificationsUnsubscribeSecret: options.notificationsUnsubscribeSecret,
         mailer: options.mailer,
+        notificationsMailer: options.notificationsMailer,
         leaseMs: options.leaseMs,
         now: resolveNow?.(),
       });
@@ -593,7 +849,10 @@ export function startMailOutboxWorker({
   db,
   intervalMs,
   authUrl,
+  apiUrl,
+  notificationsUnsubscribeSecret,
   mailer,
+  notificationsMailer,
   batchSize = MAIL_CLAIM_BATCH_SIZE,
   maxBatchesPerTick = MAIL_MAX_BATCHES_PER_TICK,
   leaseMs = MAIL_LEASE_MS,
@@ -617,7 +876,10 @@ export function startMailOutboxWorker({
         limit: batchSize,
         leaseMs,
         authUrl,
+        apiUrl,
+        notificationsUnsubscribeSecret,
         mailer,
+        notificationsMailer,
         now: getNow,
         onError,
       }));
