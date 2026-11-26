@@ -38,7 +38,16 @@ interface Company extends Identity {
 
 const createdCompanies: Company[] = [];
 const dnsRecordsByHost = new Map<string, string[][]>();
+const dnsBarriersByHost = new Map<string, { remaining: number; promise: Promise<void>; release: () => void }>();
 let dnsLookupCount = 0;
+
+function setDnsBarrier(hostname: string, count: number) {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  dnsBarriersByHost.set(hostname.toLowerCase(), { remaining: count, promise, release });
+}
 
 let signingKey: CryptoKey;
 let app: ReturnType<typeof buildServer>;
@@ -57,10 +66,11 @@ async function createCompany(name: string, options?: { primaryStatus?: "VERIFIED
   const accountId = uuidv7();
   const email = `anna@${domain}`;
   const primaryStatus = options?.primaryStatus ?? "VERIFIED";
+  const orgStatus = primaryStatus === "VERIFIED" ? "ACTIVE" : "PENDING_VERIFICATION";
 
   await db.authUser.create({ data: { id: accountId, name: `Anna ${name}`, email, emailVerified: true } });
   await withOrganization(db, id, async (tx) => {
-    await tx.organization.create({ data: { id, name, createdVia: "SELF_SIGNUP", status: "ACTIVE" } });
+    await tx.organization.create({ data: { id, name, createdVia: "SELF_SIGNUP", status: orgStatus } });
     await tx.organizationDomain.create({
       data: {
         id: primaryDomainId,
@@ -162,7 +172,18 @@ beforeAll(async () => {
 
   const resolveTxt = async (hostname: string) => {
     dnsLookupCount += 1;
-    const records = dnsRecordsByHost.get(hostname.toLowerCase());
+    const key = hostname.toLowerCase();
+    const barrier = dnsBarriersByHost.get(key);
+    if (barrier) {
+      barrier.remaining -= 1;
+      if (barrier.remaining <= 0) {
+        dnsBarriersByHost.delete(key);
+        barrier.release();
+      } else {
+        await barrier.promise;
+      }
+    }
+    const records = dnsRecordsByHost.get(key);
     if (!records) {
       throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
     }
@@ -756,5 +777,244 @@ describe("Dane firmy i zarządzanie domenami (MonoriseCore#66)", () => {
     });
     expect(overLimit.statusCode).toBe(409);
     expect(overLimit.json().error.code).toBe("CONFLICT");
+  });
+
+  it("wygrywa weryfikacja: równoległe dodanie przez dwie firmy, usunięcie cudzych roszczeń, ochrona głównej z rejestracji i wyścig weryfikacji", async () => {
+    const ownerAcme = await token(acme);
+    const ownerGlobex = await token(globex);
+    const sharedDomain = `${uuidv7().slice(-8)}-shared.win.test`;
+    const raceDomain = `${uuidv7().slice(-8)}-race.win.test`;
+
+    // 1) Dwie firmy równolegle dodają tę samą domenę -> obie dostają 201 PENDING
+    const [acmeAdd, globexAdd] = await Promise.all([
+      inject(app, "POST", "/core/v1/organization/domains", ownerAcme, { domain: sharedDomain }),
+      inject(app, "POST", "/core/v1/organization/domains", ownerGlobex, { domain: sharedDomain }),
+    ]);
+    expect(acmeAdd.statusCode).toBe(201);
+    expect(globexAdd.statusCode).toBe(201);
+    const acmeDomId = acmeAdd.json().data.id as string;
+    const globexDomId = globexAdd.json().data.id as string;
+
+    // 2) Pierwsza weryfikacja (Acme) wygrywa i usuwa niegłówne roszczenie Globex w tej samej transakcji
+    dnsRecordsByHost.set(domainVerificationHost(sharedDomain).toLowerCase(), [
+      [acmeAdd.json().data.verificationTxtValue as string],
+    ]);
+    const acmeWin = await inject(app, "POST", `/core/v1/organization/domains/${acmeDomId}/verify`, ownerAcme, {});
+    expect(acmeWin.statusCode).toBe(200);
+    expect(acmeWin.json().data.status).toBe("VERIFIED");
+
+    const globexAfter = await withOrganization(db, globex.id, (tx) =>
+      tx.organizationDomain.findUnique({ where: { id: globexDomId } }),
+    );
+    expect(globexAfter).toBeNull();
+
+    // Globex nie może już dodać ani zweryfikować zweryfikowanej domeny Acme
+    expect(
+      (await inject(app, "POST", "/core/v1/organization/domains", ownerGlobex, { domain: sharedDomain })).statusCode,
+    ).toBe(409);
+
+    // 3) Konkurencyjna główna niezweryfikowana domena (rejestracja w toku) nie znika po cichu, ale dostaje 409 przy weryfikacji
+    const pendingSignupCo = await createCompany("PendingRace", { primaryStatus: "PENDING" });
+    const pendingSignupToken = await token(pendingSignupCo);
+    const acmeClaimPending = await inject(devTrustApp, "POST", "/core/v1/organization/domains", ownerAcme, {
+      domain: pendingSignupCo.domain,
+    });
+    expect(acmeClaimPending.statusCode).toBe(201);
+    const acmeClaimId = acmeClaimPending.json().data.id as string;
+    expect(
+      (
+        await inject(devTrustApp, "POST", `/core/v1/organization/domains/${acmeClaimId}/verify`, ownerAcme, {
+          trustLocally: true,
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const stillPresentPrimary = await withOrganization(db, pendingSignupCo.id, (tx) =>
+      tx.organizationDomain.findUnique({ where: { id: pendingSignupCo.primaryDomainId } }),
+    );
+    expect(stillPresentPrimary?.status).toBe("PENDING");
+    const lateVerify = await inject(
+      devTrustApp,
+      "POST",
+      `/core/v1/organization/domains/${pendingSignupCo.primaryDomainId}/verify`,
+      pendingSignupToken,
+      { trustLocally: true },
+    );
+    expect(lateVerify.statusCode).toBe(409);
+    expect(lateVerify.json().error.code).toBe("CONFLICT");
+
+    // 4) Równoległa weryfikacja tej samej domeny przez dwie firmy (zsynchronizowana na DNS TXT)
+    //    kończy się dokładnie jednym zwycięzcą ([200, 409]) i jednym zweryfikowanym właścicielem
+    const [rAdd1, rAdd2] = await Promise.all([
+      inject(app, "POST", "/core/v1/organization/domains", ownerAcme, { domain: raceDomain }),
+      inject(app, "POST", "/core/v1/organization/domains", ownerGlobex, { domain: raceDomain }),
+    ]);
+    expect(rAdd1.statusCode).toBe(201);
+    expect(rAdd2.statusCode).toBe(201);
+    const raceHost = domainVerificationHost(raceDomain);
+    dnsRecordsByHost.set(raceHost.toLowerCase(), [
+      [rAdd1.json().data.verificationTxtValue as string],
+      [rAdd2.json().data.verificationTxtValue as string],
+    ]);
+    setDnsBarrier(raceHost, 2);
+
+    const [rVer1, rVer2] = await Promise.all([
+      inject(app, "POST", `/core/v1/organization/domains/${rAdd1.json().data.id}/verify`, ownerAcme, {}),
+      inject(app, "POST", `/core/v1/organization/domains/${rAdd2.json().data.id}/verify`, ownerGlobex, {}),
+    ]);
+    expect([rVer1.statusCode, rVer2.statusCode].sort()).toEqual([200, 409]);
+    const [acmeRaceRow, globexRaceRow] = await Promise.all([
+      withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.findUnique({ where: { id: rAdd1.json().data.id as string } }),
+      ),
+      withOrganization(db, globex.id, (tx) =>
+        tx.organizationDomain.findUnique({ where: { id: rAdd2.json().data.id as string } }),
+      ),
+    ]);
+    expect([acmeRaceRow, globexRaceRow].filter((row) => row?.status === "VERIFIED")).toHaveLength(1);
+    expect([acmeRaceRow, globexRaceRow].filter((row) => row === null)).toHaveLength(1);
+  });
+
+  it("aktywuje firmę z PENDING_VERIFICATION (verify, idempotentne verify i PUT primary), wspiera rotację sekretu oraz blokuje REVOKED (409)", async () => {
+    // 1) Weryfikacja głównej domeny przenosi PENDING_VERIFICATION -> ACTIVE + audyt organization.activated
+    const pending1 = await createCompany("ActivateByVerify", { primaryStatus: "PENDING" });
+    const pending1Token = await token(pending1);
+
+    const verified1 = await inject(
+      devTrustApp,
+      "POST",
+      `/core/v1/organization/domains/${pending1.primaryDomainId}/verify`,
+      pending1Token,
+      { trustLocally: true },
+    );
+    expect(verified1.statusCode).toBe(200);
+    const org1After = await withOrganization(db, pending1.id, (tx) =>
+      tx.organization.findUniqueOrThrow({ where: { id: pending1.id } }),
+    );
+    expect(org1After.status).toBe("ACTIVE");
+    const activatedAudits1 = await withOrganization(db, pending1.id, (tx) =>
+      tx.auditLog.findMany({ where: { action: "organization.activated", resourceId: pending1.id } }),
+    );
+    expect(activatedAudits1).toHaveLength(1);
+
+    // 1b) Idempotentna gałąź „już zweryfikowana” także aktywuje firmę, jeśli wciąż była PENDING_VERIFICATION
+    await withOrganization(db, pending1.id, (tx) =>
+      tx.organization.update({ where: { id: pending1.id }, data: { status: "PENDING_VERIFICATION" } }),
+    );
+    const reverify1 = await inject(
+      devTrustApp,
+      "POST",
+      `/core/v1/organization/domains/${pending1.primaryDomainId}/verify`,
+      pending1Token,
+      {},
+    );
+    expect(reverify1.statusCode).toBe(200);
+    const org1Reactivated = await withOrganization(db, pending1.id, (tx) =>
+      tx.organization.findUniqueOrThrow({ where: { id: pending1.id } }),
+    );
+    expect(org1Reactivated.status).toBe("ACTIVE");
+    const activatedAudits1After = await withOrganization(db, pending1.id, (tx) =>
+      tx.auditLog.findMany({ where: { action: "organization.activated", resourceId: pending1.id } }),
+    );
+    expect(activatedAudits1After).toHaveLength(2);
+
+    // 2) Ustawienie zweryfikowanej domeny dodatkowej jako głównej też przenosi PENDING_VERIFICATION -> ACTIVE
+    const pending2 = await createCompany("ActivateByPrimary", { primaryStatus: "PENDING" });
+    const pending2Token = await token(pending2);
+    const secAdd = await inject(devTrustApp, "POST", "/core/v1/organization/domains", pending2Token, {
+      domain: `${uuidv7().slice(-8)}-promote.activate.test`,
+    });
+    const secId = secAdd.json().data.id as string;
+    await inject(devTrustApp, "POST", `/core/v1/organization/domains/${secId}/verify`, pending2Token, {
+      trustLocally: true,
+    });
+    const org2BeforeSwap = await withOrganization(db, pending2.id, (tx) =>
+      tx.organization.findUniqueOrThrow({ where: { id: pending2.id } }),
+    );
+    expect(org2BeforeSwap.status).toBe("PENDING_VERIFICATION");
+
+    const promoted = await inject(devTrustApp, "PUT", `/core/v1/organization/domains/${secId}/primary`, pending2Token);
+    expect(promoted.statusCode).toBe(200);
+    expect(promoted.json().data.status).toBe("ACTIVE");
+    const activatedAudits2 = await withOrganization(db, pending2.id, (tx) =>
+      tx.auditLog.findMany({ where: { action: "organization.activated", resourceId: pending2.id } }),
+    );
+    expect(activatedAudits2).toHaveLength(1);
+
+    // 3) REVOKED domain: ukrywa TXT w GET /organization i zwraca 409 na POST .../verify
+    const revokedDomain = `${uuidv7().slice(-8)}-revoked.acme.test`;
+    const revokedId = uuidv7();
+    await withOrganization(db, acme.id, (tx) =>
+      tx.organizationDomain.create({
+        data: {
+          id: revokedId,
+          organizationId: acme.id,
+          domain: revokedDomain,
+          status: "REVOKED",
+          verificationMethod: "DNS_TXT",
+          verificationTokenHash: hashToken(domainTxtValue(DOMAIN_SECRET, acme.id, revokedDomain)),
+          isPrimary: false,
+        },
+      }),
+    );
+    const ownerAcme = await token(acme);
+    const orgGet = await inject(app, "GET", "/core/v1/organization", ownerAcme);
+    const revokedView = (
+      orgGet.json().data.domains as {
+        id: string;
+        verificationTxtName: string | null;
+        verificationTxtValue: string | null;
+      }[]
+    ).find((d) => d.id === revokedId);
+    expect(revokedView).toMatchObject({ verificationTxtName: null, verificationTxtValue: null });
+
+    const verifyRevoked = await inject(app, "POST", `/core/v1/organization/domains/${revokedId}/verify`, ownerAcme, {});
+    expect(verifyRevoked.statusCode).toBe(409);
+    expect(verifyRevoked.json().error.code).toBe("CONFLICT");
+
+    // 4) Rotacja sekretu: domena zapisana pod starym sekretem weryfikuje się zarówno starym, jak i nowym TXT
+    const oldSecret = "old-domain-verification-secret-0123456789";
+    const oldDomain = `${uuidv7().slice(-8)}-rot-old.acme.test`;
+    const newDomain = `${uuidv7().slice(-8)}-rot-new.acme.test`;
+    const oldDomId = uuidv7();
+    const newDomId = uuidv7();
+    await withOrganization(db, acme.id, async (tx) => {
+      await tx.organizationDomain.create({
+        data: {
+          id: oldDomId,
+          organizationId: acme.id,
+          domain: oldDomain,
+          status: "PENDING",
+          verificationMethod: "DNS_TXT",
+          verificationTokenHash: hashToken(domainTxtValue(oldSecret, acme.id, oldDomain)),
+          isPrimary: false,
+        },
+      });
+      await tx.organizationDomain.create({
+        data: {
+          id: newDomId,
+          organizationId: acme.id,
+          domain: newDomain,
+          status: "PENDING",
+          verificationMethod: "DNS_TXT",
+          verificationTokenHash: hashToken(domainTxtValue(oldSecret, acme.id, newDomain)),
+          isPrimary: false,
+        },
+      });
+    });
+
+    dnsRecordsByHost.set(domainVerificationHost(oldDomain).toLowerCase(), [
+      [domainTxtValue(oldSecret, acme.id, oldDomain)],
+    ]);
+    dnsRecordsByHost.set(domainVerificationHost(newDomain).toLowerCase(), [
+      [domainTxtValue(DOMAIN_SECRET, acme.id, newDomain)],
+    ]);
+
+    expect(
+      (await inject(app, "POST", `/core/v1/organization/domains/${oldDomId}/verify`, ownerAcme, {})).statusCode,
+    ).toBe(200);
+    expect(
+      (await inject(app, "POST", `/core/v1/organization/domains/${newDomId}/verify`, ownerAcme, {})).statusCode,
+    ).toBe(200);
   });
 });

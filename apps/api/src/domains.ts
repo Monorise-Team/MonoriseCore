@@ -17,8 +17,10 @@ import {
 import {
   domainOwner,
   domainTxtValue,
+  expectedDomainTokenHashes,
   hashToken,
-  matchesDomainTokenHash,
+  matchesAnyDomainTokenHash,
+  releaseCompetingDomainClaims,
   uuidv7,
   withOrganization,
   type PrismaClient,
@@ -52,7 +54,7 @@ export class DomainError extends Error {
 export interface DomainServiceOptions {
   /** Sekret HMAC-SHA256 współdzielony z `apps/auth` (`CORE_DOMAIN_VERIFICATION_SECRET`). */
   domainVerificationSecret?: string | undefined;
-  /** Czy dozwolona jest ścieżka lokalna `trustLocally: true` (`CORE_DEV_TRUST_DOMAINS=1` poza produkcją). */
+  /** Czy dozwolona jest ścieżka lokalna `trustLocally: true` (`NODE_ENV` = `development`/`test` i `CORE_DEV_TRUST_DOMAINS=1`). */
   devTrustDomains?: boolean | undefined;
   /** Nadpisanie zapytania DNS TXT (np. w testach). */
   resolveTxt?: ResolveTxtFn | undefined;
@@ -77,6 +79,7 @@ export interface SerializableOrganizationRow {
 
 export interface PreparedDomainVerification {
   domainId: string;
+  domain: string;
   alreadyVerified: boolean;
   trustLocally: boolean;
 }
@@ -89,10 +92,16 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * Serializuje operacje na domenach jednej firmy na czas transakcji (limit 20 domen, weryfikacja,
- * zmiana głównej domeny, usuwanie).
+ * zmiana głównej domeny, usuwanie oraz walidacja domeny przy zaproszeniach i `workEmail`).
  */
 export async function lockOrganizationDomains(tx: Tx, organizationId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('org_domains:' || ${organizationId}::uuid::text, 0))`;
+}
+
+/** Serializuje równoległą weryfikację tej samej domeny ponad granicą firm („wygrywa weryfikacja”). */
+async function lockDomainVerification(tx: Tx, domain: string): Promise<void> {
+  const lockKey = `domain_verify:${domain.toLowerCase()}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}::text, 0))`;
 }
 
 /** Odpytuje rekordy DNS TXT z limitem czasu (domyślnie 5 s) bez wycieku timera. */
@@ -116,9 +125,38 @@ export async function resolveTxtWithTimeout(
 }
 
 /**
+ * Aktywuje firmę wyłącznie ze stanu `PENDING_VERIFICATION` (nigdy nie odblokowuje `SUSPENDED` ani
+ * `OFFBOARDING`) i zapisuje wpis audytu `organization.activated`, gdy zmiana rzeczywiście zaszła.
+ */
+async function activateOrganizationIfPending(
+  tx: Tx,
+  request: FastifyRequest,
+  who: AuditActorAccount,
+  domain: { id: string; domain: string },
+): Promise<void> {
+  const activated = await tx.organization.updateMany({
+    where: { id: who.organizationId, status: "PENDING_VERIFICATION" },
+    data: { status: "ACTIVE" },
+  });
+  if (activated.count > 0) {
+    await writeAudit(tx, request, who, {
+      action: "organization.activated",
+      resourceType: "organization",
+      resourceId: who.organizationId,
+      metadata: {
+        previousStatus: "PENDING_VERIFICATION",
+        status: "ACTIVE",
+        domainId: domain.id,
+        domain: domain.domain,
+      },
+    });
+  }
+}
+
+/**
  * Serializuje domenę firmy do formatu API. Pola `verificationTxtName` i `verificationTxtValue`
- * są zwracane wyłącznie dla niezweryfikowanych domen i tylko wywołującemu z `isOwner` albo
- * `core.organization.manage` w zakresie całej firmy; `verificationTokenHash` nigdy nie opuszcza bazy.
+ * są zwracane wyłącznie dla domen w statusie `PENDING` lub `FAILED` i tylko wywołującemu z `isOwner`
+ * albo `core.organization.manage` w zakresie całej firmy; `verificationTokenHash` nigdy nie opuszcza bazy.
  */
 export function serializeOrganizationDomain(
   row: SerializableOrganizationDomainRow,
@@ -128,7 +166,8 @@ export function serializeOrganizationDomain(
     domainVerificationSecret?: string | undefined;
   },
 ): OrganizationDomain {
-  const showTxt = row.status !== "VERIFIED" && options.includeVerificationTxt;
+  const showTxt = (row.status === "PENDING" || row.status === "FAILED") && options.includeVerificationTxt;
+  const secret = options.domainVerificationSecret?.trim();
   return {
     id: row.id,
     domain: row.domain,
@@ -137,10 +176,7 @@ export function serializeOrganizationDomain(
     verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
     lastCheckedAt: row.lastCheckedAt ? row.lastCheckedAt.toISOString() : null,
     verificationTxtName: showTxt ? domainVerificationHost(row.domain) : null,
-    verificationTxtValue:
-      showTxt && options.domainVerificationSecret
-        ? domainTxtValue(options.domainVerificationSecret, options.organizationId, row.domain)
-        : null,
+    verificationTxtValue: showTxt && secret ? domainTxtValue(secret, options.organizationId, row.domain) : null,
   };
 }
 
@@ -177,9 +213,11 @@ export async function getOrganizationForCaller(
     include: { domains: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
   });
 
-  const hasUnverified = organization.domains.some((domain) => domain.status !== "VERIFIED");
+  const hasPendingOrFailed = organization.domains.some(
+    (domain) => domain.status === "PENDING" || domain.status === "FAILED",
+  );
   let includeVerificationTxt = false;
-  if (hasUnverified) {
+  if (hasPendingOrFailed) {
     if (who.isOwner) {
       includeVerificationTxt = true;
     } else {
@@ -242,8 +280,12 @@ export async function updateOrganization(
 
 /**
  * Dodaje niezweryfikowaną domenę (`PENDING`, `DNS_TXT`, `isPrimary = false`) do firmy:
- * odrzuca darmowe skrzynki (`422 EMAIL_DOMAIN_NOT_ALLOWED`), zajęte domeny w dowolnej firmie (`409`,
- * bez zdradzania właściciela, ADR-0019) i przekroczenie limitu 20 domen (`409`).
+ * - odrzuca darmowe skrzynki i ich subdomeny (`422 EMAIL_DOMAIN_NOT_ALLOWED`),
+ * - odrzuca domenę już zweryfikowaną (`VERIFIED`) przez dowolną firmę albo już dodaną w tej firmie
+ *   (`409 CONFLICT` bez ujawniania właściciela, ADR-0019),
+ * - zgodnie z zasadą „wygrywa weryfikacja” pozwala dodać domenę, która ma jedynie niezweryfikowane
+ *   roszczenie w innej firmie,
+ * - pilnuje limitu 20 domen w firmie (`409 CONFLICT`).
  */
 export async function addOrganizationDomain(
   tx: Tx,
@@ -262,15 +304,22 @@ export async function addOrganizationDomain(
     ]);
   }
 
-  const secret = options.domainVerificationSecret;
+  const secret = options.domainVerificationSecret?.trim();
   if (!secret) {
     throw new Error("Brak zmiennej środowiskowej CORE_DOMAIN_VERIFICATION_SECRET");
   }
 
+  await lockDomainVerification(tx, input.domain);
   await lockOrganizationDomains(tx, who.organizationId);
 
-  const owner = await domainOwner(tx, input.domain);
-  if (owner) {
+  const [verifiedOwner, existingInOrg] = await Promise.all([
+    domainOwner(tx, input.domain),
+    tx.organizationDomain.findFirst({
+      where: { organizationId: who.organizationId, domain: input.domain },
+      select: { id: true },
+    }),
+  ]);
+  if (verifiedOwner || existingInOrg) {
     throw new DomainError(409, "CONFLICT", "Ta domena jest już przypisana do firmy");
   }
 
@@ -321,8 +370,10 @@ export async function addOrganizationDomain(
 /**
  * Etap 1 weryfikacji domeny — poza długą transakcją i blokadami bazy:
  * 1. Wyszukuje domenę (`404 NOT_FOUND` przed sprawdzeniem uprawnień) i weryfikuje `core.organization.manage`.
- * 2. Pilnuje flagi `trustLocally` (`403`, gdy `devTrustDomains !== true`) oraz statusu `REVOKED` (`409`).
- * 3. Dla niezweryfikowanej domeny wykonuje zapytanie DNS TXT (timeout 5 s) poza transakcją; gdy rekord
+ * 2. Pilnuje flagi `trustLocally` (`403`, gdy `devTrustDomains !== true`), statusu `REVOKED` (`409`)
+ *    oraz tego, czy inna firma nie zdążyła już zweryfikować tej domeny (`409`).
+ * 3. Dla niezweryfikowanej domeny wykonuje zapytanie DNS TXT (timeout 5 s) poza transakcją, akceptując
+ *    zarówno zapisany `verificationTokenHash`, jak i skrót wyliczony z bieżącego sekretu; gdy rekord
  *    nie pasuje, utrwala `lastCheckedAt = now` w osobnej krótkiej transakcji i rzuca `422 VALIDATION_FAILED`.
  */
 export async function prepareVerifyOrganizationDomain(
@@ -333,14 +384,21 @@ export async function prepareVerifyOrganizationDomain(
   now: Date,
   options: DomainServiceOptions,
 ): Promise<PreparedDomainVerification> {
-  const domain = await withOrganization(db, who.organizationId, async (tx) => {
+  const { domain, verifiedByOther } = await withOrganization(db, who.organizationId, async (tx) => {
     const found = await tx.organizationDomain.findUnique({ where: { id: domainId } });
     if (!found) {
       throw new DomainError(404, "NOT_FOUND", "Nie znaleziono domeny firmy");
     }
     const snapshot = await loadPermissionSnapshot(tx, who);
     assertCorePermission(snapshot, CORE_PERMISSIONS.keys["organization.manage"], {});
-    return found;
+
+    let verifiedByOther = false;
+    if (found.status !== "VERIFIED" && found.status !== "REVOKED") {
+      const owner = await domainOwner(tx, found.domain);
+      verifiedByOther = owner !== null && owner.organizationId !== who.organizationId;
+    }
+
+    return { domain: found, verifiedByOther };
   });
 
   const trustLocally = input.trustLocally ?? false;
@@ -354,22 +412,27 @@ export async function prepareVerifyOrganizationDomain(
   }
 
   if (domain.status === "VERIFIED") {
-    return { domainId: domain.id, alreadyVerified: true, trustLocally };
+    return { domainId: domain.id, domain: domain.domain, alreadyVerified: true, trustLocally };
+  }
+
+  if (verifiedByOther) {
+    throw new DomainError(409, "CONFLICT", "Ta domena została już zweryfikowana przez inną firmę");
   }
 
   if (!trustLocally) {
-    const expectedHash =
-      domain.verificationTokenHash ??
-      (options.domainVerificationSecret
-        ? hashToken(domainTxtValue(options.domainVerificationSecret, who.organizationId, domain.domain))
-        : null);
+    const expectedHashes = expectedDomainTokenHashes({
+      storedHash: domain.verificationTokenHash,
+      currentSecret: options.domainVerificationSecret,
+      organizationId: who.organizationId,
+      domain: domain.domain,
+    });
 
     let matched = false;
-    if (expectedHash) {
+    if (expectedHashes.length > 0) {
       const resolver = options.resolveTxt ?? dnsResolveTxt;
       try {
         const records = await resolveTxtWithTimeout(resolver, domainVerificationHost(domain.domain));
-        matched = records.some((parts) => matchesDomainTokenHash(parts.join(""), expectedHash));
+        matched = records.some((parts) => matchesAnyDomainTokenHash(parts.join(""), expectedHashes));
       } catch {
         matched = false;
       }
@@ -386,13 +449,15 @@ export async function prepareVerifyOrganizationDomain(
     }
   }
 
-  return { domainId: domain.id, alreadyVerified: false, trustLocally };
+  return { domainId: domain.id, domain: domain.domain, alreadyVerified: false, trustLocally };
 }
 
 /**
  * Etap 2 weryfikacji domeny — wewnątrz transakcji `withOrganization` (i ewentualnego `Idempotency-Key`):
- * pod blokadą doradczą ustawia `VERIFIED`, `verifiedAt`, `lastCheckedAt` oraz zapisuje wpis audytu
- * `organization.domain.verified` (bez sekretu ani skrótu tokenu).
+ * pod blokadami `domain_verify` i `org_domains` ustawia `VERIFIED`, usuwa konkurencyjne niezweryfikowane
+ * niegłówne roszczenia innych firm („wygrywa weryfikacja”), zapisuje wpis audytu `organization.domain.verified`,
+ * a gdy to domena główna — przenosi firmę z `PENDING_VERIFICATION` do `ACTIVE` (także w gałęzi
+ * idempotentnej „już zweryfikowana”).
  */
 export async function commitVerifyOrganizationDomain(
   tx: Tx,
@@ -402,16 +467,24 @@ export async function commitVerifyOrganizationDomain(
   now: Date,
   options: DomainServiceOptions,
 ): Promise<OrganizationDomain> {
+  await lockDomainVerification(tx, prepared.domain);
   await lockOrganizationDomains(tx, who.organizationId);
 
   const domain = await tx.organizationDomain.findUnique({ where: { id: prepared.domainId } });
   if (!domain) {
+    const owner = await domainOwner(tx, prepared.domain);
+    if (owner && owner.organizationId !== who.organizationId) {
+      throw new DomainError(409, "CONFLICT", "Ta domena została już zweryfikowana przez inną firmę");
+    }
     throw new DomainError(404, "NOT_FOUND", "Nie znaleziono domeny firmy");
   }
   if (domain.status === "REVOKED") {
     throw new DomainError(409, "CONFLICT", "Nie można zweryfikować cofniętej domeny");
   }
   if (domain.status === "VERIFIED") {
+    if (domain.isPrimary) {
+      await activateOrganizationIfPending(tx, request, who, domain);
+    }
     return serializeOrganizationDomain(domain, {
       organizationId: who.organizationId,
       includeVerificationTxt: true,
@@ -419,14 +492,29 @@ export async function commitVerifyOrganizationDomain(
     });
   }
 
-  const updated = await tx.organizationDomain.update({
-    where: { id: domain.id },
-    data: {
-      status: "VERIFIED",
-      verifiedAt: now,
-      lastCheckedAt: now,
-    },
-  });
+  const existingOwner = await domainOwner(tx, domain.domain);
+  if (existingOwner && existingOwner.organizationId !== who.organizationId) {
+    throw new DomainError(409, "CONFLICT", "Ta domena została już zweryfikowana przez inną firmę");
+  }
+
+  let updated: SerializableOrganizationDomainRow;
+  try {
+    updated = await tx.organizationDomain.update({
+      where: { id: domain.id },
+      data: {
+        status: "VERIFIED",
+        verifiedAt: now,
+        lastCheckedAt: now,
+      },
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new DomainError(409, "CONFLICT", "Ta domena została już zweryfikowana przez inną firmę");
+    }
+    throw error;
+  }
+
+  await releaseCompetingDomainClaims(tx, updated.domain);
 
   await writeAudit(tx, request, who, {
     action: "organization.domain.verified",
@@ -437,6 +525,10 @@ export async function commitVerifyOrganizationDomain(
       method: prepared.trustLocally ? "DEV_TRUST" : "DNS_TXT",
     },
   });
+
+  if (updated.isPrimary) {
+    await activateOrganizationIfPending(tx, request, who, updated);
+  }
 
   return serializeOrganizationDomain(updated, {
     organizationId: who.organizationId,
@@ -451,7 +543,7 @@ export async function commitVerifyOrganizationDomain(
  * 2. Blokuje usunięcie domeny głównej (`isPrimary`) oraz ostatniej zweryfikowanej domeny (`409`).
  * 3. Blokuje usunięcie domeny używanej przez konto (`Account.normalizedEmail`), oczekujące zaproszenie
  *    (`Invitation.status = PENDING`) albo pracownika (`Employee.workEmail`) w firmie (`409`, ADR-0019).
- * 4. Trwale usuwa wiersz (zwalniając `UNIQUE(domain)`) i zapisuje audyt `organization.domain.removed`.
+ * 4. Trwale usuwa wiersz (zwalniając domenę) i zapisuje audyt `organization.domain.removed`.
  */
 export async function deleteOrganizationDomain(
   tx: Tx,
@@ -533,8 +625,8 @@ export async function deleteOrganizationDomain(
 
 /**
  * Ustawia wskazaną zweryfikowaną domenę jako główną domenę firmy w jednej transakcji (atomowa zamiana
- * `isPrimary`, zgodna z częściowym indeksem unikalnym). Powtórzenie na bieżącej domenie głównej jest
- * idempotentne (bez duplikatu wpisu audytu).
+ * `isPrimary`, zgodna z częściowym indeksem unikalnym) i aktywuje firmę, jeśli wciąż była w stanie
+ * `PENDING_VERIFICATION`. Powtórzenie na bieżącej domenie głównej jest idempotentne (bez duplikatu audytu).
  */
 export async function setPrimaryOrganizationDomain(
   tx: Tx,
@@ -589,6 +681,8 @@ export async function setPrimaryOrganizationDomain(
       },
     });
   }
+
+  await activateOrganizationIfPending(tx, request, who, domain);
 
   const organization = await tx.organization.findUniqueOrThrow({
     where: { id: who.organizationId },

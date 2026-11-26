@@ -75,6 +75,7 @@ import {
   deleteOrganizationDomain,
   DomainError,
   getOrganizationForCaller,
+  lockOrganizationDomains,
   prepareVerifyOrganizationDomain,
   setPrimaryOrganizationDomain,
   updateOrganization,
@@ -306,6 +307,9 @@ async function validateOrganizationWorkEmail(
       [{ field: "workEmail", message: "Darmowe domeny pocztowe nie mogą należeć do firmy" }],
     );
   }
+
+  // Serializujemy względem usuwania domen firmy (DELETE /organization/domains/{domainId})
+  await lockOrganizationDomains(tx, organizationId);
 
   const verifiedDomain = await tx.organizationDomain.findFirst({
     where: { organizationId, domain, status: "VERIFIED" },
@@ -618,7 +622,7 @@ export function buildServer({
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
   const openApiDocument = buildOpenApiDocument();
   const domainOptions: DomainServiceOptions = {
-    domainVerificationSecret,
+    domainVerificationSecret: domainVerificationSecret?.trim() || undefined,
     devTrustDomains,
     resolveTxt,
   };

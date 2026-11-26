@@ -374,8 +374,9 @@ export const ROUTES = {
     summary: "Pobierz firmę zalogowanego użytkownika",
     description:
       "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania. " +
-      "Pola `verificationTxtName` i `verificationTxtValue` dla niezweryfikowanych domen są zwracane wyłącznie " +
-      "Ownerowi albo kontom z uprawnieniem `core.organization.manage` w zakresie całej firmy.",
+      "Pola `verificationTxtName` i `verificationTxtValue` są zwracane wyłącznie dla domen w statusie " +
+      "`PENDING` lub `FAILED` i tylko Ownerowi albo kontom z uprawnieniem `core.organization.manage` " +
+      "w zakresie całej firmy.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -422,9 +423,11 @@ export const ROUTES = {
     summary: "Dodaj domenę e-mail do firmy",
     description:
       "Dodaje niezweryfikowaną domenę (`PENDING`, weryfikacja rekordem DNS TXT, `isPrimary = false`) do firmy " +
-      "i zwraca dane rekordu TXT do publikacji. Odrzuca darmowe skrzynki pocztowe (`422 EMAIL_DOMAIN_NOT_ALLOWED`), " +
-      "domeny zajęte przez jakąkolwiek firmę (`409 CONFLICT` bez ujawniania właściciela, ADR-0019) oraz przekroczenie " +
-      "limitu 20 domen. Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+      "i zwraca dane rekordu TXT do publikacji. Odrzuca darmowe skrzynki pocztowe i ich subdomeny " +
+      "(`422 EMAIL_DOMAIN_NOT_ALLOWED`), domeny zweryfikowane (`VERIFIED`) przez jakąkolwiek firmę lub już " +
+      "dodane w tej firmie (`409 CONFLICT` bez ujawniania właściciela, ADR-0019) oraz przekroczenie limitu 20 domen. " +
+      "Zgodnie z zasadą „wygrywa weryfikacja” wiele firm może zgłosić niezweryfikowane roszczenie do tej samej " +
+      "domeny. Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 201,
     envelope: true,
@@ -451,10 +454,12 @@ export const ROUTES = {
     summary: "Zweryfikuj domenę firmy rekordem DNS TXT",
     description:
       "Sprawdza rekord DNS TXT (`_monorise-verification.<domena>`) wskazanej domeny firmy (z limitem czasu 5 s) " +
-      "albo — wyłącznie lokalnie przy `CORE_DEV_TRUST_DOMAINS=1` poza produkcją — potwierdza ją z `trustLocally: true`. " +
-      "Brak pasującego rekordu utrwala `lastCheckedAt` i zwraca `422 VALIDATION_FAILED`. Powtórzenie dla już " +
-      "zweryfikowanej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej " +
-      "firmy albo roli Ownera.",
+      "albo — wyłącznie gdy `NODE_ENV` to `development` lub `test` oraz `CORE_DEV_TRUST_DOMAINS=1` — potwierdza ją " +
+      "z `trustLocally: true`. Po potwierdzeniu usuwa konkurencyjne niezweryfikowane, niegłówne roszczenia innych " +
+      "firm („wygrywa weryfikacja”), a dla głównej domeny przenosi firmę z `PENDING_VERIFICATION` do `ACTIVE`. " +
+      "Brak pasującego rekordu utrwala `lastCheckedAt` i zwraca `422 VALIDATION_FAILED`. Domena zweryfikowana już " +
+      "przez inną firmę albo `REVOKED` zwraca `409 CONFLICT`. Powtórzenie dla już zweryfikowanej domeny jest " +
+      "idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -508,8 +513,9 @@ export const ROUTES = {
     summary: "Ustaw główną domenę firmy",
     description:
       "Ustawia wskazaną zweryfikowaną domenę jako główną domenę firmy (`isPrimary = true`), atomowo zdejmując flagę " +
-      "z poprzedniej głównej domeny. Niezweryfikowana domena zwraca `409 CONFLICT`; powtórzenie dla bieżącej głównej " +
-      "domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+      "z poprzedniej głównej domeny i przenosząc firmę z `PENDING_VERIFICATION` do `ACTIVE`, jeśli wciąż oczekiwała " +
+      "na aktywację. Niezweryfikowana domena zwraca `409 CONFLICT`; powtórzenie dla bieżącej głównej domeny jest " +
+      "idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,

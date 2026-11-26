@@ -1,4 +1,4 @@
-import { CORE_PERMISSIONS, type AccountStatus, type ScopeType } from "@core/contracts";
+import { canManageOrganizationSnapshot, CORE_PERMISSIONS, type AccountStatus, type ScopeType } from "@core/contracts";
 import type { Tx } from "@core/db";
 import {
   assertCan,
@@ -214,7 +214,7 @@ export function assertCorePermission(
 
 /** Czy konto może zarządzać danymi firmy i jej domenami (Owner lub `core.organization.manage` w zakresie całej firmy). */
 export function canManageOrganization(snapshot: PermissionSnapshot): boolean {
-  return snapshot.isOwner || can(snapshot, CORE_PERMISSIONS.keys["organization.manage"], {});
+  return canManageOrganizationSnapshot(snapshot);
 }
 
 /**

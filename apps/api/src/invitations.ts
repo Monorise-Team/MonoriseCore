@@ -11,6 +11,7 @@ import {
 } from "@core/contracts";
 import { domainOwner, hashToken, uuidv7, withOrganization, type Prisma, type PrismaClient, type Tx } from "@core/db";
 import { z } from "zod";
+import { lockOrganizationDomains } from "./domains.js";
 import { invitationMail, sendMail, type MailSender } from "./mail.js";
 
 const UuidSchema = z.uuid();
@@ -234,6 +235,9 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
   if (!organization) {
     throw new InvitationError(404, "NOT_FOUND", "Nie znaleziono firmy");
   }
+
+  // Serializujemy względem usuwania domen firmy (DELETE /organization/domains/{domainId})
+  await lockOrganizationDomains(tx, input.organizationId);
 
   const verifiedDomain = await tx.organizationDomain.findFirst({
     where: { domain, status: "VERIFIED" },
