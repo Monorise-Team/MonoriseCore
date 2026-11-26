@@ -139,9 +139,10 @@ beforeAll(async () => {
 beforeEach(async () => {
   clearSentMails();
   currentNow = new Date("2026-11-26T10:00:00.000Z");
-  await ownerDb.mailOutbox.deleteMany({
-    where: { organizationId: { in: [acme.id, globex.id] } },
-  });
+  // core_owner też podlega RLS (FORCE), a core_app nie ma DELETE na mail_outbox: kasujemy w kontekście firmy
+  for (const company of [acme, globex]) {
+    await withOrganization(ownerDb, company.id, (tx) => tx.mailOutbox.deleteMany({}));
+  }
 });
 
 afterAll(async () => {
@@ -673,7 +674,7 @@ describe("Transakcyjna kolejka poczty mail_outbox (MonoriseCore#60)", () => {
     });
 
     // Starsze zaproszenie bez żadnego wiersza mail_outbox -> delivery.status === null
-    await ownerDb.mailOutbox.deleteMany({ where: { invitationId: invId } });
+    await withOrganization(ownerDb, acme.id, (tx) => tx.mailOutbox.deleteMany({ where: { invitationId: invId } }));
     const listWithoutJob = await request("GET", "/core/v1/invitations", ownerToken);
     const legacyRow = (listWithoutJob.json().data as Array<{ id: string; delivery: Record<string, unknown> }>).find(
       (item) => item.id === invId,
@@ -752,7 +753,7 @@ describe("Transakcyjna kolejka poczty mail_outbox (MonoriseCore#60)", () => {
     const invId = createRes.json().data.id as string;
 
     // Usuwamy początkowy wiersz z create, żeby dokładnie sterować sześcioma wierszami testowymi
-    await ownerDb.mailOutbox.deleteMany({ where: { invitationId: invId } });
+    await withOrganization(ownerDb, acme.id, (tx) => tx.mailOutbox.deleteMany({ where: { invitationId: invId } }));
 
     const cutoff = new Date(currentNow.getTime() - MAIL_CLEANUP_RETENTION_MS);
     const oldTime = new Date(cutoff.getTime() - 24 * 60 * 60 * 1000); // 31 dni temu
