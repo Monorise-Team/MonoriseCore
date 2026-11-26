@@ -1,4 +1,3 @@
-import { domainVerificationHost } from "@core/contracts";
 import { accountClaims, withOrganization } from "@core/db";
 import { Badge, Card } from "@monorise-team/ui";
 import { cookies, headers } from "next/headers";
@@ -6,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { config } from "@/server/config";
 import { db } from "@/server/db";
-import { domainTxtValue } from "@/server/domains";
+import { canAccountManageOrganization, resolveAccountPendingDomainView } from "@/server/domains";
 import { findReturnClient, resolveAccountReturnButton, RETURN_CLIENT_COOKIE } from "@/server/return-to-product";
 import { AccountActions, DomainActions, ReturnToProductAction } from "./AccountActions";
 
@@ -26,15 +25,36 @@ export default async function AccountPage() {
   if (!session) redirect("/sign-in");
   const claims = await accountClaims(db, session.user.id);
   if (!claims) redirect("/sign-in");
-  const { organization, employee } = await withOrganization(db, claims.organizationId, async (tx) => ({
-    organization: await tx.organization.findUniqueOrThrow({
-      where: { id: claims.organizationId },
-      include: { domains: { orderBy: { createdAt: "asc" } } },
-    }),
-    employee: await tx.employee.findUniqueOrThrow({ where: { id: claims.employeeId } }),
-  }));
+  const { organization, employee, canManageDomains } = await withOrganization(db, claims.organizationId, async (tx) => {
+    const [organization, employee] = await Promise.all([
+      tx.organization.findUniqueOrThrow({
+        where: { id: claims.organizationId },
+        include: { domains: { orderBy: { createdAt: "asc" } } },
+      }),
+      tx.employee.findUniqueOrThrow({ where: { id: claims.employeeId } }),
+    ]);
+    const hasPendingPrimary = organization.domains.some((d) => d.isPrimary && d.status !== "VERIFIED");
+    const canManageDomains = hasPendingPrimary
+      ? await canAccountManageOrganization(tx, {
+          accountId: session.user.id,
+          organizationId: claims.organizationId,
+          ownerAccountId: organization.ownerAccountId,
+          authzRevision: claims.authzRevision,
+        })
+      : false;
+    return { organization, employee, canManageDomains };
+  });
   const status = STATUS[organization.status];
   const pending = organization.domains.find((d) => d.isPrimary && d.status !== "VERIFIED");
+  const pendingView = pending
+    ? resolveAccountPendingDomainView({
+        organizationId: organization.id,
+        domain: pending.domain,
+        status: pending.status,
+        canManage: canManageDomains,
+        devTrust: config.devTrustDomains,
+      })
+    : null;
   const cookieStore = await cookies();
   const returnClientId = cookieStore.get(RETURN_CLIENT_COOKIE)?.value;
   const returnClient =
@@ -60,20 +80,27 @@ export default async function AccountPage() {
         <Badge tone={status.tone}>{status.label}</Badge>
       </div>
 
-      {pending ? (
-        <div className="flex flex-col gap-3">
+      {pendingView ? (
+        pendingView.canManage ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-text-secondary">
+              Potwierdź, że domena <strong>{pendingView.domain}</strong> należy do firmy: dodaj w jej DNS rekord TXT,
+              potem kliknij „Sprawdź rekord”.
+            </p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-bg-tertiary p-3 font-mono text-xs">
+              <dt className="text-text-tertiary">Nazwa</dt>
+              <dd className="break-all">{pendingView.txtHost}</dd>
+              <dt className="text-text-tertiary">Wartość</dt>
+              <dd className="break-all">{pendingView.txtValue}</dd>
+            </dl>
+            <DomainActions devTrust={pendingView.devTrust} />
+          </div>
+        ) : (
           <p className="text-sm text-text-secondary">
-            Potwierdź, że domena <strong>{pending.domain}</strong> należy do firmy: dodaj w jej DNS rekord TXT, potem
-            kliknij „Sprawdź rekord”.
+            Domena <strong>{pendingView.domain}</strong> czeka na potwierdzenie przez właściciela lub administratora
+            firmy.
           </p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-bg-tertiary p-3 font-mono text-xs">
-            <dt className="text-text-tertiary">Nazwa</dt>
-            <dd className="break-all">{domainVerificationHost(pending.domain)}</dd>
-            <dt className="text-text-tertiary">Wartość</dt>
-            <dd className="break-all">{domainTxtValue(organization.id, pending.domain)}</dd>
-          </dl>
-          <DomainActions devTrust={config.devTrustDomains} />
-        </div>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-text-secondary">

@@ -1,4 +1,5 @@
 import "server-only";
+import { isDevTrustDomainsEnabled, resolveDomainVerificationSecret } from "@core/db";
 
 /** `next build` importuje kod tras, ale ich nie wykonuje: wtedy wystarczą wartości zastępcze. */
 const building = process.env.NEXT_PHASE === "phase-production-build";
@@ -17,9 +18,17 @@ export const config = {
   get secret(): string {
     return required("BETTER_AUTH_SECRET", "build-time-secret-build-time-secret-0000");
   },
-  /** Sekret HMAC-SHA256 współdzielony z Core API do rekordów DNS TXT; gdy brak, wraca do `BETTER_AUTH_SECRET`. */
+  /**
+   * Sekret HMAC-SHA256 współdzielony z Core API do rekordów DNS TXT:
+   * na produkcji wymagany (`CORE_DOMAIN_VERIFICATION_SECRET`, min. 32 znaki po przycięciu spacji);
+   * poza produkcją może wrócić do `BETTER_AUTH_SECRET`.
+   */
   get domainVerificationSecret(): string {
-    return process.env.CORE_DOMAIN_VERIFICATION_SECRET || this.secret;
+    return resolveDomainVerificationSecret({
+      env: process.env,
+      fallback: () => this.secret,
+      isBuildPhase: building,
+    });
   },
   get databaseUrl(): string {
     return required("CORE_DATABASE_URL", "postgresql://build:build@localhost:5432/build");
@@ -31,6 +40,8 @@ export const config = {
   mailFrom: process.env.CORE_MAIL_FROM ?? "Monorise <no-reply@monorise.studio>",
   /** Tylko lokalnie: adresy powrotu produktów po HTTP (localhost i *.localhost), np. aven-mail.localhost:3000. */
   allowLocalHttpRedirects: process.env.NODE_ENV !== "production",
-  /** Tylko lokalnie: potwierdzenie domeny bez rekordu DNS TXT. */
-  devTrustDomains: process.env.CORE_DEV_TRUST_DOMAINS === "1" && process.env.NODE_ENV !== "production",
+  /** Tylko lokalnie i w testach (`NODE_ENV` = `development` lub `test` oraz `CORE_DEV_TRUST_DOMAINS=1`): bez DNS TXT. */
+  get devTrustDomains(): boolean {
+    return isDevTrustDomainsEnabled(process.env);
+  },
 };
