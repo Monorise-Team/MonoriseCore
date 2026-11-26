@@ -69,18 +69,16 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M)                          |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS, `Idempotency-Key`; firmy, domeny, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka     |
-| `packages/db`        | Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `MailOutbox`, `AuditLog`, `IdempotencyKey`), RLS, `withOrganization` |
-| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe                                           |
+- `apps/auth`: Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M).
+- `apps/api`: Core API w Fastify (`/core/v1`, ADR-0044): RLS, `Idempotency-Key`; firmy, domeny, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka.
+- `packages/db`: Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `MailOutbox`, `AuditLog`, `IdempotencyKey`), RLS, `withOrganization`.
+- `packages/contracts`: schematy Zod i typy API, pola tokenów, `CORE_PERMISSIONS`, darmowe domeny pocztowe.
 
 ## Zasady kodu
 
 1. **Firma zawsze z zaufanego źródła** (token, sesja), nigdy z treści żądania, adresu ani formularza (ADR-0037).
 2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez właściciela tabel i `BYPASSRLS`).
-3. **Wyszukiwanie i sprzątanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`, `organization_domains_release_competing_claims`, `invitation_by_token_hash`, `outbox_publish_pending`, `product_event_feed`, `idempotency_keys_cleanup_expired`, `mail_outbox_claim`, `mail_outbox_cleanup`) należące do roli `core_lookup`. `domain_owner` zwraca wyłącznie domeny `VERIFIED` (zasada „wygrywa weryfikacja”), a `organization_domains_release_competing_claims` po weryfikacji domeny usuwa niezweryfikowane, niegłówne roszczenia innych firm (z zachowaniem cudzej głównej domeny z rejestracji w toku, która przy próbie weryfikacji zwraca `409`). Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
+3. **Wyszukiwanie i sprzątanie ponad granicą firm** tylko przez wąskie funkcje bazy w roli `core_lookup` (`account_claims`, `domain_owner`, `organization_domains_release_competing_claims`, `invitation_by_token_hash`, `outbox_publish_pending`, `product_event_feed`, `idempotency_keys_cleanup_expired`, `mail_outbox_claim`, `mail_outbox_cleanup`; działanie opisuje README). Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
 4. **Każda tabela z danymi firmy** ma w migracji `ENABLE` + `FORCE` RLS i testy izolacji. `audit_log` jest niezmienny (tylko `SELECT`/`INSERT` dla `core_app`, wyzwalacz blokujący `UPDATE` także dla `core_owner`).
 5. **Tokeny** (ADR-0023): JWT EdDSA (5 min). Użytkownik: `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień). Maszynowy (`client_credentials`, zakresy `core:permissions.register`, `core:permissions.read`, `core:directory.read`) bez `org_id`: manifesty, migawki i katalog produktów.
 6. **Klienci OAuth tylko z kodu**: `ensureFirstPartyClients` (`pnpm oauth:seed`) rejestruje klientów (z PKCE) i produkty (`avenmail`, `timotime`). Rejestracja HTTP wyłączona; zmiany klientów/adresów powrotu opisz w PR.
