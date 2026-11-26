@@ -163,7 +163,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -295,7 +295,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -388,7 +388,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -470,7 +470,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -592,7 +592,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -683,7 +683,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -715,7 +715,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -816,7 +816,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -948,7 +948,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1041,7 +1041,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1175,7 +1175,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1222,7 +1222,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1254,7 +1254,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1301,7 +1301,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1399,7 +1399,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1500,7 +1500,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1639,7 +1639,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1778,7 +1778,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1890,7 +1890,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2002,7 +2002,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2103,7 +2103,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2204,7 +2204,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2308,7 +2308,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2440,7 +2440,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2523,7 +2523,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2634,7 +2634,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2766,7 +2766,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2846,7 +2846,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2955,7 +2955,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3046,7 +3046,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3137,7 +3137,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3269,7 +3269,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3380,7 +3380,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3483,7 +3483,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3605,7 +3605,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3697,7 +3697,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4579,7 +4579,7 @@
           "ORGANIZATION_EXISTS",
           "ORGANIZATION_NOT_ACTIVE",
           "ACCOUNT_DEACTIVATED",
-          "INTERNAL"
+          "INTERNAL_ERROR"
         ]
       },
       "GrantScope": {

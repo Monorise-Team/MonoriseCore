@@ -61,7 +61,7 @@ export const ERROR_CODES = [
   "ORGANIZATION_EXISTS",
   "ORGANIZATION_NOT_ACTIVE",
   "ACCOUNT_DEACTIVATED",
-  "INTERNAL",
+  "INTERNAL_ERROR",
 ] as const;
 export const ErrorCode = z.enum(ERROR_CODES);
 export type ErrorCode = (typeof ERROR_CODES)[number];

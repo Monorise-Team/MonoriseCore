@@ -549,7 +549,7 @@ export function buildServer({
                 ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
                 : statusCode === 400
                   ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-                  : new ApiFailure(500, "INTERNAL", "Wewnętrzny błąd serwera");
+                  : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
