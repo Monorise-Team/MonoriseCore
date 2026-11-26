@@ -300,6 +300,7 @@ describe("dziennik zdarzeń — testy jednostkowe bez bazy", () => {
     expect(getAuditActionLabel("app_access.revoked")).toBe("Wyłączono dostęp do aplikacji");
     expect(getAuditActionLabel("organization.owner.transferred")).toBe("Przekazano rolę Ownera firmy");
     expect(getAuditActionLabel("unit.member.set")).toBe("Zapisano członkostwo w jednostce organizacyjnej");
+    expect(getAuditActionLabel("notification.preference_changed")).toBe("Zmieniono ustawienia powiadomień");
     expect(getAuditActionLabel("timotime.entry.approved")).toBe("timotime.entry.approved");
     expect(getAuditActionLabel("toString")).toBe("toString");
     expect(getAuditActionLabel("constructor")).toBe("constructor");

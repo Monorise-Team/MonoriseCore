@@ -116,6 +116,7 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
       organizationId: ORG_ID,
       kind: "INVITATION" as const,
       invitationId: INV_ID,
+      notificationId: null,
       attempts: 1,
     };
     const job2 = {
@@ -123,6 +124,7 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
       organizationId: ORG_ID,
       kind: "INVITATION" as const,
       invitationId: INV_ID,
+      notificationId: null,
       attempts: 1,
     };
     const observedNowMs: number[] = [];
