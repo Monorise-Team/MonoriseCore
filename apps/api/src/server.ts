@@ -14,6 +14,7 @@ import {
   IDEMPOTENCY_REPLAYED_HEADER,
   InvitationStatus,
   isFreeEmailDomain,
+  ListAuditLogQuery,
   MAX_DIRECTORY_FILTER_IDS,
   normalizeEmail,
   PageQuery,
@@ -52,7 +53,7 @@ import { uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
 import { PermissionError } from "@monorise-team/permissions";
 import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
 import { z } from "zod";
-import { writeAudit } from "./audit.js";
+import { AuditCursorError, decodeAuditCursor, listAuditLogEntries, writeAudit, type AuditLogCursor } from "./audit.js";
 import {
   assertCanAssignInScope,
   assertCanDelegateRole,
@@ -2458,6 +2459,42 @@ export function buildServer({
       });
 
       return reply.status(204).send();
+    },
+  });
+
+  app.route({
+    method: ROUTES.listAuditLog.method,
+    url: toFastifyPath(ROUTES.listAuditLog.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const query = parseInput(ListAuditLogQuery, request.query ?? {});
+      let cursor: AuditLogCursor | undefined;
+      if (query.cursor !== undefined) {
+        try {
+          cursor = decodeAuditCursor(query.cursor);
+        } catch (error) {
+          if (error instanceof AuditCursorError) {
+            throw new ApiFailure(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+              { field: "cursor", message: error.message },
+            ]);
+          }
+          throw error;
+        }
+      }
+
+      const currentTime = getNow();
+      const { items, nextCursor } = await withOrganization(db, who.organizationId, async (tx) => {
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["audit.read"], {});
+        return listAuditLogEntries(tx, {
+          organizationId: who.organizationId,
+          query,
+          ...(cursor ? { cursor } : {}),
+          now: currentTime,
+        });
+      });
+
+      return sendList(request, items, nextCursor);
     },
   });
 

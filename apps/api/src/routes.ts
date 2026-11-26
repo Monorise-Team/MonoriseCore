@@ -1,6 +1,11 @@
 import {
   API_PREFIX,
   AppAccess,
+  AuditActionFilter,
+  AuditActorType,
+  AuditLogEntry,
+  AuditResourceIdFilter,
+  AuditResourceTypeFilter,
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
@@ -24,6 +29,7 @@ import {
   IdempotencyKeyHeader,
   Invitation,
   InvitationStatus,
+  IsoDatetime,
   MAX_DIRECTORY_FILTER_IDS,
   MAX_PAGE_LIMIT,
   Me,
@@ -65,6 +71,7 @@ export type RouteTag =
   | "Permissions"
   | "Roles"
   | "AppAccess"
+  | "Audit"
   | "Directory"
   | "Events";
 
@@ -89,6 +96,10 @@ export const TAGS: readonly TagDefinition[] = [
   {
     name: "AppAccess",
     description: "Dostęp firm do produktów (Entitlements) oraz włączanie aplikacji pracownikom (AppAccess, ADR-0035).",
+  },
+  {
+    name: "Audit",
+    description: "Centralny dziennik zdarzeń firmy (ADR-0039).",
   },
   {
     name: "Directory",
@@ -166,6 +177,7 @@ export const AppAccessList = z.array(AppAccess);
 export const DirectoryUnitMemberList = z.array(DirectoryUnitMember);
 export const DirectoryEmployeeList = z.array(DirectoryEmployee);
 export const ProductEventList = z.array(ProductEvent);
+export const AuditLogEntryList = z.array(AuditLogEntry);
 
 const UuidParam = z.uuid();
 const RepeatableUuidParam = z.array(z.uuid()).max(MAX_DIRECTORY_FILTER_IDS);
@@ -1391,6 +1403,84 @@ export const ROUTES = {
       403: ["PERMISSION_DENIED"],
       404: ["NOT_FOUND"],
       409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  listAuditLog: {
+    method: "GET",
+    path: `${API_PREFIX}/audit-log`,
+    operationId: "listAuditLog",
+    tag: "Audit",
+    summary: "Dziennik zdarzeń firmy",
+    description:
+      "Zwraca stronicowaną listę wpisów centralnego dziennika zdarzeń firmy od najnowszych (`createdAt DESC, id DESC`), " +
+      "z oknem retencji 730 dni (ADR-0039, ADR-0041). Wymaga uprawnienia `core.audit.read` w zakresie całej firmy " +
+      "(`ORGANIZATION`) albo roli Ownera. Wrażliwe pola w `metadata` (tokeny, sekrety, hasła, skróty) są usuwane przed zwrotem.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    paginated: true,
+    parameters: [
+      ...PAGE_PARAMETERS,
+      {
+        name: "actorAccountId",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po identyfikatorze konta aktora (UUID v7).",
+        schema: UuidParam,
+      },
+      {
+        name: "actorType",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po typie aktora (`ACCOUNT`, `OPERATOR`, `SYSTEM` albo `PRODUCT`).",
+        schema: AuditActorType,
+      },
+      {
+        name: "action",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po nazwie akcji (dokładne dopasowanie, np. `role.assigned`).",
+        schema: AuditActionFilter,
+      },
+      {
+        name: "resourceType",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po typie zasobu (np. `role_assignment`, `app_access`, `unit`).",
+        schema: AuditResourceTypeFilter,
+      },
+      {
+        name: "resourceId",
+        in: "query",
+        required: false,
+        description: "Opcjonalny filtr po identyfikatorze zasobu.",
+        schema: AuditResourceIdFilter,
+      },
+      {
+        name: "from",
+        in: "query",
+        required: false,
+        description:
+          "Dolna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt >= from`; nie wcześniej niż 730 dni wstecz).",
+        schema: IsoDatetime,
+      },
+      {
+        name: "to",
+        in: "query",
+        required: false,
+        description: "Górna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt <= to`).",
+        schema: IsoDatetime,
+      },
+    ],
+    dataSchemaName: "AuditLogEntryList",
+    dataSchema: AuditLogEntryList,
+    responseSchemaName: "AuditLogEntryListResponse",
+    responseDescription: "Strona wpisów dziennika zdarzeń firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
       422: ["VALIDATION_FAILED"],
       500: ["INTERNAL_ERROR"],
     },

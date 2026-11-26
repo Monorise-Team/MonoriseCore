@@ -11,6 +11,8 @@ import {
   apiSuccessSchema,
   AppAccess,
   AppAccessStatus,
+  AuditActorType,
+  AuditLogEntry,
   CopyRole,
   CreateAppAccess,
   CreateEmployee,
@@ -259,6 +261,8 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("AppAccessStatus", AppAccessStatus);
   register("AppAccess", AppAccess);
   register("CreateAppAccess", CreateAppAccess);
+  register("AuditActorType", AuditActorType);
+  register("AuditLogEntry", AuditLogEntry);
   register("GrantScope", GrantScope);
   register("PermissionGrant", PermissionGrant);
   register("SnapshotUnit", SnapshotUnit);

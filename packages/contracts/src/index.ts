@@ -491,7 +491,7 @@ export const RoleAssignment = z.object({
 });
 export type RoleAssignment = z.infer<typeof RoleAssignment>;
 
-const IsoDatetime = z.iso.datetime({ offset: true });
+export const IsoDatetime = z.iso.datetime({ offset: true });
 
 export const CreateRoleAssignment = z
   .object({
@@ -765,3 +765,53 @@ export const ProductEvent = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 export type ProductEvent = z.infer<typeof ProductEvent>;
+
+// ── Dziennik zdarzeń firmy (MonoriseCore#63, ADR-0039, ADR-0041) ──────────────────────────────────
+
+export const AUDIT_LOG_RETENTION_DAYS = 730;
+export const AUDIT_LOG_RETENTION_MS = AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+export const AuditActorType = z.enum(["ACCOUNT", "OPERATOR", "SYSTEM", "PRODUCT"]);
+export type AuditActorType = z.infer<typeof AuditActorType>;
+
+export const AuditActionFilter = z.string().trim().min(1).max(120);
+export const AuditResourceTypeFilter = z.string().trim().min(1).max(64);
+export const AuditResourceIdFilter = z.string().trim().min(1).max(256);
+
+export const ListAuditLogQuery = PageQuery.extend({
+  actorAccountId: z.uuid().optional(),
+  actorType: AuditActorType.optional(),
+  action: AuditActionFilter.optional(),
+  resourceType: AuditResourceTypeFilter.optional(),
+  resourceId: AuditResourceIdFilter.optional(),
+  from: IsoDatetime.optional(),
+  to: IsoDatetime.optional(),
+}).superRefine((data, ctx) => {
+  if (data.from && data.to && Date.parse(data.from) > Date.parse(data.to)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["to"],
+      message: "Data to nie może być wcześniejsza niż from",
+    });
+  }
+});
+export type ListAuditLogQuery = z.infer<typeof ListAuditLogQuery>;
+
+export const AuditLogEntry = z.object({
+  id: z.uuid(),
+  actorType: AuditActorType,
+  actorAccountId: z.uuid().nullable(),
+  actorDisplayName: z.string().nullable(),
+  product: ProductKey.nullable(),
+  action: z.string(),
+  actionLabel: z.string(),
+  resourceType: z.string(),
+  resourceId: z.string(),
+  metadata: z.record(z.string(), z.unknown()),
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  requestId: z.string().nullable(),
+  supportAccessGrantId: z.uuid().nullable(),
+  createdAt: z.string(),
+});
+export type AuditLogEntry = z.infer<typeof AuditLogEntry>;
