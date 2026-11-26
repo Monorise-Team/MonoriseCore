@@ -1,5 +1,5 @@
 import "server-only";
-import { emailDomain, isFreeEmailDomain, normalizeEmail, type SignUpRequest } from "@core/contracts";
+import { DomainName, emailDomain, isFreeEmailDomain, normalizeEmail, type SignUpRequest } from "@core/contracts";
 import { domainOwner, uuidv7, withOrganization } from "@core/db";
 import { auth } from "./auth";
 import { db } from "./db";
@@ -9,11 +9,20 @@ import { CoreError, isUniqueViolation } from "./errors";
 /**
  * Samorejestracja firmy (ADR-0021): osoba z adresem w domenie firmy zakłada konto i firmę. Firma czeka na
  * potwierdzenie domeny rekordem DNS TXT, a konto na potwierdzenie adresu e-mail.
+ * Zgodnie z zasadą „wygrywa weryfikacja” niezweryfikowane roszczenie innej firmy nie blokuje rejestracji —
+ * blokuje ją wyłącznie zweryfikowany (`VERIFIED`) właściciel domeny.
  */
 export async function signUpOrganization(input: SignUpRequest): Promise<{ organizationId: string; domain: string }> {
   const email = normalizeEmail(input.email);
-  const domain = emailDomain(email);
-  if (!domain || isFreeEmailDomain(domain)) {
+  const rawDomain = emailDomain(email);
+  const parsedDomain = DomainName.safeParse(rawDomain);
+  if (!parsedDomain.success) {
+    throw new CoreError("VALIDATION_FAILED", 422, "Podaj poprawny adres e-mail w domenie firmy", [
+      { field: "email", message: "Domena adresu e-mail jest nieprawidłowa" },
+    ]);
+  }
+  const domain = parsedDomain.data;
+  if (isFreeEmailDomain(domain)) {
     throw new CoreError(
       "EMAIL_DOMAIN_NOT_ALLOWED",
       422,
@@ -36,6 +45,15 @@ export async function signUpOrganization(input: SignUpRequest): Promise<{ organi
   const employeeId = uuidv7();
   try {
     await withOrganization(db, organizationId, async (tx) => {
+      const domainLockKey = `domain_verify:${domain.toLowerCase()}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${domainLockKey}::text, 0))`;
+      if (await domainOwner(tx, domain)) {
+        throw new CoreError(
+          "ORGANIZATION_EXISTS",
+          409,
+          `Firma z domeną ${domain} już jest w Monorise. Poproś jej administratora o zaproszenie.`,
+        );
+      }
       await tx.organization.create({
         data: { id: organizationId, name: input.organizationName, createdVia: "SELF_SIGNUP" },
       });

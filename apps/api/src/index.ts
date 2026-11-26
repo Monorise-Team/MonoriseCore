@@ -1,4 +1,4 @@
-import { createDb } from "@core/db";
+import { createDb, isDevTrustDomainsEnabled, resolveDomainVerificationSecret } from "@core/db";
 import { startOutboxPublisher } from "./event-feed.js";
 import { parseIdempotencyCleanupIntervalMs, startIdempotencyCleanup } from "./idempotency.js";
 import { registerCorePermissions } from "./permissions-registry.js";
@@ -24,6 +24,8 @@ const app = buildServer({
   verifyToken: createTokenVerifier(tokenOptions),
   verifyMachineToken: createMachineTokenVerifier(tokenOptions),
   authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
+  domainVerificationSecret: resolveDomainVerificationSecret({ env: process.env }),
+  devTrustDomains: isDevTrustDomainsEnabled(process.env),
   logger: true,
 });
 

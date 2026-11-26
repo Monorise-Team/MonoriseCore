@@ -36,6 +36,7 @@ export class AuditCursorError extends Error {
 /** Czytelne polskie etykiety znanych akcji platformy Core; dla nieznanych akcji (np. z produktów) zwracamy surową nazwę. */
 export const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   "organization.owner.transferred": "Przekazano rolę Ownera firmy",
+  "organization.activated": "Aktywowano firmę",
   "organization.updated": "Zaktualizowano dane firmy",
   "organization.domain.added": "Dodano domenę firmy",
   "organization.domain.verified": "Zweryfikowano domenę firmy",

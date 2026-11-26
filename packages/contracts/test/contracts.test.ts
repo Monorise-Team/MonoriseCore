@@ -14,12 +14,15 @@ import {
   AUDIT_LOG_RETENTION_MS,
   AuditActorType,
   AuditLogEntry,
+  canManageOrganizationAssignments,
+  canManageOrganizationSnapshot,
   CORE_PERMISSIONS,
   CORE_ROLE_TEMPLATES,
   CopyRole,
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
   CreateRoleFromScratch,
@@ -27,6 +30,7 @@ import {
   DEFAULT_PAGE_LIMIT,
   DIRECTORY_READ_SCOPE,
   DirectoryEmployee,
+  DomainName,
   Employee,
   DirectoryUnitMember,
   emailDomain,
@@ -45,10 +49,13 @@ import {
   isFreeEmailDomain,
   ListAuditLogQuery,
   MachineTokenClaims,
+  MAX_ORGANIZATION_DOMAINS,
   MAX_PAGE_LIMIT,
   MAX_PERMISSION_MANIFEST_ENTRIES,
   Me,
   normalizeEmail,
+  Organization,
+  OrganizationDomain,
   OrganizationOwner,
   PageQuery,
   Permission,
@@ -69,8 +76,10 @@ import {
   Unit,
   UnitMember,
   UpdateEmployee,
+  UpdateOrganization,
   UpdateRole,
   UpdateUnit,
+  VerifyOrganizationDomain,
 } from "../src/index.js";
 
 const UUID_1 = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7b";
@@ -83,11 +92,174 @@ describe("adresy e-mail", () => {
     expect(normalizeEmail("  Anna@Acme.com ")).toBe("anna@acme.com");
   });
 
-  it("odrzuca darmowe skrzynki, także polskie", () => {
-    for (const domain of ["gmail.com", "WP.pl", "onet.pl", "interia.pl", "o2.pl"]) {
-      expect(isFreeEmailDomain(domain)).toBe(true);
+  it("odrzuca darmowe skrzynki, polskie, nowe domeny i ich subdomeny", () => {
+    for (const domain of [
+      "gmail.com",
+      "WP.pl",
+      "onet.pl",
+      "interia.pl",
+      "o2.pl",
+      "pm.me",
+      "tuta.com",
+      "tutanota.com",
+      "mail.gmail.com",
+      "sub.a.proton.me",
+      "mail.wp.pl",
+      "  team.pm.me  ",
+      "desk.tuta.com",
+      "legacy.tutanota.com",
+    ]) {
+      expect(isFreeEmailDomain(domain), `Powinno odrzucić ${domain}`).toBe(true);
     }
-    expect(isFreeEmailDomain("acme.com")).toBe(false);
+    for (const allowed of ["acme.com", "notgmail.com", "my-tuta.com", "fpm.me", "company-wp.pl"]) {
+      expect(isFreeEmailDomain(allowed), `Powinno przepuścić ${allowed}`).toBe(false);
+    }
+  });
+});
+
+describe("uprawnienia core.organization.manage", () => {
+  const now = new Date("2026-11-26T12:00:00.000Z");
+
+  it("przyznaje dostęp Ownerowi lub kontu z aktywnym zakresem ORGANIZATION, odrzuca UNIT/RESOURCE, wygasłe i wycofane", () => {
+    expect(
+      canManageOrganizationAssignments({
+        accountId: UUID_1,
+        organizationId: UUID_2,
+        isOwner: true,
+        authzRevision: 0,
+        assignments: [],
+        now,
+      }),
+    ).toBe(true);
+
+    expect(
+      canManageOrganizationAssignments({
+        accountId: UUID_1,
+        organizationId: UUID_2,
+        isOwner: false,
+        authzRevision: 0,
+        assignments: [
+          {
+            scopeType: "ORGANIZATION",
+            scopeId: null,
+            validFrom: null,
+            validUntil: null,
+            role: {
+              archivedAt: null,
+              permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+            },
+          },
+        ],
+        now,
+      }),
+    ).toBe(true);
+
+    // Zakres UNIT lub RESOURCE nie wystarcza dla operacji na poziomie całej firmy
+    for (const scope of [
+      { scopeType: "UNIT" as const, scopeId: UUID_3 },
+      { scopeType: "RESOURCE" as const, scopeId: "res_1" },
+    ]) {
+      expect(
+        canManageOrganizationAssignments({
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          isOwner: false,
+          authzRevision: 0,
+          assignments: [
+            {
+              ...scope,
+              validFrom: null,
+              validUntil: null,
+              role: {
+                archivedAt: null,
+                permissions: [
+                  { permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } },
+                ],
+              },
+            },
+          ],
+          now,
+        }),
+      ).toBe(false);
+    }
+
+    // Zarchiwizowana rola, wycofane uprawnienie, wygasłe lub przyszłe przypisanie -> false
+    const deniedCases = [
+      {
+        role: {
+          archivedAt: new Date("2026-11-25T00:00:00.000Z"),
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: null,
+        validUntil: null,
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [
+            {
+              permission: {
+                key: CORE_PERMISSIONS.keys["organization.manage"],
+                deprecatedAt: new Date("2026-11-25T00:00:00.000Z"),
+              },
+            },
+          ],
+        },
+        validFrom: null,
+        validUntil: null,
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: null,
+        validUntil: new Date("2026-11-26T11:59:59.000Z"),
+      },
+      {
+        role: {
+          archivedAt: null,
+          permissions: [{ permission: { key: CORE_PERMISSIONS.keys["organization.manage"], deprecatedAt: null } }],
+        },
+        validFrom: new Date("2026-11-26T12:00:01.000Z"),
+        validUntil: null,
+      },
+    ];
+    for (const c of deniedCases) {
+      expect(
+        canManageOrganizationAssignments({
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          isOwner: false,
+          authzRevision: 0,
+          assignments: [{ scopeType: "ORGANIZATION", scopeId: null, ...c }],
+          now,
+        }),
+      ).toBe(false);
+    }
+
+    // Bezpośrednia ocena gotowej migawki
+    expect(
+      canManageOrganizationSnapshot(
+        {
+          accountId: UUID_1,
+          organizationId: UUID_2,
+          authzRevision: 1,
+          isOwner: false,
+          products: ["core"],
+          grants: [
+            {
+              permission: CORE_PERMISSIONS.keys["organization.manage"],
+              scope: { type: "ORGANIZATION" },
+              validFrom: null,
+              validUntil: null,
+            },
+          ],
+          units: [],
+        },
+        now,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -278,8 +450,9 @@ describe("kontrakty", () => {
       "core.roles.assign",
       "core.app_access.manage",
       "core.audit.read",
+      "core.organization.manage",
     ]);
-    expect(RegisterPermissionsRequest.parse(CORE_PERMISSIONS.manifest)).toHaveLength(6);
+    expect(RegisterPermissionsRequest.parse(CORE_PERMISSIONS.manifest)).toHaveLength(7);
     expect(PERMISSIONS_READ_SCOPE).toBe("core:permissions.read");
 
     expect(ProductKey.safeParse("timotime").success).toBe(true);
@@ -343,6 +516,7 @@ describe("kontrakty", () => {
     expect(CORE_ROLE_TEMPLATES).toHaveLength(1);
     expect(CORE_ROLE_TEMPLATES[0]?.key).toBe("core.company_admin");
     expect(CORE_ROLE_TEMPLATES[0]?.permissions).toEqual(CORE_PERMISSIONS.manifest.map((p) => p.key));
+    expect(CORE_ROLE_TEMPLATES[0]?.permissions).toContain("core.organization.manage");
 
     expect(RoleTemplateKey.safeParse("core.company_admin").success).toBe(true);
     expect(RoleTemplateKey.safeParse("timotime.manager").success).toBe(true);
@@ -480,6 +654,67 @@ describe("kontrakty", () => {
 
     expect(TransferOrganizationOwner.parse({ accountId: UUID_1 }).accountId).toBe(UUID_1);
     expect(OrganizationOwner.parse({ ownerAccountId: UUID_1 }).ownerAccountId).toBe(UUID_1);
+  });
+
+  it("waliduje schematy firmy i zarządzania domenami", () => {
+    expect(MAX_ORGANIZATION_DOMAINS).toBe(20);
+
+    expect(DomainName.parse("  ACME.EU  ")).toBe("acme.eu");
+    expect(DomainName.parse("sub.acme-group.co.uk")).toBe("sub.acme-group.co.uk");
+    expect(DomainName.parse("a.pl")).toBe("a.pl");
+    for (const invalid of [
+      "",
+      "a.b",
+      "localhost",
+      "-acme.eu",
+      "acme-.eu",
+      "acme..eu",
+      "acme.123",
+      "https://acme.eu",
+      "anna@acme.eu",
+      `${"a".repeat(64)}.eu`,
+      `${"a.".repeat(127)}eu`,
+    ]) {
+      expect(DomainName.safeParse(invalid).success, `Powinno odrzucić domenę "${invalid}"`).toBe(false);
+    }
+
+    expect(UpdateOrganization.parse({ name: "  Acme Europe Sp. z o.o.  " })).toEqual({
+      name: "Acme Europe Sp. z o.o.",
+    });
+    expect(UpdateOrganization.safeParse({ name: "A" }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ name: "   " }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ name: "a".repeat(121) }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ name: "Acme", status: "ACTIVE" }).success).toBe(false);
+
+    expect(CreateOrganizationDomain.parse({ domain: "  Acme.EU " })).toEqual({ domain: "acme.eu" });
+    expect(CreateOrganizationDomain.safeParse({ domain: "acme.eu", isPrimary: true }).success).toBe(false);
+
+    expect(VerifyOrganizationDomain.parse({})).toEqual({});
+    expect(VerifyOrganizationDomain.parse({ trustLocally: true })).toEqual({ trustLocally: true });
+    expect(VerifyOrganizationDomain.parse({ trustLocally: false })).toEqual({ trustLocally: false });
+    expect(VerifyOrganizationDomain.safeParse({ trustLocally: "1" }).success).toBe(false);
+    expect(VerifyOrganizationDomain.safeParse({ extra: true }).success).toBe(false);
+
+    const parsedDomain = OrganizationDomain.parse({
+      id: UUID_1,
+      domain: "acme.eu",
+      status: "PENDING",
+      isPrimary: false,
+      verifiedAt: null,
+      lastCheckedAt: null,
+      verificationTxtName: "_monorise-verification.acme.eu",
+      verificationTxtValue: "monorise-verification=abc",
+    });
+    expect(parsedDomain.verificationTxtName).toBe("_monorise-verification.acme.eu");
+
+    const parsedOrg = Organization.parse({
+      id: UUID_2,
+      name: "Acme",
+      status: "ACTIVE",
+      domains: [parsedDomain],
+      createdAt: "2026-11-26T10:00:00.000Z",
+    });
+    expect(parsedOrg.domains).toHaveLength(1);
   });
 
   it("waliduje schematy dostępu do produktów, aplikacji i migawki uprawnień", () => {

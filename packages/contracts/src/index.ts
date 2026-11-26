@@ -14,7 +14,14 @@ import {
 } from "@monorise-team/permissions";
 import { z } from "zod";
 
-export { CORE_PERMISSIONS, CORE_ROLE_TEMPLATES, type CorePermissionKey } from "./permissions.js";
+export {
+  canManageOrganizationAssignments,
+  canManageOrganizationSnapshot,
+  CORE_PERMISSIONS,
+  CORE_ROLE_TEMPLATES,
+  type CorePermissionKey,
+  type RawRoleAssignmentRecord,
+} from "./permissions.js";
 
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
@@ -183,17 +190,34 @@ export type MachineTokenClaims = z.infer<typeof MachineTokenClaims>;
 
 // ── Firmy ───────────────────────────────────────────────────────────────────────────────────────
 
+export const MAX_ORGANIZATION_DOMAINS = 20;
+
 export const OrganizationStatus = z.enum(["PENDING_VERIFICATION", "ACTIVE", "SUSPENDED", "OFFBOARDING", "DELETED"]);
 export type OrganizationStatus = z.infer<typeof OrganizationStatus>;
 
 export const DomainStatus = z.enum(["PENDING", "VERIFIED", "FAILED", "REVOKED"]);
 export type DomainStatus = z.infer<typeof DomainStatus>;
 
+/** Nazwa domeny e-mail firmy (małe litery, co najmniej jedna kropka, TLD z liter). */
+export const DOMAIN_NAME_REGEX = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+export const DomainName = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(4, "Nazwa domeny jest za krótka")
+  .max(253, "Nazwa domeny jest za długa")
+  .regex(DOMAIN_NAME_REGEX, "Podaj poprawną nazwę domeny");
+export type DomainName = z.infer<typeof DomainName>;
+
 export const OrganizationDomain = z.object({
+  id: z.uuid(),
   domain: z.string(),
   status: DomainStatus,
   isPrimary: z.boolean(),
   verifiedAt: z.string().nullable(),
+  lastCheckedAt: z.string().nullable(),
+  verificationTxtName: z.string().nullable(),
+  verificationTxtValue: z.string().nullable(),
 });
 export type OrganizationDomain = z.infer<typeof OrganizationDomain>;
 
@@ -205,6 +229,27 @@ export const Organization = z.object({
   createdAt: z.string(),
 });
 export type Organization = z.infer<typeof Organization>;
+
+export const UpdateOrganization = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+  })
+  .strict();
+export type UpdateOrganization = z.infer<typeof UpdateOrganization>;
+
+export const CreateOrganizationDomain = z
+  .object({
+    domain: DomainName,
+  })
+  .strict();
+export type CreateOrganizationDomain = z.infer<typeof CreateOrganizationDomain>;
+
+export const VerifyOrganizationDomain = z
+  .object({
+    trustLocally: z.boolean().optional(),
+  })
+  .strict();
+export type VerifyOrganizationDomain = z.infer<typeof VerifyOrganizationDomain>;
 
 export const OrganizationOwner = z.object({
   ownerAccountId: z.uuid(),
@@ -693,6 +738,9 @@ export const FREE_EMAIL_DOMAINS = new Set([
   "aol.com",
   "proton.me",
   "protonmail.com",
+  "pm.me",
+  "tuta.com",
+  "tutanota.com",
   "gmx.com",
   "gmx.net",
   "zoho.com",
@@ -727,7 +775,13 @@ export function emailDomain(email: string): string {
 }
 
 export function isFreeEmailDomain(domain: string): boolean {
-  return FREE_EMAIL_DOMAINS.has(domain.toLowerCase());
+  const normalized = domain.trim().toLowerCase();
+  if (!normalized) return false;
+  if (FREE_EMAIL_DOMAINS.has(normalized)) return true;
+  for (const free of FREE_EMAIL_DOMAINS) {
+    if (normalized.endsWith(`.${free}`)) return true;
+  }
+  return false;
 }
 
 /** Rekord DNS TXT potwierdzający domenę firmy: `_monorise-verification.<domena>` = `monorise-verification=<kod>`. */

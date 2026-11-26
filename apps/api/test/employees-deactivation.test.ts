@@ -260,7 +260,7 @@ beforeAll(async () => {
     });
   });
 
-  await grantEntitlement(db, { organization: acme.id, product: testProductKey });
+  await grantEntitlement(db, { organization: acme.id, product: testProductKey, now: currentNow });
 });
 
 afterAll(async () => {
