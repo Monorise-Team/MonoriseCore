@@ -19,13 +19,13 @@ datasource db {
 
 /// Konto logowania. Identyfikator jest taki sam jak Account.id (sub w tokenie).
 model AuthUser {
-  id            String       @id @db.Uuid
+  id            String                  @id @db.Uuid
   name          String
-  email         String       @unique @db.Citext
-  emailVerified Boolean      @default(false)
+  email         String                  @unique @db.Citext
+  emailVerified Boolean                 @default(false)
   image         String?
-  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+  createdAt     DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                @updatedAt @db.Timestamptz(3)
   sessions      AuthSession[]
   credentials   AuthCredential[]
   account       Account?
@@ -39,15 +39,15 @@ model AuthUser {
 }
 
 model AuthSession {
-  id        String   @id @db.Uuid
-  expiresAt DateTime @db.Timestamptz(3)
-  token     String   @unique
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  ipAddress String?
-  userAgent String?
-  userId    String   @db.Uuid
-  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String                  @id @db.Uuid
+  expiresAt    DateTime                @db.Timestamptz(3)
+  token        String                  @unique
+  createdAt    DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime                @updatedAt @db.Timestamptz(3)
+  ipAddress    String?
+  userAgent    String?
+  userId       String                  @db.Uuid
+  user         AuthUser                @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthRefresh AuthOAuthRefreshToken[]
   oauthAccess  AuthOAuthAccessToken[]
 
@@ -110,41 +110,41 @@ model AuthJwks {
 
 /// Aplikacja, która loguje użytkowników przez Core (np. AvenMail w przeglądarce, na telefonie).
 model AuthOAuthClient {
-  id                               String    @id @db.Uuid
-  clientId                         String    @unique
+  id                               String                    @id @db.Uuid
+  clientId                         String                    @unique
   clientSecret                     String?
   clientDiscoveryId                String?
-  disabled                         Boolean?  @default(false)
+  disabled                         Boolean?                  @default(false)
   skipConsent                      Boolean?
   enableEndSession                 Boolean?
   subjectType                      String?
-  scopes                           String[]  @default([])
-  clientCredentialsScopes          String[]  @default([])
-  userId                           String?   @db.Uuid
-  user                             AuthUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt                        DateTime? @default(now()) @db.Timestamptz(3)
-  updatedAt                        DateTime? @updatedAt @db.Timestamptz(3)
+  scopes                           String[]                  @default([])
+  clientCredentialsScopes          String[]                  @default([])
+  userId                           String?                   @db.Uuid
+  user                             AuthUser?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                        DateTime?                 @default(now()) @db.Timestamptz(3)
+  updatedAt                        DateTime?                 @updatedAt @db.Timestamptz(3)
   name                             String?
   uri                              String?
   icon                             String?
-  contacts                         String[]  @default([])
+  contacts                         String[]                  @default([])
   tos                              String?
   policy                           String?
   softwareId                       String?
   softwareVersion                  String?
   softwareStatement                String?
   redirectUris                     String[]
-  postLogoutRedirectUris           String[]  @default([])
+  postLogoutRedirectUris           String[]                  @default([])
   backchannelLogoutUri             String?
   backchannelLogoutSessionRequired Boolean?
   tokenEndpointAuthMethod          String?
   applicationType                  String?
   jwks                             String?
   jwksUri                          String?
-  grantTypes                       String[]  @default([])
-  responseTypes                    String[]  @default([])
+  grantTypes                       String[]                  @default([])
+  responseTypes                    String[]                  @default([])
   requirePKCE                      Boolean?
-  dpopBoundAccessTokens            Boolean?  @default(false)
+  dpopBoundAccessTokens            Boolean?                  @default(false)
   referenceId                      String?
   metadata                         String?
   resources                        AuthOAuthClientResource[]
@@ -158,20 +158,20 @@ model AuthOAuthClient {
 
 /// API, dla którego wydawany jest token (odbiorca, aud), np. https://aven.monorise.studio.
 model AuthOAuthResource {
-  id                            String    @id @db.Uuid
-  identifier                    String    @unique
+  id                            String                    @id @db.Uuid
+  identifier                    String                    @unique
   name                          String
   accessTokenTtl                Int?
   refreshTokenTtl               Int?
   signingAlgorithm              String?
   signingKeyId                  String?
-  allowedScopes                 String[]  @default([])
+  allowedScopes                 String[]                  @default([])
   customClaims                  String?
-  dpopBoundAccessTokensRequired Boolean?  @default(false)
-  disabled                      Boolean?  @default(false)
-  createdAt                     DateTime? @default(now()) @db.Timestamptz(3)
-  updatedAt                     DateTime? @updatedAt @db.Timestamptz(3)
-  policyVersion                 Int?      @default(1)
+  dpopBoundAccessTokensRequired Boolean?                  @default(false)
+  disabled                      Boolean?                  @default(false)
+  createdAt                     DateTime?                 @default(now()) @db.Timestamptz(3)
+  updatedAt                     DateTime?                 @updatedAt @db.Timestamptz(3)
+  policyVersion                 Int?                      @default(1)
   metadata                      String?
   clients                       AuthOAuthClientResource[]
 
@@ -195,25 +195,25 @@ model AuthOAuthClientResource {
 }
 
 model AuthOAuthRefreshToken {
-  id                      String       @id @db.Uuid
-  token                   String       @unique
+  id                      String                 @id @db.Uuid
+  token                   String                 @unique
   clientId                String
-  client                  AuthOAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
-  sessionId               String?      @db.Uuid
-  session                 AuthSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  userId                  String       @db.Uuid
-  user                    AuthUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client                  AuthOAuthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId               String?                @db.Uuid
+  session                 AuthSession?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId                  String                 @db.Uuid
+  user                    AuthUser               @relation(fields: [userId], references: [id], onDelete: Cascade)
   referenceId             String?
   authorizationCodeId     String?
-  resources               String[]     @default([])
-  requestedUserInfoClaims String[]     @default([])
-  expiresAt               DateTime     @db.Timestamptz(3)
-  createdAt               DateTime     @default(now()) @db.Timestamptz(3)
-  revoked                 DateTime?    @db.Timestamptz(3)
-  rotatedAt               DateTime?    @db.Timestamptz(3)
+  resources               String[]               @default([])
+  requestedUserInfoClaims String[]               @default([])
+  expiresAt               DateTime               @db.Timestamptz(3)
+  createdAt               DateTime               @default(now()) @db.Timestamptz(3)
+  revoked                 DateTime?              @db.Timestamptz(3)
+  rotatedAt               DateTime?              @db.Timestamptz(3)
   rotationReplayResponse  String?
-  rotationReplayExpiresAt DateTime?    @db.Timestamptz(3)
-  authTime                DateTime?    @db.Timestamptz(3)
+  rotationReplayExpiresAt DateTime?              @db.Timestamptz(3)
+  authTime                DateTime?              @db.Timestamptz(3)
   confirmation            String?
   scopes                  String[]
   accessTokens            AuthOAuthAccessToken[]
@@ -322,6 +322,7 @@ model Organization {
   outboxEvents         OutboxEvent[]
   auditLogs            AuditLog[]
   idempotencyKeys      IdempotencyKey[]
+  mailOutbox           MailOutbox[]
 
   @@map("organizations")
   @@schema("public")
@@ -407,19 +408,19 @@ enum AccountStatus {
 
 /// Konto pracownika w firmie. Jeden adres e-mail to jedno konto w jednej firmie (ADR-0018).
 model Account {
-  id                String        @id @db.Uuid
-  authUser          AuthUser      @relation(fields: [id], references: [id], onDelete: Cascade)
-  organizationId    String        @db.Uuid
-  organization      Organization  @relation("OrganizationAccounts", fields: [organizationId], references: [id], onDelete: Cascade)
-  ownedOrganization Organization? @relation("OrganizationOwner")
-  employeeId        String        @unique @db.Uuid
-  employee          Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  email             String        @db.Citext
-  normalizedEmail   String        @unique @db.Citext
-  status            AccountStatus @default(INVITED)
-  authzRevision     Int           @default(0)
-  lastLoginAt       DateTime?     @db.Timestamptz(3)
-  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  id                String           @id @db.Uuid
+  authUser          AuthUser         @relation(fields: [id], references: [id], onDelete: Cascade)
+  organizationId    String           @db.Uuid
+  organization      Organization     @relation("OrganizationAccounts", fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedOrganization Organization?    @relation("OrganizationOwner")
+  employeeId        String           @unique @db.Uuid
+  employee          Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  email             String           @db.Citext
+  normalizedEmail   String           @unique @db.Citext
+  status            AccountStatus    @default(INVITED)
+  authzRevision     Int              @default(0)
+  lastLoginAt       DateTime?        @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
   deactivatedAt     DateTime?        @db.Timestamptz(3)
   invitations       Invitation[]
@@ -458,7 +459,9 @@ model Invitation {
   acceptedAt         DateTime?        @db.Timestamptz(3)
   createdAt          DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+  mailOutbox         MailOutbox[]
 
+  @@unique([organizationId, id])
   @@index([organizationId])
   @@index([organizationId, accountId])
   @@index([organizationId, status])
@@ -537,12 +540,12 @@ model UnitMembership {
 
 /// Produkt platformy Monorise (np. timotime, avenmail). Dane platformy, bez organizationId i bez RLS.
 model Product {
-  id                   String       @id @db.Uuid
-  key                  String       @unique
+  id                   String        @id @db.Uuid
+  key                  String        @unique
   name                 String
-  registrationClientId String?      @unique
-  createdAt            DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt            DateTime     @updatedAt @db.Timestamptz(3)
+  registrationClientId String?       @unique
+  createdAt            DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
   permissions          Permission[]
   roles                Role[]
   entitlements         Entitlement[]
@@ -813,5 +816,48 @@ model IdempotencyKey {
   @@unique([organizationId, principal, key])
   @@index([expiresAt, id])
   @@map("idempotency_keys")
+  @@schema("public")
+}
+
+// ── Transakcyjna kolejka wysyłki poczty (MonoriseCore#60) ─────────────────────────────────────────
+
+enum MailKind {
+  INVITATION
+
+  @@schema("public")
+}
+
+enum MailStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+
+  @@schema("public")
+}
+
+/// Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
+/// (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
+model MailOutbox {
+  id             String       @id @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind           MailKind
+  invitationId   String       @db.Uuid
+  invitation     Invitation   @relation(fields: [organizationId, invitationId], references: [organizationId, id], onDelete: Cascade)
+  status         MailStatus   @default(PENDING)
+  attempts       Int          @default(0)
+  nextAttemptAt  DateTime     @default(now()) @db.Timestamptz(3)
+  lockedUntil    DateTime?    @db.Timestamptz(3)
+  lastAttemptAt  DateTime?    @db.Timestamptz(3)
+  sentAt         DateTime?    @db.Timestamptz(3)
+  failedAt       DateTime?    @db.Timestamptz(3)
+  lastError      String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, invitationId])
+  @@map("mail_outbox")
   @@schema("public")
 }

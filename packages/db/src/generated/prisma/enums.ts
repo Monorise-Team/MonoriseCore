@@ -152,3 +152,20 @@ export const AppAccessStatus = {
 } as const
 
 export type AppAccessStatus = (typeof AppAccessStatus)[keyof typeof AppAccessStatus]
+
+
+export const MailKind = {
+  INVITATION: 'INVITATION'
+} as const
+
+export type MailKind = (typeof MailKind)[keyof typeof MailKind]
+
+
+export const MailStatus = {
+  PENDING: 'PENDING',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED'
+} as const
+
+export type MailStatus = (typeof MailStatus)[keyof typeof MailStatus]

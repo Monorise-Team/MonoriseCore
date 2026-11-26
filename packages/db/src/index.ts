@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "./generated/prisma/client.js";
-import type { AccountStatus, DomainStatus, OrganizationStatus } from "./generated/prisma/enums.js";
+import type { AccountStatus, DomainStatus, MailKind, OrganizationStatus } from "./generated/prisma/enums.js";
 
 export * from "./generated/prisma/enums.js";
 export { Prisma, PrismaClient } from "./generated/prisma/client.js";
@@ -215,6 +215,42 @@ export async function invitationByTokenHash(
 export async function cleanupExpiredIdempotencyKeys(db: PrismaClient | Tx, limit = 1000): Promise<number> {
   const rows = await db.$queryRaw<{ deleted: number }[]>`
     SELECT "public"."idempotency_keys_cleanup_expired"(${limit}::integer) AS deleted`;
+  return rows[0]?.deleted ?? 0;
+}
+
+export interface ClaimedMailOutboxJob {
+  id: string;
+  organizationId: string;
+  kind: MailKind;
+  invitationId: string;
+  attempts: number;
+}
+
+/**
+ * Atomowo rezerwuje porcję gotowych zadań z kolejki poczty (`public.mail_outbox_claim`, `SECURITY DEFINER`),
+ * ustawiając dzierżawę `lockedUntil` i podbijając `attempts` oraz `lastAttemptAt`.
+ */
+export async function claimMailOutboxJobs(
+  db: PrismaClient | Tx,
+  options: { limit?: number | undefined; leaseMs?: number | undefined; now?: Date | undefined } = {},
+): Promise<ClaimedMailOutboxJob[]> {
+  const limit = options.limit ?? 20;
+  const leaseMs = options.leaseMs ?? 60_000;
+  if (options.now !== undefined) {
+    return db.$queryRaw<ClaimedMailOutboxJob[]>`
+      SELECT * FROM "public"."mail_outbox_claim"(${limit}::integer, ${leaseMs}::integer, ${options.now}::timestamptz)`;
+  }
+  return db.$queryRaw<ClaimedMailOutboxJob[]>`
+    SELECT * FROM "public"."mail_outbox_claim"(${limit}::integer, ${leaseMs}::integer)`;
+}
+
+/**
+ * Usuwa wysłane (`SENT`) i anulowane (`CANCELLED`) wiersze `mail_outbox` starsze niż `before`
+ * ponad granicą firm (`public.mail_outbox_cleanup`, `SECURITY DEFINER`).
+ */
+export async function cleanupMailOutbox(db: PrismaClient | Tx, before: Date): Promise<number> {
+  const rows = await db.$queryRaw<{ deleted: number }[]>`
+    SELECT "public"."mail_outbox_cleanup"(${before}::timestamptz) AS deleted`;
   return rows[0]?.deleted ?? 0;
 }
 

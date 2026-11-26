@@ -198,3 +198,9 @@ export type OutboxEvent = Prisma.OutboxEventModel
  * Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź bez ponownego wykonania operacji.
  */
 export type IdempotencyKey = Prisma.IdempotencyKeyModel
+/**
+ * Model MailOutbox
+ * Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
+ * (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
+ */
+export type MailOutbox = Prisma.MailOutboxModel

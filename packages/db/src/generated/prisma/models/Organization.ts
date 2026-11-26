@@ -236,6 +236,7 @@ export type OrganizationWhereInput = {
   outboxEvents?: Prisma.OutboxEventListRelationFilter
   auditLogs?: Prisma.AuditLogListRelationFilter
   idempotencyKeys?: Prisma.IdempotencyKeyListRelationFilter
+  mailOutbox?: Prisma.MailOutboxListRelationFilter
 }
 
 export type OrganizationOrderByWithRelationInput = {
@@ -263,6 +264,7 @@ export type OrganizationOrderByWithRelationInput = {
   outboxEvents?: Prisma.OutboxEventOrderByRelationAggregateInput
   auditLogs?: Prisma.AuditLogOrderByRelationAggregateInput
   idempotencyKeys?: Prisma.IdempotencyKeyOrderByRelationAggregateInput
+  mailOutbox?: Prisma.MailOutboxOrderByRelationAggregateInput
 }
 
 export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
@@ -293,6 +295,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   outboxEvents?: Prisma.OutboxEventListRelationFilter
   auditLogs?: Prisma.AuditLogListRelationFilter
   idempotencyKeys?: Prisma.IdempotencyKeyListRelationFilter
+  mailOutbox?: Prisma.MailOutboxListRelationFilter
 }, "id" | "ownerAccountId">
 
 export type OrganizationOrderByWithAggregationInput = {
@@ -351,6 +354,7 @@ export type OrganizationCreateInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateInput = {
@@ -377,6 +381,7 @@ export type OrganizationUncheckedCreateInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUpdateInput = {
@@ -403,6 +408,7 @@ export type OrganizationUpdateInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateInput = {
@@ -429,6 +435,7 @@ export type OrganizationUncheckedUpdateInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateManyInput = {
@@ -746,6 +753,20 @@ export type OrganizationUpdateOneRequiredWithoutIdempotencyKeysNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutIdempotencyKeysInput, Prisma.OrganizationUpdateWithoutIdempotencyKeysInput>, Prisma.OrganizationUncheckedUpdateWithoutIdempotencyKeysInput>
 }
 
+export type OrganizationCreateNestedOneWithoutMailOutboxInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutMailOutboxInput, Prisma.OrganizationUncheckedCreateWithoutMailOutboxInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutMailOutboxInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutMailOutboxNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutMailOutboxInput, Prisma.OrganizationUncheckedCreateWithoutMailOutboxInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutMailOutboxInput
+  upsert?: Prisma.OrganizationUpsertWithoutMailOutboxInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutMailOutboxInput, Prisma.OrganizationUpdateWithoutMailOutboxInput>, Prisma.OrganizationUncheckedUpdateWithoutMailOutboxInput>
+}
+
 export type OrganizationCreateWithoutDomainsInput = {
   id: string
   name: string
@@ -769,6 +790,7 @@ export type OrganizationCreateWithoutDomainsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutDomainsInput = {
@@ -794,6 +816,7 @@ export type OrganizationUncheckedCreateWithoutDomainsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutDomainsInput = {
@@ -835,6 +858,7 @@ export type OrganizationUpdateWithoutDomainsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutDomainsInput = {
@@ -860,6 +884,7 @@ export type OrganizationUncheckedUpdateWithoutDomainsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutEmployeesInput = {
@@ -885,6 +910,7 @@ export type OrganizationCreateWithoutEmployeesInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutEmployeesInput = {
@@ -910,6 +936,7 @@ export type OrganizationUncheckedCreateWithoutEmployeesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutEmployeesInput = {
@@ -951,6 +978,7 @@ export type OrganizationUpdateWithoutEmployeesInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
@@ -976,6 +1004,7 @@ export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAccountsInput = {
@@ -1001,6 +1030,7 @@ export type OrganizationCreateWithoutAccountsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAccountsInput = {
@@ -1026,6 +1056,7 @@ export type OrganizationUncheckedCreateWithoutAccountsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAccountsInput = {
@@ -1056,6 +1087,7 @@ export type OrganizationCreateWithoutOwnerAccountInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutOwnerAccountInput = {
@@ -1081,6 +1113,7 @@ export type OrganizationUncheckedCreateWithoutOwnerAccountInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutOwnerAccountInput = {
@@ -1122,6 +1155,7 @@ export type OrganizationUpdateWithoutAccountsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAccountsInput = {
@@ -1147,6 +1181,7 @@ export type OrganizationUncheckedUpdateWithoutAccountsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUpsertWithoutOwnerAccountInput = {
@@ -1183,6 +1218,7 @@ export type OrganizationUpdateWithoutOwnerAccountInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutOwnerAccountInput = {
@@ -1208,6 +1244,7 @@ export type OrganizationUncheckedUpdateWithoutOwnerAccountInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutInvitationsInput = {
@@ -1233,6 +1270,7 @@ export type OrganizationCreateWithoutInvitationsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutInvitationsInput = {
@@ -1258,6 +1296,7 @@ export type OrganizationUncheckedCreateWithoutInvitationsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutInvitationsInput = {
@@ -1299,6 +1338,7 @@ export type OrganizationUpdateWithoutInvitationsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutInvitationsInput = {
@@ -1324,6 +1364,7 @@ export type OrganizationUncheckedUpdateWithoutInvitationsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutUnitsInput = {
@@ -1349,6 +1390,7 @@ export type OrganizationCreateWithoutUnitsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutUnitsInput = {
@@ -1374,6 +1416,7 @@ export type OrganizationUncheckedCreateWithoutUnitsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutUnitsInput = {
@@ -1415,6 +1458,7 @@ export type OrganizationUpdateWithoutUnitsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutUnitsInput = {
@@ -1440,6 +1484,7 @@ export type OrganizationUncheckedUpdateWithoutUnitsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutUnitMembershipsInput = {
@@ -1465,6 +1510,7 @@ export type OrganizationCreateWithoutUnitMembershipsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutUnitMembershipsInput = {
@@ -1490,6 +1536,7 @@ export type OrganizationUncheckedCreateWithoutUnitMembershipsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutUnitMembershipsInput = {
@@ -1531,6 +1578,7 @@ export type OrganizationUpdateWithoutUnitMembershipsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutUnitMembershipsInput = {
@@ -1556,6 +1604,7 @@ export type OrganizationUncheckedUpdateWithoutUnitMembershipsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutRolesInput = {
@@ -1581,6 +1630,7 @@ export type OrganizationCreateWithoutRolesInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutRolesInput = {
@@ -1606,6 +1656,7 @@ export type OrganizationUncheckedCreateWithoutRolesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutRolesInput = {
@@ -1647,6 +1698,7 @@ export type OrganizationUpdateWithoutRolesInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutRolesInput = {
@@ -1672,6 +1724,7 @@ export type OrganizationUncheckedUpdateWithoutRolesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutRoleAssignmentsInput = {
@@ -1697,6 +1750,7 @@ export type OrganizationCreateWithoutRoleAssignmentsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutRoleAssignmentsInput = {
@@ -1722,6 +1776,7 @@ export type OrganizationUncheckedCreateWithoutRoleAssignmentsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutRoleAssignmentsInput = {
@@ -1763,6 +1818,7 @@ export type OrganizationUpdateWithoutRoleAssignmentsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutRoleAssignmentsInput = {
@@ -1788,6 +1844,7 @@ export type OrganizationUncheckedUpdateWithoutRoleAssignmentsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAuditLogsInput = {
@@ -1813,6 +1870,7 @@ export type OrganizationCreateWithoutAuditLogsInput = {
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutOrganizationInput
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAuditLogsInput = {
@@ -1838,6 +1896,7 @@ export type OrganizationUncheckedCreateWithoutAuditLogsInput = {
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutOrganizationInput
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAuditLogsInput = {
@@ -1879,6 +1938,7 @@ export type OrganizationUpdateWithoutAuditLogsInput = {
   appAccesses?: Prisma.AppAccessUpdateManyWithoutOrganizationNestedInput
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAuditLogsInput = {
@@ -1904,6 +1964,7 @@ export type OrganizationUncheckedUpdateWithoutAuditLogsInput = {
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutOrganizationNestedInput
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutEntitlementsInput = {
@@ -1929,6 +1990,7 @@ export type OrganizationCreateWithoutEntitlementsInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutEntitlementsInput = {
@@ -1954,6 +2016,7 @@ export type OrganizationUncheckedCreateWithoutEntitlementsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutEntitlementsInput = {
@@ -1995,6 +2058,7 @@ export type OrganizationUpdateWithoutEntitlementsInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutEntitlementsInput = {
@@ -2020,6 +2084,7 @@ export type OrganizationUncheckedUpdateWithoutEntitlementsInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutAppAccessesInput = {
@@ -2045,6 +2110,7 @@ export type OrganizationCreateWithoutAppAccessesInput = {
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutAppAccessesInput = {
@@ -2070,6 +2136,7 @@ export type OrganizationUncheckedCreateWithoutAppAccessesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutAppAccessesInput = {
@@ -2111,6 +2178,7 @@ export type OrganizationUpdateWithoutAppAccessesInput = {
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutAppAccessesInput = {
@@ -2136,6 +2204,7 @@ export type OrganizationUncheckedUpdateWithoutAppAccessesInput = {
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutOutboxEventsInput = {
@@ -2161,6 +2230,7 @@ export type OrganizationCreateWithoutOutboxEventsInput = {
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutOutboxEventsInput = {
@@ -2186,6 +2256,7 @@ export type OrganizationUncheckedCreateWithoutOutboxEventsInput = {
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutOutboxEventsInput = {
@@ -2227,6 +2298,7 @@ export type OrganizationUpdateWithoutOutboxEventsInput = {
   appAccesses?: Prisma.AppAccessUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutOutboxEventsInput = {
@@ -2252,6 +2324,7 @@ export type OrganizationUncheckedUpdateWithoutOutboxEventsInput = {
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
   idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutIdempotencyKeysInput = {
@@ -2277,6 +2350,7 @@ export type OrganizationCreateWithoutIdempotencyKeysInput = {
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutOrganizationInput
   outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutIdempotencyKeysInput = {
@@ -2302,6 +2376,7 @@ export type OrganizationUncheckedCreateWithoutIdempotencyKeysInput = {
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutOrganizationInput
   outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
   auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+  mailOutbox?: Prisma.MailOutboxUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutIdempotencyKeysInput = {
@@ -2343,6 +2418,7 @@ export type OrganizationUpdateWithoutIdempotencyKeysInput = {
   appAccesses?: Prisma.AppAccessUpdateManyWithoutOrganizationNestedInput
   outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutIdempotencyKeysInput = {
@@ -2368,6 +2444,127 @@ export type OrganizationUncheckedUpdateWithoutIdempotencyKeysInput = {
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutOrganizationNestedInput
   outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
   auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  mailOutbox?: Prisma.MailOutboxUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutMailOutboxInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownerAccount?: Prisma.AccountCreateNestedOneWithoutOwnedOrganizationInput
+  domains?: Prisma.OrganizationDomainCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipCreateNestedManyWithoutOrganizationInput
+  roles?: Prisma.RoleCreateNestedManyWithoutOrganizationInput
+  roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutOrganizationInput
+  entitlements?: Prisma.EntitlementCreateNestedManyWithoutOrganizationInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutOrganizationInput
+  outboxEvents?: Prisma.OutboxEventCreateNestedManyWithoutOrganizationInput
+  auditLogs?: Prisma.AuditLogCreateNestedManyWithoutOrganizationInput
+  idempotencyKeys?: Prisma.IdempotencyKeyCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutMailOutboxInput = {
+  id: string
+  name: string
+  status?: $Enums.OrganizationStatus
+  createdVia: $Enums.OrganizationCreatedVia
+  ownerAccountId?: string | null
+  mfaRequiredForAll?: boolean
+  suspendedAt?: Date | string | null
+  offboardingStartedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  domains?: Prisma.OrganizationDomainUncheckedCreateNestedManyWithoutOrganizationInput
+  employees?: Prisma.EmployeeUncheckedCreateNestedManyWithoutOrganizationInput
+  accounts?: Prisma.AccountUncheckedCreateNestedManyWithoutOrganizationInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutOrganizationInput
+  units?: Prisma.OrganizationUnitUncheckedCreateNestedManyWithoutOrganizationInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedCreateNestedManyWithoutOrganizationInput
+  roles?: Prisma.RoleUncheckedCreateNestedManyWithoutOrganizationInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutOrganizationInput
+  entitlements?: Prisma.EntitlementUncheckedCreateNestedManyWithoutOrganizationInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutOrganizationInput
+  outboxEvents?: Prisma.OutboxEventUncheckedCreateNestedManyWithoutOrganizationInput
+  auditLogs?: Prisma.AuditLogUncheckedCreateNestedManyWithoutOrganizationInput
+  idempotencyKeys?: Prisma.IdempotencyKeyUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutMailOutboxInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutMailOutboxInput, Prisma.OrganizationUncheckedCreateWithoutMailOutboxInput>
+}
+
+export type OrganizationUpsertWithoutMailOutboxInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutMailOutboxInput, Prisma.OrganizationUncheckedUpdateWithoutMailOutboxInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutMailOutboxInput, Prisma.OrganizationUncheckedCreateWithoutMailOutboxInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutMailOutboxInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutMailOutboxInput, Prisma.OrganizationUncheckedUpdateWithoutMailOutboxInput>
+}
+
+export type OrganizationUpdateWithoutMailOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownerAccount?: Prisma.AccountUpdateOneWithoutOwnedOrganizationNestedInput
+  domains?: Prisma.OrganizationDomainUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUpdateManyWithoutOrganizationNestedInput
+  roles?: Prisma.RoleUpdateManyWithoutOrganizationNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutOrganizationNestedInput
+  entitlements?: Prisma.EntitlementUpdateManyWithoutOrganizationNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutOrganizationNestedInput
+  outboxEvents?: Prisma.OutboxEventUpdateManyWithoutOrganizationNestedInput
+  auditLogs?: Prisma.AuditLogUpdateManyWithoutOrganizationNestedInput
+  idempotencyKeys?: Prisma.IdempotencyKeyUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutMailOutboxInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
+  ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  offboardingStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  domains?: Prisma.OrganizationDomainUncheckedUpdateManyWithoutOrganizationNestedInput
+  employees?: Prisma.EmployeeUncheckedUpdateManyWithoutOrganizationNestedInput
+  accounts?: Prisma.AccountUncheckedUpdateManyWithoutOrganizationNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutOrganizationNestedInput
+  units?: Prisma.OrganizationUnitUncheckedUpdateManyWithoutOrganizationNestedInput
+  unitMemberships?: Prisma.UnitMembershipUncheckedUpdateManyWithoutOrganizationNestedInput
+  roles?: Prisma.RoleUncheckedUpdateManyWithoutOrganizationNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutOrganizationNestedInput
+  entitlements?: Prisma.EntitlementUncheckedUpdateManyWithoutOrganizationNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutOrganizationNestedInput
+  outboxEvents?: Prisma.OutboxEventUncheckedUpdateManyWithoutOrganizationNestedInput
+  auditLogs?: Prisma.AuditLogUncheckedUpdateManyWithoutOrganizationNestedInput
+  idempotencyKeys?: Prisma.IdempotencyKeyUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 
@@ -2389,6 +2586,7 @@ export type OrganizationCountOutputType = {
   outboxEvents: number
   auditLogs: number
   idempotencyKeys: number
+  mailOutbox: number
 }
 
 export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -2405,6 +2603,7 @@ export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Exte
   outboxEvents?: boolean | OrganizationCountOutputTypeCountOutboxEventsArgs
   auditLogs?: boolean | OrganizationCountOutputTypeCountAuditLogsArgs
   idempotencyKeys?: boolean | OrganizationCountOutputTypeCountIdempotencyKeysArgs
+  mailOutbox?: boolean | OrganizationCountOutputTypeCountMailOutboxArgs
 }
 
 /**
@@ -2508,6 +2707,13 @@ export type OrganizationCountOutputTypeCountIdempotencyKeysArgs<ExtArgs extends 
   where?: Prisma.IdempotencyKeyWhereInput
 }
 
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountMailOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.MailOutboxWhereInput
+}
+
 
 export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -2534,6 +2740,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   outboxEvents?: boolean | Prisma.Organization$outboxEventsArgs<ExtArgs>
   auditLogs?: boolean | Prisma.Organization$auditLogsArgs<ExtArgs>
   idempotencyKeys?: boolean | Prisma.Organization$idempotencyKeysArgs<ExtArgs>
+  mailOutbox?: boolean | Prisma.Organization$mailOutboxArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
@@ -2594,6 +2801,7 @@ export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.Interna
   outboxEvents?: boolean | Prisma.Organization$outboxEventsArgs<ExtArgs>
   auditLogs?: boolean | Prisma.Organization$auditLogsArgs<ExtArgs>
   idempotencyKeys?: boolean | Prisma.Organization$idempotencyKeysArgs<ExtArgs>
+  mailOutbox?: boolean | Prisma.Organization$mailOutboxArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type OrganizationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -2620,6 +2828,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     outboxEvents: Prisma.$OutboxEventPayload<ExtArgs>[]
     auditLogs: Prisma.$AuditLogPayload<ExtArgs>[]
     idempotencyKeys: Prisma.$IdempotencyKeyPayload<ExtArgs>[]
+    mailOutbox: Prisma.$MailOutboxPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -3040,6 +3249,7 @@ export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends run
   outboxEvents<T extends Prisma.Organization$outboxEventsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$outboxEventsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OutboxEventPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   auditLogs<T extends Prisma.Organization$auditLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$auditLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   idempotencyKeys<T extends Prisma.Organization$idempotencyKeysArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$idempotencyKeysArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$IdempotencyKeyPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  mailOutbox<T extends Prisma.Organization$mailOutboxArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$mailOutboxArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$MailOutboxPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -3808,6 +4018,30 @@ export type Organization$idempotencyKeysArgs<ExtArgs extends runtime.Types.Exten
   take?: number
   skip?: number
   distinct?: Prisma.IdempotencyKeyScalarFieldEnum | Prisma.IdempotencyKeyScalarFieldEnum[]
+}
+
+/**
+ * Organization.mailOutbox
+ */
+export type Organization$mailOutboxArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the MailOutbox
+   */
+  select?: Prisma.MailOutboxSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the MailOutbox
+   */
+  omit?: Prisma.MailOutboxOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MailOutboxInclude<ExtArgs> | null
+  where?: Prisma.MailOutboxWhereInput
+  orderBy?: Prisma.MailOutboxOrderByWithRelationInput | Prisma.MailOutboxOrderByWithRelationInput[]
+  cursor?: Prisma.MailOutboxWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.MailOutboxScalarFieldEnum | Prisma.MailOutboxScalarFieldEnum[]
 }
 
 /**
