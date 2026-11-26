@@ -92,3 +92,10 @@ export async function invitationByTokenHash(
   const row = rows[0];
   return row ? { organizationId: row.organization_id, invitationId: row.invitation_id } : null;
 }
+
+/** Usuwa porcję wygasłych kluczy `Idempotency-Key` ponad granicą firm (funkcja `SECURITY DEFINER`). */
+export async function cleanupExpiredIdempotencyKeys(db: PrismaClient | Tx, limit = 1000): Promise<number> {
+  const rows = await db.$queryRaw<{ deleted: number }[]>`
+    SELECT "public"."idempotency_keys_cleanup_expired"(${limit}::integer) AS deleted`;
+  return rows[0]?.deleted ?? 0;
+}

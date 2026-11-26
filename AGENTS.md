@@ -69,23 +69,23 @@ Zasady specyficzne dla repozytorium MonoriseCore.
 
 Serwer platformy Monorise: jedno logowanie (`auth.monorise.studio`), firmy, pracownicy, konta, role i uprawnienia (`api.monorise.studio`). Produkty (AvenMail, TimoTime) logują się przez Core (ADR-0095). Przestrzeń robocza pnpm z Turborepo (ADR-0092), baza przez Prisma (ADR-0096). Decyzje są w repozytorium MonoriseDocumentation.
 
-| Gdzie                | Co                                                                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M) |
-| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS; firmy, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka       |
-| `packages/db`        | Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `AuditLog`), RLS, `withOrganization`        |
-| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe                  |
+| Gdzie                | Co                                                                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/auth`          | Next.js + Better Auth: logowanie, zakładanie firmy, aktywacja zaproszeń (`/invite`), domeny, JWT/JWKS, OAuth 2.1 (PKCE, M2M)              |
+| `apps/api`           | Core API w Fastify (`/core/v1`, ADR-0044): RLS, `Idempotency-Key`; firmy, pracownicy, zaproszenia, jednostki, role, `app-access`, migawka |
+| `packages/db`        | Prisma (struktura, zaproszenia, role, `Entitlement`, `AppAccess`, `OutboxEvent`, `AuditLog`, `IdempotencyKey`), RLS, `withOrganization`   |
+| `packages/contracts` | schematy Zod i typy API, pola tokenu użytkownika i maszynowego, `CORE_PERMISSIONS`, darmowe domeny pocztowe                               |
 
 ## Zasady kodu
 
 1. **Firma zawsze z zaufanego źródła** (token, sesja), nigdy z treści żądania, adresu ani formularza (ADR-0037).
 2. **Dane firm tylko przez `withOrganization`** z `@core/db`: ustawia firmę w transakcji, a RLS odcina inne firmy. Aplikacje łączą się rolą `core_app` (bez właściciela tabel i `BYPASSRLS`).
-3. **Wyszukiwanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`, `invitation_by_token_hash`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
+3. **Wyszukiwanie i sprzątanie ponad granicą firm** tylko przez wąskie funkcje bazy (`account_claims`, `domain_owner`, `invitation_by_token_hash`, `outbox_publish_pending`, `product_event_feed`, `idempotency_keys_cleanup_expired`) należące do roli `core_lookup`. Nowa funkcja to zmiana bezpieczeństwa — opisz ją w PR.
 4. **Każda tabela z danymi firmy** ma w migracji `ENABLE` + `FORCE` RLS i testy izolacji. `audit_log` jest niezmienny (tylko `SELECT`/`INSERT` dla `core_app`, wyzwalacz blokujący `UPDATE` także dla `core_owner`).
 5. **Tokeny** (ADR-0023): JWT EdDSA (5 min). Użytkownik: `org_id`, `employee_id`, `sid`, `amr`, `authz_rev` (bez uprawnień). Maszynowy (`client_credentials`, zakresy `core:permissions.register`, `core:permissions.read`, `core:directory.read`) bez `org_id`: manifesty, migawki i katalog produktów.
 6. **Klienci OAuth tylko z kodu**: `ensureFirstPartyClients` (`pnpm oauth:seed`) rejestruje klientów (z PKCE) i produkty (`avenmail`, `timotime`). Rejestracja HTTP wyłączona; zmiany klientów/adresów powrotu opisz w PR.
 7. **Komunikaty logowania** nie zdradzają, czy konto istnieje. Darmowe skrzynki (Gmail, WP, Onet…) nie zakładają firm (ADR-0019).
-8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /core/v1/openapi.json` zwraca czysty dokument OpenAPI). Listy przyjmują `?limit=` (1–100, domyślnie 50) i `?cursor=` oraz zwracają `meta.nextCursor`.
+8. **API** w formacie `{ data, meta, error }` ze stałymi kodami błędów z `@core/contracts` (wyjątek: `GET /core/v1/openapi.json` zwraca czysty dokument OpenAPI). Listy przyjmują `?limit=` (1–100, domyślnie 50) i `?cursor=` oraz zwracają `meta.nextCursor`. Operacje `POST` z tokenem użytkownika rejestrujemy przez wspólny `registerPostRoute` (nagłówek `Idempotency-Key`, odpowiedź powtórzona z `Idempotency-Replayed: true`, ważność 24 h, okresowe sprzątanie przez `idempotency_keys_cleanup_expired` / `CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS`).
 9. **Katalog ścieżek i OpenAPI**: każdy nowy endpoint Core API dopisujesz do `apps/api/src/routes.ts` ze schematami Zod i uruchamiasz `pnpm openapi` (CI sprawdza `openapi/core-api.json`).
 10. **Jedna wersja**: po zmianie zależności `@monorise-team/*` używaj `pnpm shared:update`; `pnpm check:versions` musi przechodzić.
 

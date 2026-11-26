@@ -164,3 +164,9 @@ export type AppAccess = Prisma.AppAccessModel
  * Osobny proces wysyłkowy (relay) odczytuje wiersze z publishedAt = NULL.
  */
 export type OutboxEvent = Prisma.OutboxEventModel
+/**
+ * Model IdempotencyKey
+ * Zapisane odpowiedzi operacji tworzących (`POST`) powiązane z nagłówkiem `Idempotency-Key`.
+ * Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź bez ponownego wykonania operacji.
+ */
+export type IdempotencyKey = Prisma.IdempotencyKeyModel

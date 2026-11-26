@@ -28,6 +28,12 @@ import {
   emailDomain,
   Entitlement,
   Health,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_TTL_HOURS,
+  IDEMPOTENCY_KEY_TTL_MS,
+  IDEMPOTENCY_REPLAYED_HEADER,
+  IdempotencyKeyHeader,
   Invitation,
   InvitationStatus,
   INVITATION_TTL_DAYS,
@@ -571,5 +577,28 @@ describe("kontrakty", () => {
       token: "token-123",
       password: "dlugie-haslo-123",
     });
+  });
+
+  it("waliduje nagłówek Idempotency-Key i stałe czasu życia", () => {
+    expect(IDEMPOTENCY_KEY_HEADER).toBe("Idempotency-Key");
+    expect(IDEMPOTENCY_REPLAYED_HEADER).toBe("Idempotency-Replayed");
+    expect(IDEMPOTENCY_KEY_MAX_LENGTH).toBe(255);
+    expect(IDEMPOTENCY_KEY_TTL_HOURS).toBe(24);
+    expect(IDEMPOTENCY_KEY_TTL_MS).toBe(24 * 60 * 60 * 1000);
+
+    expect(IdempotencyKeyHeader.parse("a")).toBe("a");
+    expect(IdempotencyKeyHeader.parse(UUID_1)).toBe(UUID_1);
+    expect(IdempotencyKeyHeader.parse("a".repeat(255))).toBe("a".repeat(255));
+    expect(IdempotencyKeyHeader.parse("key with space")).toBe("key with space");
+
+    expect(IdempotencyKeyHeader.safeParse("").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("   ").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse(" leading").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("trailing ").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("a".repeat(256)).success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("bad\tkey").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("bad\nkey").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("bad\x7fkey").success).toBe(false);
+    expect(IdempotencyKeyHeader.safeParse("klucz-ą").success).toBe(false);
   });
 });
