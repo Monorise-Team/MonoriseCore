@@ -178,5 +178,7 @@ export type IdempotencyKey = Prisma.IdempotencyKeyModel
  * Model MailOutbox
  * Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
  * (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
+ * Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
+ * jest zdefiniowany w migracji.
  */
 export type MailOutbox = Prisma.MailOutboxModel

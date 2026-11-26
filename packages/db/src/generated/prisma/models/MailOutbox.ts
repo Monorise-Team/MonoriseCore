@@ -16,6 +16,8 @@ import type * as Prisma from "../internal/prismaNamespace.js"
  * Model MailOutbox
  * Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
  * (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
+ * Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
+ * jest zdefiniowany w migracji.
  */
 export type MailOutboxModel = runtime.Types.Result.DefaultSelection<Prisma.$MailOutboxPayload>
 

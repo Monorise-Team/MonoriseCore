@@ -3,8 +3,9 @@
 --    jawnego tokenu aktywacyjnego) i jest zapisywana w tej samej transakcji co zmiana zaproszenia.
 -- 2. Złożony klucz obcy (organizationId, invitationId) -> invitations(organizationId, id) pilnuje granicy firmy.
 -- 3. RLS + FORCE RLS z polityką tenant_isolation; rola core_app bez DELETE (sprząta funkcja SECURITY DEFINER).
--- 4. Funkcje mail_outbox_claim (atomowe pobieranie z dzierżawą i FOR UPDATE SKIP LOCKED) oraz
---    mail_outbox_cleanup (usuwanie starych wierszy SENT/CANCELLED) należą do roli core_lookup.
+-- 4. Funkcje mail_outbox_claim (atomowe pobieranie z dzierżawą i FOR UPDATE SKIP LOCKED, zawsze według now())
+--    oraz mail_outbox_cleanup (porcjowe usuwanie wierszy SENT/CANCELLED i zastąpionych FAILED starszych niż
+--    30 dni według now()) należą do roli core_lookup; wywołujący nie kontroluje zegara bazy.
 
 -- CreateEnum
 CREATE TYPE "public"."MailKind" AS ENUM ('INVITATION');
@@ -36,9 +37,10 @@ CREATE TABLE "public"."mail_outbox" (
     CONSTRAINT "mail_outbox_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "mail_outbox_status_nextAttemptAt_idx"
-  ON "public"."mail_outbox"("status", "nextAttemptAt");
+-- CreateIndex (częściowy indeks wyłącznie dla zadań PENDING pobieranych przez worker)
+CREATE INDEX "mail_outbox_pending_claim_idx"
+  ON "public"."mail_outbox"("nextAttemptAt", "id")
+  WHERE "status" = 'PENDING';
 
 -- CreateIndex
 CREATE INDEX "mail_outbox_organizationId_invitationId_idx"
@@ -81,7 +83,7 @@ ALTER TABLE "public"."mail_outbox"
 
 -- ── Uprawnienia roli aplikacji ─────────────────────────────────────────────────────────────────────
 -- Domyślne uprawnienia schematu dały core_app także DELETE; tu zawężamy je do odczytu, kolejkowania
--- i aktualizacji statusu (stare wiersze SENT/CANCELLED sprząta wyłącznie mail_outbox_cleanup).
+-- i aktualizacji statusu (stare wiersze sprząta wyłącznie funkcja SECURITY DEFINER mail_outbox_cleanup).
 REVOKE ALL ON "public"."mail_outbox" FROM core_app;
 GRANT SELECT, INSERT, UPDATE ON "public"."mail_outbox" TO core_app;
 
@@ -95,12 +97,12 @@ CREATE POLICY tenant_isolation ON "public"."mail_outbox"
 
 -- ── Pobieranie zadań do wysyłki ponad granicą firm ─────────────────────────────────────────────────
 -- Funkcja należy do roli core_lookup (BYPASSRLS), bo worker obsługuje kolejkę wszystkich firm.
+-- Zawsze używa zegara PostgreSQL now() (wywołujący nie może sterować czasem ani zatruwać dzierżaw).
 -- Atomowo rezerwuje porcję zadań PENDING gotowych do wysyłki (FOR UPDATE SKIP LOCKED), ustawia
 -- dzierżawę lockedUntil, podbija attempts oraz lastAttemptAt i zwraca wyłącznie referencje.
 CREATE FUNCTION "public"."mail_outbox_claim"(
   p_limit integer,
-  p_lease_ms integer,
-  p_now timestamptz DEFAULT now()
+  p_lease_ms integer
 )
   RETURNS TABLE (
     "id" uuid,
@@ -113,13 +115,13 @@ CREATE FUNCTION "public"."mail_outbox_claim"(
   SET search_path = pg_catalog, public
   AS $$
   DECLARE
-    v_now timestamptz := COALESCE(p_now, now());
+    v_now timestamptz := now();
   BEGIN
     IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
       RAISE EXCEPTION 'p_limit musi być w zakresie 1..1000';
     END IF;
-    IF p_lease_ms IS NULL OR p_lease_ms < 1 OR p_lease_ms > 86400000 THEN
-      RAISE EXCEPTION 'p_lease_ms musi być w zakresie 1..86400000';
+    IF p_lease_ms IS NULL OR p_lease_ms < 1 OR p_lease_ms > 3600000 THEN
+      RAISE EXCEPTION 'p_lease_ms musi być w zakresie 1..3600000';
     END IF;
 
     RETURN QUERY
@@ -149,26 +151,49 @@ CREATE FUNCTION "public"."mail_outbox_claim"(
   END;
   $$;
 
--- ── Sprzątanie starych zadań SENT i CANCELLED ponad granicą firm ───────────────────────────────────
--- Usuwa wyłącznie wysłane (SENT) i anulowane (CANCELLED) wiersze starsze niż p_before.
--- Wiersze PENDING i FAILED pozostają nienaruszone.
-CREATE FUNCTION "public"."mail_outbox_cleanup"(p_before timestamptz)
+-- ── Porcjowe sprzątanie starych zadań ponad granicą firm ───────────────────────────────────────────
+-- Granicę 30 dni wyznacza wyłącznie zegar bazy now() (bez parametru czasu od wywołującego).
+-- Usuwa co najwyżej p_limit wierszy SENT/CANCELLED starszych niż 30 dni oraz wiersze FAILED starsze
+-- niż 30 dni, które zostały zastąpione nowszym zadaniem tego samego zaproszenia (kolejność po
+-- (createdAt, id) ASC gwarantuje, że zastąpione FAILED zniknie zanim zniknie nowszy SENT, więc
+-- pole delivery w API nigdy nie cofnie się z SENT do FAILED). Jedyny (najnowszy) FAILED zostaje.
+CREATE FUNCTION "public"."mail_outbox_cleanup"(p_limit integer DEFAULT 1000)
   RETURNS integer
   LANGUAGE plpgsql VOLATILE SECURITY DEFINER
   SET search_path = pg_catalog, public
   AS $$
   DECLARE
+    v_cutoff timestamptz := now() - interval '30 days';
     v_deleted integer := 0;
   BEGIN
-    IF p_before IS NULL THEN
-      RAISE EXCEPTION 'p_before nie może być NULL';
+    IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+      RAISE EXCEPTION 'p_limit musi być w zakresie 1..10000';
     END IF;
 
     PERFORM pg_advisory_xact_lock(hashtextextended('mail_outbox:cleanup', 0));
 
+    WITH expired AS (
+      SELECT m."id"
+      FROM "public"."mail_outbox" m
+      WHERE (m."status" = 'SENT' AND COALESCE(m."sentAt", m."updatedAt") < v_cutoff)
+         OR (m."status" = 'CANCELLED' AND m."updatedAt" < v_cutoff)
+         OR (
+           m."status" = 'FAILED'
+           AND COALESCE(m."failedAt", m."updatedAt") < v_cutoff
+           AND EXISTS (
+             SELECT 1
+             FROM "public"."mail_outbox" newer
+             WHERE newer."organizationId" = m."organizationId"
+               AND newer."invitationId" = m."invitationId"
+               AND (newer."createdAt", newer."id") > (m."createdAt", m."id")
+           )
+         )
+      ORDER BY m."createdAt" ASC, m."id" ASC
+      LIMIT p_limit
+    )
     DELETE FROM "public"."mail_outbox" m
-    WHERE (m."status" = 'SENT' AND COALESCE(m."sentAt", m."updatedAt") < p_before)
-       OR (m."status" = 'CANCELLED' AND m."updatedAt" < p_before);
+    USING expired
+    WHERE m."id" = expired."id";
 
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     RETURN v_deleted;
@@ -179,10 +204,10 @@ GRANT SELECT, DELETE ON "public"."mail_outbox" TO core_lookup;
 GRANT UPDATE ("lockedUntil", "attempts", "lastAttemptAt", "updatedAt") ON "public"."mail_outbox" TO core_lookup;
 
 GRANT CREATE ON SCHEMA "public" TO core_lookup;
-ALTER FUNCTION "public"."mail_outbox_claim"(integer, integer, timestamptz) OWNER TO core_lookup;
-ALTER FUNCTION "public"."mail_outbox_cleanup"(timestamptz) OWNER TO core_lookup;
+ALTER FUNCTION "public"."mail_outbox_claim"(integer, integer) OWNER TO core_lookup;
+ALTER FUNCTION "public"."mail_outbox_cleanup"(integer) OWNER TO core_lookup;
 REVOKE CREATE ON SCHEMA "public" FROM core_lookup;
-REVOKE ALL ON FUNCTION "public"."mail_outbox_claim"(integer, integer, timestamptz) FROM PUBLIC;
-REVOKE ALL ON FUNCTION "public"."mail_outbox_cleanup"(timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION "public"."mail_outbox_claim"(integer, integer, timestamptz) TO core_app;
-GRANT EXECUTE ON FUNCTION "public"."mail_outbox_cleanup"(timestamptz) TO core_app;
+REVOKE ALL ON FUNCTION "public"."mail_outbox_claim"(integer, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION "public"."mail_outbox_cleanup"(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION "public"."mail_outbox_claim"(integer, integer) TO core_app;
+GRANT EXECUTE ON FUNCTION "public"."mail_outbox_cleanup"(integer) TO core_app;

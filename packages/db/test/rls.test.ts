@@ -2249,8 +2249,7 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
     const globexEmail = `outbox-globex-${globexAccId.slice(-6)}@${globex.domain}`;
     const acmeJobId = uuidv7();
     const globexJobId = uuidv7();
-    const now = new Date("2026-11-26T10:00:00.000Z");
-    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await db.authUser.create({ data: { id: acmeAccId, name: "Jan Acme", email: acmeEmail, emailVerified: false } });
     await db.authUser.create({
@@ -2291,9 +2290,6 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
             kind: "INVITATION",
             invitationId: acmeInvId,
             status: "PENDING",
-            nextAttemptAt: now,
-            createdAt: now,
-            updatedAt: now,
           },
         });
       });
@@ -2331,9 +2327,6 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
             kind: "INVITATION",
             invitationId: globexInvId,
             status: "PENDING",
-            nextAttemptAt: now,
-            createdAt: now,
-            updatedAt: now,
           },
         });
       });
@@ -2376,20 +2369,50 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
         withOrganization(db, acme.id, (tx) => tx.mailOutbox.delete({ where: { id: acmeJobId } })),
       ).rejects.toThrow(/permission denied/i);
 
-      // Funkcja SECURITY DEFINER mail_outbox_claim rezerwuje gotowe zadania ponad granicą firm
-      const claimed = await claimMailOutboxJobs(db, { limit: 10, leaseMs: 60_000, now });
+      // PUBLIC nie ma EXECUTE na funkcjach SECURITY DEFINER, a core_app ma
+      const [privs] = await db.$queryRaw<
+        { claim_public: boolean; cleanup_public: boolean; claim_app: boolean; cleanup_app: boolean }[]
+      >`
+        SELECT
+          has_function_privilege('public', 'public.mail_outbox_claim(integer, integer)', 'EXECUTE') AS claim_public,
+          has_function_privilege('public', 'public.mail_outbox_cleanup(integer)', 'EXECUTE') AS cleanup_public,
+          has_function_privilege('core_app', 'public.mail_outbox_claim(integer, integer)', 'EXECUTE') AS claim_app,
+          has_function_privilege('core_app', 'public.mail_outbox_cleanup(integer)', 'EXECUTE') AS cleanup_app`;
+      expect(privs).toEqual({
+        claim_public: false,
+        cleanup_public: false,
+        claim_app: true,
+        cleanup_app: true,
+      });
+
+      // Walidacja zakresów p_limit i p_lease_ms w funkcjach SECURITY DEFINER
+      await expect(claimMailOutboxJobs(db, { limit: 0, leaseMs: 60_000 })).rejects.toThrow(/p_limit/i);
+      await expect(claimMailOutboxJobs(db, { limit: 1001, leaseMs: 60_000 })).rejects.toThrow(/p_limit/i);
+      await expect(claimMailOutboxJobs(db, { limit: 10, leaseMs: 0 })).rejects.toThrow(/p_lease_ms/i);
+      await expect(claimMailOutboxJobs(db, { limit: 10, leaseMs: 3_600_001 })).rejects.toThrow(/p_lease_ms/i);
+      await expect(cleanupMailOutbox(db, 0)).rejects.toThrow(/p_limit/i);
+      await expect(cleanupMailOutbox(db, 10001)).rejects.toThrow(/p_limit/i);
+
+      // Funkcja SECURITY DEFINER mail_outbox_claim rezerwuje gotowe zadania ponad granicą firm według now() bazy
+      const claimed = await claimMailOutboxJobs(db, { limit: 10, leaseMs: 90_000 });
       expect(claimed.map((row) => row.id).sort()).toEqual([acmeJobId, globexJobId].sort());
       expect(claimed.every((row) => row.attempts === 1 && row.kind === "INVITATION")).toBe(true);
 
-      // Oznaczamy jedno zadanie jako stare SENT i sprzątamy przez mail_outbox_cleanup
-      const oldDate = new Date("2026-10-01T00:00:00.000Z");
-      await withOrganization(db, acme.id, (tx) =>
-        tx.mailOutbox.update({
-          where: { id: acmeJobId },
-          data: { status: "SENT", sentAt: oldDate, lockedUntil: null, updatedAt: oldDate },
-        }),
+      // Oznaczamy jedno zadanie jako SENT sprzed 31 dni (przez zegar bazy) i sprzątamy przez mail_outbox_cleanup
+      await withOrganization(
+        ownerDb,
+        acme.id,
+        (tx) =>
+          tx.$executeRaw`
+          UPDATE "public"."mail_outbox"
+          SET "status" = 'SENT',
+              "sentAt" = now() - interval '31 days',
+              "lockedUntil" = NULL,
+              "createdAt" = now() - interval '31 days',
+              "updatedAt" = now() - interval '31 days'
+          WHERE "id" = ${acmeJobId}::uuid`,
       );
-      expect(await cleanupMailOutbox(db, new Date("2026-10-27T00:00:00.000Z"))).toBeGreaterThanOrEqual(1);
+      expect(await cleanupMailOutbox(db, 100)).toBeGreaterThanOrEqual(1);
       expect(
         await withOrganization(db, acme.id, (tx) => tx.mailOutbox.findUnique({ where: { id: acmeJobId } })),
       ).toBeNull();

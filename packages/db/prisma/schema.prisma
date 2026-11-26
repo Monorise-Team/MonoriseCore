@@ -838,6 +838,8 @@ enum MailStatus {
 
 /// Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
 /// (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
+/// Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
+/// jest zdefiniowany w migracji.
 model MailOutbox {
   id             String       @id @db.Uuid
   organizationId String       @db.Uuid
@@ -856,7 +858,6 @@ model MailOutbox {
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
 
-  @@index([status, nextAttemptAt])
   @@index([organizationId, invitationId])
   @@map("mail_outbox")
   @@schema("public")

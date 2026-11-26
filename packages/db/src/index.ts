@@ -228,29 +228,25 @@ export interface ClaimedMailOutboxJob {
 
 /**
  * Atomowo rezerwuje porcję gotowych zadań z kolejki poczty (`public.mail_outbox_claim`, `SECURITY DEFINER`),
- * ustawiając dzierżawę `lockedUntil` i podbijając `attempts` oraz `lastAttemptAt`.
+ * zawsze według zegara bazy `now()`, ustawiając dzierżawę `lockedUntil` i podbijając `attempts` oraz `lastAttemptAt`.
  */
 export async function claimMailOutboxJobs(
   db: PrismaClient | Tx,
-  options: { limit?: number | undefined; leaseMs?: number | undefined; now?: Date | undefined } = {},
+  options: { limit?: number | undefined; leaseMs?: number | undefined } = {},
 ): Promise<ClaimedMailOutboxJob[]> {
   const limit = options.limit ?? 20;
-  const leaseMs = options.leaseMs ?? 60_000;
-  if (options.now !== undefined) {
-    return db.$queryRaw<ClaimedMailOutboxJob[]>`
-      SELECT * FROM "public"."mail_outbox_claim"(${limit}::integer, ${leaseMs}::integer, ${options.now}::timestamptz)`;
-  }
+  const leaseMs = options.leaseMs ?? 90_000;
   return db.$queryRaw<ClaimedMailOutboxJob[]>`
     SELECT * FROM "public"."mail_outbox_claim"(${limit}::integer, ${leaseMs}::integer)`;
 }
 
 /**
- * Usuwa wysłane (`SENT`) i anulowane (`CANCELLED`) wiersze `mail_outbox` starsze niż `before`
- * ponad granicą firm (`public.mail_outbox_cleanup`, `SECURITY DEFINER`).
+ * Usuwa porcję zadań `SENT`, `CANCELLED` oraz zastąpionych `FAILED` starszych niż 30 dni ponad granicą firm
+ * (`public.mail_outbox_cleanup`, `SECURITY DEFINER`, zawsze według zegara bazy `now()`).
  */
-export async function cleanupMailOutbox(db: PrismaClient | Tx, before: Date): Promise<number> {
+export async function cleanupMailOutbox(db: PrismaClient | Tx, limit = 1000): Promise<number> {
   const rows = await db.$queryRaw<{ deleted: number }[]>`
-    SELECT "public"."mail_outbox_cleanup"(${before}::timestamptz) AS deleted`;
+    SELECT "public"."mail_outbox_cleanup"(${limit}::integer) AS deleted`;
   return rows[0]?.deleted ?? 0;
 }
 
