@@ -8,8 +8,14 @@
  * Adresy produktów można zmienić zmiennymi środowiskowymi (domyślnie lokalne *.localhost).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { NOTIFICATIONS_SEND_SCOPE } from "@core/contracts";
 import { db } from "../src/server/db";
-import { ensureFirstPartyClients, PRODUCT_MACHINE_SCOPES, PRODUCT_SCOPES } from "../src/server/oauth-clients";
+import {
+  BASE_PRODUCT_MACHINE_SCOPES,
+  ensureFirstPartyClients,
+  PRODUCT_MACHINE_SCOPES,
+  PRODUCT_SCOPES,
+} from "../src/server/oauth-clients";
 
 const env = (name: string, fallback: string) => process.env[name] ?? fallback;
 const AVEN_API = env("CORE_AVENMAIL_API_URL", "http://aven.localhost:3000");
@@ -38,7 +44,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${AVEN_WEB}/api/auth/callback`],
       confidential: true,
       resources: [AVEN_API, CORE_API],
-      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
+      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES],
     },
     {
       clientId: "avenmail-desktop",
@@ -62,7 +68,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${TIME_WEB}/api/auth/callback`],
       confidential: true,
       resources: [TIME_API, CORE_API],
-      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
+      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES, NOTIFICATIONS_SEND_SCOPE],
     },
     {
       clientId: "timotime-mobile",
@@ -79,7 +85,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${KIVO_WEB}/api/auth/callback`],
       confidential: true,
       resources: [KIVO_API, CORE_API],
-      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
+      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES, NOTIFICATIONS_SEND_SCOPE],
     },
     {
       // Panel klienta (BFF bez własnej bazy): tylko Core API, bez tokenów serwerowych i bez wpisu w products

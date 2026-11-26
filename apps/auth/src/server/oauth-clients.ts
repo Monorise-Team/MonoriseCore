@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   DIRECTORY_READ_SCOPE,
   EVENTS_READ_SCOPE,
+  NOTIFICATIONS_SEND_SCOPE,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
 } from "@core/contracts";
@@ -10,13 +11,15 @@ import { uuidv7 } from "@core/db";
 import { db } from "./db";
 
 export const PRODUCT_SCOPES = ["openid", "profile", "email", "offline_access"];
-/** Zakresy maszynowe (client_credentials) dla poufnych serwerów produktów w Core API. */
-export const PRODUCT_MACHINE_SCOPES = [
+/** Podstawowe zakresy maszynowe (client_credentials) dla poufnych serwerów produktów w Core API. */
+export const BASE_PRODUCT_MACHINE_SCOPES = [
   PERMISSIONS_REGISTER_SCOPE,
   PERMISSIONS_READ_SCOPE,
   DIRECTORY_READ_SCOPE,
   EVENTS_READ_SCOPE,
 ];
+/** Wszystkie zakresy maszynowe (client_credentials) obsługiwane przez Core API dla poufnych serwerów produktów. */
+export const PRODUCT_MACHINE_SCOPES = [...BASE_PRODUCT_MACHINE_SCOPES, NOTIFICATIONS_SEND_SCOPE];
 
 /** Skrót sekretu klienta (ten sam w konfiguracji wtyczki OAuth i przy rejestracji aplikacji). */
 export function hashClientSecret(secret: string): string {

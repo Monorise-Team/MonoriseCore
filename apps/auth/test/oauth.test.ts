@@ -3,6 +3,7 @@ import {
   AccessTokenClaims,
   DIRECTORY_READ_SCOPE,
   MachineTokenClaims,
+  NOTIFICATIONS_SEND_SCOPE,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
 } from "@core/contracts";
@@ -508,8 +509,8 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       expect(MachineTokenClaims.parse(payload).client_id).toBe(m2mClientId);
       expect(AccessTokenClaims.safeParse(payload).success).toBe(false);
 
-      // 1b. Poufny klient może też pobrać token maszynowy z zakresami core:permissions.read i core:directory.read
-      for (const readScope of [PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
+      // 1b. Poufny klient może też pobrać token maszynowy z zakresami core:permissions.read, core:directory.read i core:notifications.send
+      for (const readScope of [PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE, NOTIFICATIONS_SEND_SCOPE]) {
         const issuedRead = await call("/api/auth/oauth2/token", {
           method: "POST",
           form: {
@@ -570,9 +571,14 @@ describe("logowanie produktu przez Core (OAuth 2.1 z PKCE)", () => {
       });
       expect(publicDenied.status).toBe(400);
 
-      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o zakresy maszynowe (permissions.* ani directory.read)
+      // 5. Przepływ przeglądarkowy użytkownika nie może poprosić o zakresy maszynowe (permissions.*, directory.read ani notifications.send)
       const challenge = base64url(createHash("sha256").update("weryfikator-user-scope-test-0123456789abcdef").digest());
-      for (const machineScope of [PERMISSIONS_REGISTER_SCOPE, PERMISSIONS_READ_SCOPE, DIRECTORY_READ_SCOPE]) {
+      for (const machineScope of [
+        PERMISSIONS_REGISTER_SCOPE,
+        PERMISSIONS_READ_SCOPE,
+        DIRECTORY_READ_SCOPE,
+        NOTIFICATIONS_SEND_SCOPE,
+      ]) {
         const authorize = new URLSearchParams({
           response_type: "code",
           client_id: m2mClientId,
