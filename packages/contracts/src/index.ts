@@ -23,6 +23,31 @@ export {
   type RawRoleAssignmentRecord,
 } from "./permissions.js";
 
+export {
+  CreateNotification,
+  getNotificationCategory,
+  NOTIFICATION_ACTION_URL_MAX_LENGTH,
+  NOTIFICATION_BODY_MAX_LENGTH,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CATEGORY_KEYS,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_MAIL_CHANNELS,
+  NOTIFICATION_SKIP_REASONS,
+  NOTIFICATION_STATUSES,
+  NOTIFICATION_TITLE_MAX_LENGTH,
+  NotificationCategoryKey,
+  NotificationChannel,
+  NotificationMailChannel,
+  NotificationPreference,
+  NotificationResult,
+  NotificationSkipReason,
+  NotificationStatus,
+  NOTIFICATIONS_SEND_SCOPE,
+  UnsubscribeNotificationResult,
+  UpdateNotificationPreference,
+  type NotificationCategoryDefinition,
+} from "./notifications.js";
+
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const PERMISSIONS_READ_SCOPE = "core:permissions.read";
