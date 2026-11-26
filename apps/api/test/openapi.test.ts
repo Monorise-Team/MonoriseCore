@@ -185,4 +185,37 @@ describe("OpenAPI Core API", () => {
       }
     }
   });
+
+  it("dokumentuje GET /core/v1/audit-log w tagu Audit wraz z filtrami i schematami AuditLogEntry*", () => {
+    expect(document.tags.some((tag) => tag.name === "Audit")).toBe(true);
+
+    const operation = document.paths["/core/v1/audit-log"]?.get;
+    expect(operation).toBeDefined();
+    expect(operation?.operationId).toBe("listAuditLog");
+    expect(operation?.tags).toEqual(["Audit"]);
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(operation?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/AuditLogEntryListResponse",
+    });
+    expect(operation?.responses["403"]).toBeDefined();
+    expect(operation?.responses["422"]).toBeDefined();
+
+    const queryParamNames = (operation?.parameters ?? [])
+      .filter((param) => param.in === "query")
+      .map((param) => param.name)
+      .sort();
+    expect(queryParamNames).toEqual(
+      ["action", "actorAccountId", "actorType", "cursor", "from", "limit", "resourceId", "resourceType", "to"].sort(),
+    );
+
+    expect(document.components.schemas.AuditActorType).toBeDefined();
+    expect(document.components.schemas.AuditLogEntry).toBeDefined();
+    expect(document.components.schemas.AuditLogEntryList).toBeDefined();
+    expect(document.components.schemas.AuditLogEntryListResponse).toBeDefined();
+
+    const entryProps = (document.components.schemas.AuditLogEntry?.properties ?? {}) as Record<string, unknown>;
+    expect("actorOperatorId" in entryProps).toBe(false);
+    expect("actorDisplayName" in entryProps).toBe(true);
+    expect("actionLabel" in entryProps).toBe(true);
+  });
 });
