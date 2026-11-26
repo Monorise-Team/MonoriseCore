@@ -391,6 +391,12 @@ describe("Zaproszenia pracowników — Core API i serwis", () => {
     const authUser = await db.authUser.findUniqueOrThrow({ where: { id: inviteEmpRes.json().data.accountId } });
     expect(authUser.name).toBe("Katarzyna Zielinska");
 
+    // Brakujący workEmail pracownika zostaje uzupełniony znormalizowanym adresem zaproszenia
+    const updatedEmployee = await withOrganization(db, acme.id, (tx) =>
+      tx.employee.findUniqueOrThrow({ where: { id: employeeId } }),
+    );
+    expect(updatedEmployee.workEmail).toBe(`katarzyna@${acme.domain}`);
+
     // Ten sam pracownik (ma już konto INVITED) -> 409
     const alreadyHasAccount = await request("POST", "/core/v1/invitations", ownerToken, {
       email: `katarzyna2@${acme.domain}`,

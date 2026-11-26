@@ -251,6 +251,7 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
   let employeeId: string;
   let firstName: string;
   let lastName: string;
+  let backfillWorkEmail = false;
 
   if (input.employeeId !== undefined) {
     const employee = await tx.employee.findUnique({
@@ -259,6 +260,7 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
         id: true,
         firstName: true,
         lastName: true,
+        workEmail: true,
         status: true,
         account: { select: { id: true } },
       },
@@ -275,6 +277,7 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
     employeeId = employee.id;
     firstName = employee.firstName;
     lastName = employee.lastName;
+    backfillWorkEmail = employee.workEmail === null;
   } else {
     const trimmedFirst = input.firstName?.trim() ?? "";
     const trimmedLast = input.lastName?.trim() ?? "";
@@ -325,6 +328,11 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
           lastName,
           workEmail: normalized,
         },
+      });
+    } else if (backfillWorkEmail) {
+      await tx.employee.update({
+        where: { id: employeeId },
+        data: { workEmail: normalized },
       });
     }
 

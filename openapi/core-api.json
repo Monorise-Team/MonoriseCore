@@ -658,7 +658,7 @@
         ],
         "operationId": "createEmployee",
         "summary": "Dodaj pracownika",
-        "description": "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "description": "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Opcjonalny służbowy adres e-mail (`workEmail`) jest normalizowany, musi należeć do zweryfikowanej domeny firmy (nigdy darmowej skrzynki) i być unikalny w firmie. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
         "security": [
           {
             "bearerAuth": []
@@ -753,7 +753,118 @@
             }
           },
           "422": {
-            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/employees/{employeeId}": {
+      "patch": {
+        "tags": [
+          "People"
+        ],
+        "operationId": "updateEmployee",
+        "summary": "Zmień dane pracownika",
+        "description": "Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employeeId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator pracownika (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Pola pracownika do aktualizacji.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEmployee"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowany pracownik.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -6295,6 +6406,47 @@
           "DEPARTMENT",
           "TEAM"
         ]
+      },
+      "UpdateEmployee": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "workEmail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateRole": {
         "type": "object",

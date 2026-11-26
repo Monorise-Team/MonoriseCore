@@ -243,6 +243,26 @@ export const CreateEmployee = z.object({
 });
 export type CreateEmployee = z.infer<typeof CreateEmployee>;
 
+export const UpdateEmployee = z
+  .object({
+    firstName: z.string().trim().min(1).max(80).optional(),
+    lastName: z.string().trim().min(1).max(80).optional(),
+    workEmail: z.email().max(254).nullable().optional(),
+    jobTitle: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.firstName !== undefined ||
+      data.lastName !== undefined ||
+      data.workEmail !== undefined ||
+      data.jobTitle !== undefined,
+    {
+      message: "Podaj co najmniej jedno pole do zmiany",
+    },
+  );
+export type UpdateEmployee = z.infer<typeof UpdateEmployee>;
+
 /** Kim jestem: konto, pracownik i firma z tokenu. */
 export const Me = z.object({
   account: z.object({

@@ -68,6 +68,7 @@ import {
   TransferOrganizationOwner,
   Unit,
   UnitMember,
+  UpdateEmployee,
   UpdateRole,
   UpdateUnit,
 } from "../src/index.js";
@@ -145,6 +146,27 @@ describe("kontrakty", () => {
       }),
     ).toEqual({ firstName: "Anna", lastName: "Nowak", workEmail: "anna@acme.test", jobTitle: "Magazyn" });
     expect(CreateEmployee.safeParse({ firstName: "   ", lastName: "Nowak" }).success).toBe(false);
+
+    expect(
+      UpdateEmployee.parse({
+        firstName: " Jan ",
+        lastName: " Kowalski ",
+        workEmail: "Jan.Kowalski@Acme.test",
+        jobTitle: " Kierownik ",
+      }),
+    ).toEqual({
+      firstName: "Jan",
+      lastName: "Kowalski",
+      workEmail: "Jan.Kowalski@Acme.test",
+      jobTitle: "Kierownik",
+    });
+    expect(UpdateEmployee.parse({ jobTitle: null, workEmail: null })).toEqual({ jobTitle: null, workEmail: null });
+    expect(UpdateEmployee.safeParse({}).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ firstName: "   " }).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ lastName: "" }).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ jobTitle: "   " }).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ workEmail: "nie-email" }).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ firstName: "Jan", status: "FORMER" }).success).toBe(false);
 
     expect(CreateUnit.parse({ name: " Kraków ", type: "BRANCH" })).toEqual({ name: "Kraków", type: "BRANCH" });
     expect(CreateUnit.parse({ name: "Magazyn", type: "TEAM", parentId: UUID_1 })).toEqual({

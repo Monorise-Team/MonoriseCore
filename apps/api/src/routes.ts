@@ -53,6 +53,7 @@ import {
   Unit,
   UnitMember,
   UnitStatus,
+  UpdateEmployee,
   UpdateRole,
   UpdateUnit,
   type ErrorCode,
@@ -426,8 +427,9 @@ export const ROUTES = {
     tag: "People",
     summary: "Dodaj pracownika",
     description:
-      "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` " +
-      "w zakresie całej firmy albo roli Ownera.",
+      "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Opcjonalny służbowy adres e-mail (`workEmail`) " +
+      "jest normalizowany, musi należeć do zweryfikowanej domeny firmy (nigdy darmowej skrzynki) i być unikalny w firmie. " +
+      "Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 201,
     envelope: true,
@@ -441,7 +443,40 @@ export const ROUTES = {
     errors: {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
-      422: ["VALIDATION_FAILED"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED", "EMAIL_DOMAIN_NOT_ALLOWED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  updateEmployee: {
+    method: "PATCH",
+    path: `${API_PREFIX}/employees/{employeeId}`,
+    operationId: "updateEmployee",
+    tag: "People",
+    summary: "Zmień dane pracownika",
+    description:
+      "Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres " +
+      "e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska " +
+      "pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla " +
+      "pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga " +
+      "uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [EMPLOYEE_ID_PARAM],
+    requestBodySchemaName: "UpdateEmployee",
+    requestBodySchema: UpdateEmployee,
+    requestBodyDescription: "Pola pracownika do aktualizacji.",
+    dataSchemaName: "Employee",
+    dataSchema: Employee,
+    responseSchemaName: "EmployeeResponse",
+    responseDescription: "Zaktualizowany pracownik.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      409: ["CONFLICT"],
+      422: ["VALIDATION_FAILED", "EMAIL_DOMAIN_NOT_ALLOWED"],
       500: ["INTERNAL_ERROR"],
     },
   },

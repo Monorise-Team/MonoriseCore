@@ -65,6 +65,7 @@ import {
   UnitMembershipRole,
   UnitStatus,
   UnitType,
+  UpdateEmployee,
   UpdateRole,
   UpdateUnit,
 } from "@core/contracts";
@@ -224,6 +225,7 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("EmployeeStatus", EmployeeStatus);
   register("Employee", Employee);
   register("CreateEmployee", CreateEmployee);
+  register("UpdateEmployee", UpdateEmployee);
   register("InvitationStatus", InvitationStatus);
   register("Invitation", Invitation);
   register("CreateInvitation", CreateInvitation);
