@@ -13,7 +13,13 @@ export async function POST(request: NextRequest) {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session) throw new CoreError("UNAUTHENTICATED", 401, "Zaloguj się ponownie");
     const body = Body.parse(await request.json().catch(() => ({})));
-    return ok(await verifyOrganizationDomain(session.user.id, { trustLocally: body.trustLocally ?? false }));
+    return ok(
+      await verifyOrganizationDomain(session.user.id, {
+        trustLocally: body.trustLocally ?? false,
+        ipAddress: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip"),
+        userAgent: request.headers.get("user-agent"),
+      }),
+    );
   } catch (error) {
     return fail(error);
   }

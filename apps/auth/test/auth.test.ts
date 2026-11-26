@@ -130,5 +130,53 @@ describe("samorejestracja firmy i logowanie", () => {
       tx.organization.findUniqueOrThrow({ where: { id: organizationId } }),
     );
     expect(organization.status).toBe("ACTIVE");
+
+    const audits = await withOrganization(db, organizationId, (tx) =>
+      tx.auditLog.findMany({ where: { action: "organization.domain.verified" } }),
+    );
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      actorType: "ACCOUNT",
+      actorAccountId: session!.user.id,
+      action: "organization.domain.verified",
+      resourceType: "organization_domain",
+      metadata: { domain, method: "DEV_TRUST" },
+    });
+  });
+
+  it("verifyOrganizationDomain nie zmienia statusu firmy SUSPENDED na ACTIVE i zapisuje wpis audytu", async () => {
+    const { organizationId, email, domain } = await signUp("suspended");
+    await confirmEmail(email);
+    const { headers } = await signIn(email);
+    const session = await auth.api.getSession({ headers });
+
+    await withOrganization(db, organizationId, (tx) =>
+      tx.organization.update({
+        where: { id: organizationId },
+        data: { status: "SUSPENDED", suspendedAt: new Date() },
+      }),
+    );
+
+    expect(await verifyOrganizationDomain(session!.user.id, { trustLocally: true })).toEqual({
+      domain,
+      status: "VERIFIED",
+    });
+
+    const organization = await withOrganization(db, organizationId, (tx) =>
+      tx.organization.findUniqueOrThrow({ where: { id: organizationId } }),
+    );
+    expect(organization.status).toBe("SUSPENDED");
+
+    const audits = await withOrganization(db, organizationId, (tx) =>
+      tx.auditLog.findMany({ where: { action: "organization.domain.verified" } }),
+    );
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      actorType: "ACCOUNT",
+      actorAccountId: session!.user.id,
+      action: "organization.domain.verified",
+      resourceType: "organization_domain",
+      metadata: { domain, method: "DEV_TRUST" },
+    });
   });
 });

@@ -17,6 +17,10 @@ export const config = {
   get secret(): string {
     return required("BETTER_AUTH_SECRET", "build-time-secret-build-time-secret-0000");
   },
+  /** Sekret HMAC-SHA256 współdzielony z Core API do rekordów DNS TXT; gdy brak, wraca do `BETTER_AUTH_SECRET`. */
+  get domainVerificationSecret(): string {
+    return process.env.CORE_DOMAIN_VERIFICATION_SECRET || this.secret;
+  },
   get databaseUrl(): string {
     return required("CORE_DATABASE_URL", "postgresql://build:build@localhost:5432/build");
   },
