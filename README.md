@@ -69,21 +69,22 @@ Produkty logują użytkowników przez Core w OAuth 2.1 (kod autoryzacji z PKCE).
 Lokalnie aplikacje Monorise rejestruje polecenie:
 
 ```bash
-pnpm oauth:seed     # klienci OAuth AvenMail i TimoTime, ich API oraz wpisy w rejestrze produktów
+pnpm oauth:seed     # klienci OAuth AvenMail, TimoTime i KivoTasks, ich API oraz wpisy w rejestrze produktów
 ```
 
-Sekrety nowych klientów poufnych (serwery AvenMail, TimoTime i MonorisePortal) trafiają do `apps/auth/.data/oauth-clients.json`, poza repozytorium; w bazie zostaje tylko ich skrót. Ponowne uruchomienie niczego nie psuje i nie zmienia istniejących sekretów.
+Sekrety nowych klientów poufnych (serwery AvenMail, TimoTime, KivoTasks i MonorisePortal) trafiają do `apps/auth/.data/oauth-clients.json`, poza repozytorium; w bazie zostaje tylko ich skrót. Ponowne uruchomienie niczego nie psuje i nie zmienia istniejących sekretów.
 
-| Klient             | Rodzaj                   | Powrót po zalogowaniu                                                                            |
-| ------------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `avenmail-web`     | poufny (serwer AvenMail) | `http://aven-mail.localhost:3000/api/auth/callback`                                              |
-| `avenmail-desktop` | publiczny (Tauri)        | `http://127.0.0.1/oauth/callback` (dowolny port, RFC 8252)                                       |
-| `avenmail-mobile`  | publiczny (Expo)         | `avenmail://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go)     |
-| `timotime-web`     | poufny (serwer TimoTime) | `http://timo-time.localhost:3300/api/auth/callback`                                              |
-| `timotime-mobile`  | publiczny (Expo)         | `timotime://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go)     |
-| `monorise-portal`  | poufny (serwer Portalu)  | `http://portal.localhost:3400/api/auth/callback` (zmienna `CORE_PORTAL_WEB_URL`); tylko Core API |
+| Klient             | Rodzaj                    | Powrót po zalogowaniu                                                                            |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `avenmail-web`     | poufny (serwer AvenMail)  | `http://aven-mail.localhost:3000/api/auth/callback`                                              |
+| `avenmail-desktop` | publiczny (Tauri)         | `http://127.0.0.1/oauth/callback` (dowolny port, RFC 8252)                                       |
+| `avenmail-mobile`  | publiczny (Expo)          | `avenmail://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go)     |
+| `timotime-web`     | poufny (serwer TimoTime)  | `http://timo-time.localhost:3300/api/auth/callback`                                              |
+| `kivotasks-web`    | poufny (serwer KivoTasks) | `http://kivotasks.localhost:3500/api/auth/callback`                                              |
+| `timotime-mobile`  | publiczny (Expo)          | `timotime://oauth/callback`, lokalnie też `exp://127.0.0.1:8081/--/oauth/callback` (Expo Go)     |
+| `monorise-portal`  | poufny (serwer Portalu)   | `http://portal.localhost:3400/api/auth/callback` (zmienna `CORE_PORTAL_WEB_URL`); tylko Core API |
 
-Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Token odświeżania jest jednorazowy: przez 20 sekund po użyciu ten sam stary token dostaje tę samą odpowiedź (dwa żądania przeglądarki naraz), a później jego ponowne użycie unieważnia wszystkie tokeny tej osoby w tej aplikacji. Nieaktywne konto albo wstrzymana firma dostaje przy odświeżaniu odmowę `invalid_grant`, więc aplikacja kończy sesję. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) z zakresami `core:permissions.register`, `core:permissions.read` oraz `core:directory.read` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tych zakresów.
+Token dostępu jest ważny 5 minut, a token odświeżania (zakres `offline_access`) 30 dni. Token odświeżania jest jednorazowy: przez 20 sekund po użyciu ten sam stary token dostaje tę samą odpowiedź (dwa żądania przeglądarki naraz), a później jego ponowne użycie unieważnia wszystkie tokeny tej osoby w tej aplikacji. Nieaktywne konto albo wstrzymana firma dostaje przy odświeżaniu odmowę `invalid_grant`, więc aplikacja kończy sesję. Rejestrowanie aplikacji przez HTTP jest wyłączone. Poufni klienci produktów (`avenmail-web`, `timotime-web`, `kivotasks-web`) mogą dodatkowo pobierać 5-minutowy token maszynowy (`grant_type=client_credentials`) z zakresami `core:permissions.register`, `core:permissions.read` oraz `core:directory.read` dla zasobu Core API; klienci publiczni nigdy nie dostają tego grantu, a przepływ użytkownika w przeglądarce nie przyjmuje tych zakresów.
 
 ## Struktura firmy i Owner (etap 1 dziedziny Core)
 
