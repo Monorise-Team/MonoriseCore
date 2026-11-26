@@ -1447,7 +1447,7 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       422: ["VALIDATION_FAILED"],
-      500: ["INTERNAL"],
+      500: ["INTERNAL_ERROR"],
     },
   },
 } as const satisfies Record<string, RouteDefinition>;

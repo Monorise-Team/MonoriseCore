@@ -559,7 +559,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
