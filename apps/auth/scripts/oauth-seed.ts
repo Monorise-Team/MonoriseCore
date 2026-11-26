@@ -16,6 +16,8 @@ const AVEN_API = env("CORE_AVENMAIL_API_URL", "http://aven.localhost:3000");
 const AVEN_WEB = env("CORE_AVENMAIL_WEB_URL", "http://aven-mail.localhost:3000");
 const TIME_API = env("CORE_TIMOTIME_API_URL", "http://time.localhost:3300");
 const TIME_WEB = env("CORE_TIMOTIME_WEB_URL", "http://timo-time.localhost:3300");
+const KIVO_API = env("CORE_KIVOTASKS_API_URL", "http://kivo.localhost:3500");
+const KIVO_WEB = env("CORE_KIVOTASKS_WEB_URL", "http://kivotasks.localhost:3500");
 const CORE_API = env("CORE_API_URL", "http://localhost:3200");
 const PORTAL_WEB = env("CORE_PORTAL_WEB_URL", "http://portal.localhost:3400");
 // Expo Go podczas pracy lokalnej wraca adresem exp:// serwera Metro (`expo start --localhost`)
@@ -25,6 +27,7 @@ const secrets = await ensureFirstPartyClients({
   resources: [
     { identifier: AVEN_API, name: "AvenMail API" },
     { identifier: TIME_API, name: "TimoTime API" },
+    { identifier: KIVO_API, name: "KivoTasks API" },
     { identifier: CORE_API, name: "Core API", allowedScopes: [...PRODUCT_SCOPES, ...PRODUCT_MACHINE_SCOPES] },
   ],
   clients: [
@@ -69,6 +72,16 @@ const secrets = await ensureFirstPartyClients({
       resources: [TIME_API, CORE_API],
     },
     {
+      // KivoTasks (ADR-0103): tylko przeglądarka, BFF jak TimoTime, z tokenami serwerowymi do Core
+      clientId: "kivotasks-web",
+      name: "KivoTasks",
+      uri: `${KIVO_WEB}/`,
+      redirectUris: [`${KIVO_WEB}/api/auth/callback`],
+      confidential: true,
+      resources: [KIVO_API, CORE_API],
+      clientCredentialsScopes: [...PRODUCT_MACHINE_SCOPES],
+    },
+    {
       // Panel klienta (BFF bez własnej bazy): tylko Core API, bez tokenów serwerowych i bez wpisu w products
       clientId: "monorise-portal",
       name: "MonorisePortal",
@@ -81,6 +94,7 @@ const secrets = await ensureFirstPartyClients({
   products: [
     { key: "avenmail", name: "AvenMail", registrationClientId: "avenmail-web" },
     { key: "timotime", name: "TimoTime", registrationClientId: "timotime-web" },
+    { key: "kivotasks", name: "KivoTasks", registrationClientId: "kivotasks-web" },
   ],
 });
 
