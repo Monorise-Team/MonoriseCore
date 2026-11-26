@@ -14,7 +14,8 @@ import type * as Prisma from "../internal/prismaNamespace.js"
 
 /**
  * Model OrganizationDomain
- * 
+ * Domena e-mail przypisana do firmy (ADR-0019).
+ * Co najwyżej jedna domena główna (`isPrimary = true`) na firmę (częściowy indeks unikalny w migracji).
  */
 export type OrganizationDomainModel = runtime.Types.Result.DefaultSelection<Prisma.$OrganizationDomainPayload>
 

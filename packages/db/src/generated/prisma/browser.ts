@@ -84,7 +84,8 @@ export type AuthOAuthClientAssertion = Prisma.AuthOAuthClientAssertionModel
 export type Organization = Prisma.OrganizationModel
 /**
  * Model OrganizationDomain
- * 
+ * Domena e-mail przypisana do firmy (ADR-0019).
+ * Co najwyżej jedna domena główna (`isPrimary = true`) na firmę (częściowy indeks unikalny w migracji).
  */
 export type OrganizationDomain = Prisma.OrganizationDomainModel
 /**

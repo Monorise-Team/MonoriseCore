@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "./generated/prisma/client.js";
 import type { AccountStatus, DomainStatus, OrganizationStatus } from "./generated/prisma/enums.js";
@@ -8,9 +8,32 @@ export { Prisma, PrismaClient } from "./generated/prisma/client.js";
 export type * from "./generated/prisma/models.js";
 export { uuidv7 } from "./ids.js";
 
+const DOMAIN_TXT_PREFIX = "monorise-verification=";
+
 /** Skrót SHA-256 (hex) tokenu (np. weryfikacji domeny lub zaproszenia), przechowywany w bazie zamiast samego tokenu. */
 export function hashToken(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Wartość rekordu DNS TXT potwierdzającego domenę firmy (`monorise-verification=<32 znaki base64url>`).
+ * Wyliczana deterministycznie z sekretu, identyfikatora firmy i domeny (w małych literach); w bazie
+ * przechowujemy wyłącznie jej skrót (`verificationTokenHash`).
+ */
+export function domainTxtValue(secret: string, organizationId: string, domain: string): string {
+  const code = createHmac("sha256", secret).update(`${organizationId}:${domain.toLowerCase()}`).digest("base64url");
+  return `${DOMAIN_TXT_PREFIX}${code.slice(0, 32)}`;
+}
+
+/**
+ * Porównuje skrót SHA-256 rekordu DNS TXT z zapisanym `verificationTokenHash` w stałym czasie
+ * (`timingSafeEqual`), dzięki czemu rotacja sekretu nie unieważnia istniejących wierszy w bazie.
+ */
+export function matchesDomainTokenHash(txtRecord: string, expectedHash: string | null): boolean {
+  if (!expectedHash) return false;
+  const actual = Buffer.from(hashToken(txtRecord), "utf8");
+  const expected = Buffer.from(expectedHash, "utf8");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 /** Klient transakcji: to samo API co PrismaClient, bez metod sterujących połączeniem. */

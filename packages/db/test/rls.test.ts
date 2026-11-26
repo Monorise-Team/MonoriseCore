@@ -1966,3 +1966,103 @@ describe("klucze powtórzeń Idempotency-Key (RLS i sprzątanie wygasłych)", ()
     expect(await withOrganization(ownerDb, temp.id, (tx) => tx.idempotencyKey.count({ where: { id: keyId } }))).toBe(0);
   });
 });
+
+describe("domeny firm (częściowy indeks jednej domeny głównej i RLS)", () => {
+  it("egzekwuje co najwyżej jedną domenę główną na firmę oraz izoluje UPDATE/DELETE między firmami", async () => {
+    const acmeSecondId = uuidv7();
+    const acmeThirdId = uuidv7();
+    const acmeSecondDomain = `sec-${acmeSecondId.slice(-8)}.acme.test`;
+    const acmeThirdDomain = `third-${acmeThirdId.slice(-8)}.acme.test`;
+
+    const globexPrimary = await withOrganization(db, globex.id, (tx) =>
+      tx.organizationDomain.findFirstOrThrow({ where: { isPrimary: true } }),
+    );
+
+    try {
+      // Próba dodania drugiej domeny głównej w tej samej firmie -> naruszenie częściowego indeksu unikalnego
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.organizationDomain.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              domain: `dup-primary-${uuidv7().slice(-8)}.acme.test`,
+              verificationMethod: "DNS_TXT",
+              isPrimary: true,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/organization_domains_organizationId_primary_key|unique|duplicate/i);
+
+      // Wiele domen niegłównych (isPrimary = false) w tej samej firmie działa bez konfliktu
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.organizationDomain.create({
+          data: {
+            id: acmeSecondId,
+            organizationId: acme.id,
+            domain: acmeSecondDomain,
+            status: "VERIFIED",
+            verificationMethod: "DNS_TXT",
+            verifiedAt: new Date(),
+            isPrimary: false,
+          },
+        });
+        await tx.organizationDomain.create({
+          data: {
+            id: acmeThirdId,
+            organizationId: acme.id,
+            domain: acmeThirdDomain,
+            status: "PENDING",
+            verificationMethod: "DNS_TXT",
+            isPrimary: false,
+          },
+        });
+      });
+
+      // Próba ustawienia isPrimary = true bez wcześniejszego zdjęcia flagi z obecnej głównej -> błąd unikalności
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.organizationDomain.update({
+            where: { id: acmeSecondId },
+            data: { isPrimary: true },
+          }),
+        ),
+      ).rejects.toThrow(/organization_domains_organizationId_primary_key|unique|duplicate/i);
+
+      // RLS: firma Acme nie może zmienić ani usunąć domeny firmy Globex (0 wierszy), ani dopisać domeny dla Globex
+      const crossUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.updateMany({ where: { id: globexPrimary.id }, data: { status: "REVOKED" } }),
+      );
+      expect(crossUpdate.count).toBe(0);
+
+      const crossDelete = await withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.deleteMany({ where: { id: globexPrimary.id } }),
+      );
+      expect(crossDelete.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.organizationDomain.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              domain: `cross-${uuidv7().slice(-8)}.globex.test`,
+              verificationMethod: "DNS_TXT",
+              isPrimary: false,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // Domena Globex pozostaje nienaruszona
+      const stillGlobex = await withOrganization(db, globex.id, (tx) =>
+        tx.organizationDomain.findUniqueOrThrow({ where: { id: globexPrimary.id } }),
+      );
+      expect(stillGlobex.status).toBe(globexPrimary.status);
+    } finally {
+      await withOrganization(db, acme.id, (tx) =>
+        tx.organizationDomain.deleteMany({ where: { id: { in: [acmeSecondId, acmeThirdId] } } }),
+      );
+    }
+  });
+});

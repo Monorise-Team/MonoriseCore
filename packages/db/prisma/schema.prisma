@@ -343,6 +343,8 @@ enum DomainVerificationMethod {
   @@schema("public")
 }
 
+/// Domena e-mail przypisana do firmy (ADR-0019).
+/// Co najwyżej jedna domena główna (`isPrimary = true`) na firmę (częściowy indeks unikalny w migracji).
 model OrganizationDomain {
   id                    String                   @id @db.Uuid
   organizationId        String                   @db.Uuid
