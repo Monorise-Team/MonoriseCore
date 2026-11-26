@@ -11,7 +11,7 @@ const BLOCKED_ORGANIZATIONS = new Set(["SUSPENDED", "DELETED"]);
 
 /** Jednolity komunikat dla nieaktualnego, wygasłego lub zużytego linku do zmiany hasła. */
 export const INVALID_RESET_LINK_MESSAGE =
-  "Ten link do zmiany hasła wygasł lub został już użyty. Poproś o nowy link — jest ważny przez 30 minut.";
+  "Ten link do zmiany hasła wygasł lub został już użyty. Poproś o nowy link. Będzie ważny przez 30 minut.";
 
 function sanitizeIpAddress(value: string | null | undefined): string | null {
   if (!value) return null;

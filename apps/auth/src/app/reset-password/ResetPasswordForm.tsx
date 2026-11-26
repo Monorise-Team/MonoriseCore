@@ -14,7 +14,7 @@ export function ExpiredResetLinkCard() {
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-xl font-semibold">Link jest nieaktualny</h1>
         <p className="text-sm text-text-secondary">
-          Ten link do zmiany hasła wygasł lub został już użyty. Poproś o nowy link — jest ważny przez 30 minut.
+          Ten link do zmiany hasła wygasł lub został już użyty. Poproś o nowy link. Będzie ważny przez 30 minut.
         </p>
       </div>
       <div className="flex flex-col gap-3">

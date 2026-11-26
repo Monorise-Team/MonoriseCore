@@ -60,7 +60,7 @@ export function ForgotPasswordForm() {
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-xl font-semibold">Nie pamiętasz hasła?</h1>
         <p className="text-sm text-text-tertiary">
-          Podaj swój adres e-mail — wyślemy jednorazowy link do ustawienia nowego hasła.
+          Podaj swój adres e-mail. Wyślemy jednorazowy link do ustawienia nowego hasła.
         </p>
       </div>
       <form className="flex flex-col gap-3" onSubmit={submit}>
