@@ -15,7 +15,7 @@ function required(name: string): string {
 
 const db = createDb(required("CORE_DATABASE_URL"));
 const authIssuer = required("CORE_AUTH_ISSUER");
-const authUrl = process.env.CORE_AUTH_URL ?? authIssuer;
+const authUrl = process.env.CORE_AUTH_URL?.trim() || authIssuer;
 const tokenOptions = {
   keys: remoteKeys(required("CORE_AUTH_JWKS_URL")),
   issuer: authIssuer,

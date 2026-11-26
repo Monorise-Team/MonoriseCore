@@ -618,9 +618,10 @@ export function buildServer({
   devTrustDomains = false,
   resolveTxt,
   mailOutboxWorker,
-  now: getNow = () => new Date(),
+  now: customNow,
   onRoute,
 }: ServerOptions): FastifyInstance {
+  const getNow = customNow ?? (() => new Date());
   const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
   const openApiDocument = buildOpenApiDocument();
   const domainOptions: DomainServiceOptions = {
@@ -1351,7 +1352,7 @@ export function buildServer({
         employeeId: body.employeeId,
         invitedBy: who.accountId,
         actor: invitationActorFromRequest(request, who),
-        now,
+        now: customNow ? now : undefined,
       });
       return result.invitation;
     },
@@ -1372,7 +1373,7 @@ export function buildServer({
         organizationId: who.organizationId,
         invitationId: params.invitationId,
         actor: invitationActorFromRequest(request, who),
-        now,
+        now: customNow ? now : undefined,
       });
       return result.invitation;
     },
@@ -1389,7 +1390,7 @@ export function buildServer({
     handler: async (request, reply) => {
       const who = await caller(request);
       const params = parseInput(InvitationIdParams, request.params);
-      const currentTime = getNow();
+      const explicitNow = customNow?.();
 
       await withOrganization(db, who.organizationId, async (tx) => {
         const snapshot = await loadPermissionSnapshot(tx, who);
@@ -1398,7 +1399,7 @@ export function buildServer({
           organizationId: who.organizationId,
           invitationId: params.invitationId,
           actor: invitationActorFromRequest(request, who),
-          now: currentTime,
+          now: explicitNow,
         });
       });
 

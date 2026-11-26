@@ -73,12 +73,14 @@ try {
     console.log("Wiadomość zaproszenia została już podjęta do wysyłki przez worker Core API.");
   } else {
     const delivery = await deliverMailJob(db, claimed, {
-      authUrl: process.env.CORE_AUTH_URL ?? process.env.CORE_AUTH_ISSUER,
+      authUrl: process.env.CORE_AUTH_URL?.trim() || process.env.CORE_AUTH_ISSUER?.trim() || undefined,
     });
     if (delivery.status === "SENT") {
       if (delivery.inviteUrl && isLocalMailSink()) {
         console.log(`Link aktywacyjny (tylko lokalnie): ${delivery.inviteUrl}`);
       }
+    } else if (delivery.status === "SKIPPED") {
+      console.log("Zadanie wysyłki zostało już przejęte lub zmienione przez inny proces.");
     } else {
       console.error(
         `Zaproszenie zostało zapisane, ale bezpośrednia wysyłka wiadomości nie powiodła się (status: ${delivery.status}). ` +

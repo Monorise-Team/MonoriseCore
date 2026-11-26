@@ -163,8 +163,17 @@ export function serializeInvitation(row: SerializableInvitationRow, now: Date = 
   };
 }
 
+/** Wyznacza bazowy adres serwera logowania, ignorując puste lub białe wartości `CORE_AUTH_URL`. */
+export function resolveAuthUrl(
+  authUrl?: string,
+  env: { CORE_AUTH_URL?: string | undefined; CORE_AUTH_ISSUER?: string | undefined } = process.env,
+): string {
+  const raw = authUrl?.trim() || env.CORE_AUTH_URL?.trim() || env.CORE_AUTH_ISSUER?.trim() || "http://localhost:3100";
+  return raw.replace(/\/+$/, "");
+}
+
 export function buildInviteUrl(token: string, authUrl?: string): string {
-  const base = (authUrl ?? process.env.CORE_AUTH_URL ?? "http://localhost:3100").replace(/\/+$/, "");
+  const base = resolveAuthUrl(authUrl);
   return `${base}/invite?token=${encodeURIComponent(token)}`;
 }
 
@@ -236,7 +245,8 @@ async function writeInvitationAudit(
  *    poczty (`mail_outbox`, `PENDING`); faktyczny token aktywacyjny powstaje dopiero przy wysyłce.
  */
 export async function createInvitation(tx: Tx, input: CreateInvitationInput): Promise<CreateInvitationResult> {
-  const now = input.now ?? new Date();
+  const explicitNow = input.now;
+  const now = explicitNow ?? new Date();
 
   const normalized = normalizeEmail(input.email);
   if (!EmailSchema.safeParse(normalized).success) {
@@ -419,9 +429,9 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
       invitationId: created.id,
       status: "PENDING",
       attempts: 0,
-      nextAttemptAt: now,
-      createdAt: now,
-      updatedAt: now,
+      ...(explicitNow !== undefined
+        ? { nextAttemptAt: explicitNow, createdAt: explicitNow, updatedAt: explicitNow }
+        : {}),
     },
     select: {
       id: true,
@@ -452,7 +462,8 @@ export async function createInvitation(tx: Tx, input: CreateInvitationInput): Pr
  * kolejkuje nowe zadanie wysyłki i zapisuje wpis audytu `invitation.resent`.
  */
 export async function resendInvitation(tx: Tx, input: ResendInvitationInput): Promise<ResendInvitationResult> {
-  const now = input.now ?? new Date();
+  const explicitNow = input.now;
+  const now = explicitNow ?? new Date();
 
   await lockInvitation(tx, input.invitationId);
 
@@ -496,48 +507,94 @@ export async function resendInvitation(tx: Tx, input: ResendInvitationInput): Pr
     throw error;
   }
 
-  await tx.mailOutbox.updateMany({
-    where: {
-      organizationId: input.organizationId,
-      invitationId: updated.id,
-      status: "PENDING",
-    },
-    data: {
-      status: "CANCELLED",
-      lockedUntil: null,
-      updatedAt: now,
-    },
-  });
+  if (explicitNow !== undefined) {
+    await tx.mailOutbox.updateMany({
+      where: {
+        organizationId: input.organizationId,
+        invitationId: updated.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CANCELLED",
+        lockedUntil: null,
+        updatedAt: explicitNow,
+      },
+    });
+  } else {
+    await tx.$executeRaw`
+      UPDATE "public"."mail_outbox"
+      SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = now()
+      WHERE "organizationId" = ${input.organizationId}::uuid
+        AND "invitationId" = ${updated.id}::uuid
+        AND "status" = 'PENDING'`;
+  }
 
   // Pilnujemy ściśle rosnącego createdAt względem poprzedniego zadania tego zaproszenia (także przy
-  // stałym zegarze w testach albo dwóch wywołaniach w tej samej milisekundzie).
+  // stałym zegarze w testach albo dwóch wywołaniach w tej samej milisekundzie); bez jawnego now
+  // pole nextAttemptAt zawsze korzysta z zegara bazy now().
   const latestExisting = await tx.mailOutbox.findFirst({
     where: { organizationId: input.organizationId, invitationId: updated.id },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { createdAt: true },
   });
-  const jobCreatedAt =
-    latestExisting && latestExisting.createdAt.getTime() >= now.getTime()
-      ? new Date(latestExisting.createdAt.getTime() + 1)
-      : now;
 
-  const mailJob = await tx.mailOutbox.create({
-    data: {
-      id: uuidv7(jobCreatedAt.getTime()),
-      organizationId: input.organizationId,
-      kind: "INVITATION",
-      invitationId: updated.id,
-      status: "PENDING",
-      attempts: 0,
-      nextAttemptAt: now,
-      createdAt: jobCreatedAt,
-      updatedAt: jobCreatedAt,
-    },
-    select: {
-      id: true,
-      ...MAIL_OUTBOX_DELIVERY_SELECT,
-    },
-  });
+  let mailJob: { id: string } & SerializableMailDeliveryRow;
+  if (explicitNow !== undefined) {
+    const jobCreatedAt =
+      latestExisting && latestExisting.createdAt.getTime() >= explicitNow.getTime()
+        ? new Date(latestExisting.createdAt.getTime() + 1)
+        : explicitNow;
+    mailJob = await tx.mailOutbox.create({
+      data: {
+        id: uuidv7(jobCreatedAt.getTime()),
+        organizationId: input.organizationId,
+        kind: "INVITATION",
+        invitationId: updated.id,
+        status: "PENDING",
+        attempts: 0,
+        nextAttemptAt: explicitNow,
+        createdAt: jobCreatedAt,
+        updatedAt: jobCreatedAt,
+      },
+      select: {
+        id: true,
+        ...MAIL_OUTBOX_DELIVERY_SELECT,
+      },
+    });
+  } else if (latestExisting) {
+    const newJobId = uuidv7(Math.max(now.getTime(), latestExisting.createdAt.getTime() + 1));
+    const inserted = await tx.$queryRaw<({ id: string } & SerializableMailDeliveryRow)[]>`
+      INSERT INTO "public"."mail_outbox"
+        ("id", "organizationId", "kind", "invitationId", "status", "attempts", "nextAttemptAt", "createdAt", "updatedAt")
+      VALUES (
+        ${newJobId}::uuid,
+        ${input.organizationId}::uuid,
+        'INVITATION'::"public"."MailKind",
+        ${updated.id}::uuid,
+        'PENDING'::"public"."MailStatus",
+        0,
+        now(),
+        GREATEST(now(), ${latestExisting.createdAt}::timestamptz + interval '1 millisecond'),
+        now()
+      )
+      RETURNING "id", "status", "attempts", "lastAttemptAt", "sentAt"`;
+    mailJob = inserted[0]!;
+  } else {
+    mailJob = await tx.mailOutbox.create({
+      data: {
+        id: uuidv7(now.getTime()),
+        organizationId: input.organizationId,
+        kind: "INVITATION",
+        invitationId: updated.id,
+        status: "PENDING",
+        attempts: 0,
+      },
+      select: {
+        id: true,
+        ...MAIL_OUTBOX_DELIVERY_SELECT,
+      },
+    });
+  }
 
   await writeInvitationAudit(tx, input.organizationId, input.actor, {
     action: "invitation.resent",
@@ -559,7 +616,8 @@ export async function resendInvitation(tx: Tx, input: ResendInvitationInput): Pr
  * Konto pozostaje w statusie `INVITED`, a zaproszenie można później wysłać ponownie przez `resendInvitation`.
  */
 export async function revokeInvitation(tx: Tx, input: RevokeInvitationInput): Promise<void> {
-  const now = input.now ?? new Date();
+  const explicitNow = input.now;
+  const now = explicitNow ?? new Date();
 
   await lockInvitation(tx, input.invitationId);
 
@@ -580,18 +638,27 @@ export async function revokeInvitation(tx: Tx, input: RevokeInvitationInput): Pr
     data: { status: "REVOKED" },
   });
 
-  await tx.mailOutbox.updateMany({
-    where: {
-      organizationId: input.organizationId,
-      invitationId: invitation.id,
-      status: "PENDING",
-    },
-    data: {
-      status: "CANCELLED",
-      lockedUntil: null,
-      updatedAt: now,
-    },
-  });
+  if (explicitNow !== undefined) {
+    await tx.mailOutbox.updateMany({
+      where: {
+        organizationId: input.organizationId,
+        invitationId: invitation.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CANCELLED",
+        lockedUntil: null,
+        updatedAt: explicitNow,
+      },
+    });
+  } else {
+    await tx.$executeRaw`
+      UPDATE "public"."mail_outbox"
+      SET "status" = 'CANCELLED', "lockedUntil" = NULL, "updatedAt" = now()
+      WHERE "organizationId" = ${input.organizationId}::uuid
+        AND "invitationId" = ${invitation.id}::uuid
+        AND "status" = 'PENDING'`;
+  }
 
   await writeInvitationAudit(tx, input.organizationId, input.actor, {
     action: "invitation.revoked",

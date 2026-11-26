@@ -46,15 +46,64 @@ export function isLocalMailSink(smtpUrl: string = currentSmtpUrl()): boolean {
 }
 
 /**
- * Limity czasu rozmowy z serwerem SMTP. Razem (do ok. 40 s) są krótsze niż dzierżawa zadania kolejki poczty
- * (`MAIL_LEASE_MS`, 60 s), więc zawieszony serwer nie pozwoli drugiemu procesowi przejąć tego samego zadania
- * i wysłać drugiego linku w trakcie pierwszej próby. Domyślne limity `nodemailer` sięgają minut.
+ * Twardy limit całkowitego czasu pojedynczej wysyłki `sendMail()` (ms), niezależny od bezczynności gniazda.
+ * Razem z odnowieniem dzierżawy na starcie zadania pozostaje wielokrotnie krótszy niż `MAIL_LEASE_MS` (90 s),
+ * więc nawet powolny serwer SMTP (tarpit) nie przekroczy dzierżawy.
+ */
+export const MAIL_SEND_DEADLINE_MS = 30_000;
+
+/**
+ * Limity czasu gniazda w `nodemailer` (domyślnie sięgają minut). Uzupełniają twardy limit
+ * `MAIL_SEND_DEADLINE_MS`, przerywając szybciej zerwane połączenia i bezczynne gniazda.
  */
 export const SMTP_TIMEOUTS = {
   connectionTimeout: 10_000,
   greetingTimeout: 10_000,
   socketTimeout: 20_000,
 } as const;
+
+export interface ClosableMailTransport {
+  sendMail: (options: { from: string } & OutgoingMail) => Promise<unknown>;
+  close: () => void;
+}
+
+/**
+ * Wysyła wiadomość przez transport SMTP z twardym limitem czasu całkowitego (`MAIL_SEND_DEADLINE_MS`).
+ * Po przekroczeniu terminu zamyka transport i odrzuca obietnicę bez wycieku timera ani gniazda.
+ */
+export async function sendMailWithDeadline(
+  transport: ClosableMailTransport,
+  mail: { from: string } & OutgoingMail,
+  deadlineMs = MAIL_SEND_DEADLINE_MS,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const sendPromise = transport.sendMail(mail);
+    // Tłumimy ewentualne późne odrzucenie po zamknięciu transportu przy przekroczeniu terminu.
+    void sendPromise.catch(() => undefined);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        try {
+          transport.close();
+        } catch {
+          // Ignorujemy błąd zamykania transportu przy przekroczeniu terminu.
+        }
+        reject(new Error(`Przekroczono limit czasu wysyłki SMTP (${deadlineMs} ms)`));
+      }, deadlineMs);
+      timer.unref?.();
+    });
+
+    await Promise.race([sendPromise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    try {
+      transport.close();
+    } catch {
+      // Transport mógł zostać już zamknięty.
+    }
+  }
+}
 
 export async function sendMail(mail: OutgoingMail): Promise<void> {
   const smtpUrl = currentSmtpUrl();
@@ -63,7 +112,7 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
     return;
   }
   const transport = nodemailer.createTransport({ url: smtpUrl, ...SMTP_TIMEOUTS });
-  await transport.sendMail({ from: currentMailFrom(), ...mail });
+  await sendMailWithDeadline(transport, { from: currentMailFrom(), ...mail });
 }
 
 const escapeHtml = (value: string) =>
