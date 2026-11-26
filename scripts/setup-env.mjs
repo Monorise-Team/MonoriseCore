@@ -32,6 +32,7 @@ const files = {
     "CORE_API_AUDIENCE=http://localhost:3200",
     "CORE_SMTP_URL=smtp://localhost:1125",
     "CORE_MAIL_FROM=Monorise <no-reply@monorise.studio>",
+    "# Osobny kanał powiadomień (CORE_NOTIFICATIONS_SMTP_URL, CORE_NOTIFICATIONS_FROM, CORE_NOTIFICATIONS_UNSUBSCRIBE_SECRET) lokalnie korzysta z ustawień powyżej.",
     "CORE_DEV_TRUST_DOMAINS=1",
   ],
 };
