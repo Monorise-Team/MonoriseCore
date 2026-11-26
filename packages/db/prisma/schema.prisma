@@ -321,8 +321,10 @@ model Organization {
   appAccesses          AppAccess[]
   outboxEvents         OutboxEvent[]
   auditLogs            AuditLog[]
-  idempotencyKeys      IdempotencyKey[]
-  mailOutbox           MailOutbox[]
+  idempotencyKeys         IdempotencyKey[]
+  mailOutbox              MailOutbox[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@map("organizations")
   @@schema("public")
@@ -424,8 +426,9 @@ model Account {
   updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
   deactivatedAt     DateTime?        @db.Timestamptz(3)
   invitations       Invitation[]
-  roleAssignments   RoleAssignment[]
-  appAccesses       AppAccess[]
+  roleAssignments         RoleAssignment[]
+  appAccesses             AppAccess[]
+  notificationPreferences NotificationPreference[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -819,10 +822,11 @@ model IdempotencyKey {
   @@schema("public")
 }
 
-// ── Transakcyjna kolejka wysyłki poczty (MonoriseCore#60) ─────────────────────────────────────────
+// ── Transakcyjna kolejka wysyłki poczty (MonoriseCore#60, MonoriseCore#86) ───────────────────────
 
 enum MailKind {
   INVITATION
+  NOTIFICATION
 
   @@schema("public")
 }
@@ -839,26 +843,97 @@ enum MailStatus {
 /// Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
 /// (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
 /// Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
-/// jest zdefiniowany w migracji.
+/// oraz ograniczenie CHECK dopasowania `kind` do `invitationId`/`notificationId` są zdefiniowane w migracjach.
 model MailOutbox {
-  id             String       @id @db.Uuid
-  organizationId String       @db.Uuid
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id             String        @id @db.Uuid
+  organizationId String        @db.Uuid
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   kind           MailKind
-  invitationId   String       @db.Uuid
-  invitation     Invitation   @relation(fields: [organizationId, invitationId], references: [organizationId, id], onDelete: Cascade)
-  status         MailStatus   @default(PENDING)
-  attempts       Int          @default(0)
-  nextAttemptAt  DateTime     @default(now()) @db.Timestamptz(3)
-  lockedUntil    DateTime?    @db.Timestamptz(3)
-  lastAttemptAt  DateTime?    @db.Timestamptz(3)
-  sentAt         DateTime?    @db.Timestamptz(3)
-  failedAt       DateTime?    @db.Timestamptz(3)
+  invitationId   String?       @db.Uuid
+  invitation     Invitation?   @relation(fields: [organizationId, invitationId], references: [organizationId, id], onDelete: Cascade)
+  notificationId String?       @db.Uuid
+  notification   Notification? @relation(fields: [organizationId, notificationId], references: [organizationId, id], onDelete: Cascade)
+  status         MailStatus    @default(PENDING)
+  attempts       Int           @default(0)
+  nextAttemptAt  DateTime      @default(now()) @db.Timestamptz(3)
+  lockedUntil    DateTime?     @db.Timestamptz(3)
+  lastAttemptAt  DateTime?     @db.Timestamptz(3)
+  sentAt         DateTime?     @db.Timestamptz(3)
+  failedAt       DateTime?     @db.Timestamptz(3)
   lastError      String?
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
   @@index([organizationId, invitationId])
+  @@index([organizationId, notificationId])
   @@map("mail_outbox")
+  @@schema("public")
+}
+
+// ── Powiadomienia produktów i ustawienia odbiorców (MonoriseCore#86, ADR-0048) ────────────────────
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  SKIPPED
+  FAILED
+
+  @@schema("public")
+}
+
+enum NotificationSkipReason {
+  PREFERENCE_OFF
+  NO_ACCESS
+
+  @@schema("public")
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+
+  @@schema("public")
+}
+
+/// Powiadomienie e-mail zlecone przez produkt platformy Monorise (ADR-0048).
+model Notification {
+  id                 String                  @id @db.Uuid
+  organizationId     String                  @db.Uuid
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product            String
+  category           String
+  recipientAccountId String                  @db.Uuid
+  title              String
+  body               String
+  actionUrl          String?
+  status             NotificationStatus      @default(QUEUED)
+  skipReason         NotificationSkipReason?
+  createdAt          DateTime                @default(now()) @db.Timestamptz(3)
+  sentAt             DateTime?               @db.Timestamptz(3)
+  mailOutbox         MailOutbox[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, recipientAccountId])
+  @@map("notifications")
+  @@schema("public")
+}
+
+/// Ustawienie powiadomień konta w firmie dla kategorii i kanału (ADR-0048).
+/// Brak wiersza oznacza powiadomienia włączone (`enabled = true`).
+model NotificationPreference {
+  id             String              @id @db.Uuid
+  organizationId String              @db.Uuid
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId      String              @db.Uuid
+  account        Account             @relation(fields: [organizationId, accountId], references: [organizationId, id], onDelete: Cascade)
+  category       String
+  channel        NotificationChannel @default(EMAIL)
+  enabled        Boolean             @default(true)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, accountId, category, channel], map: "notification_preferences_org_account_category_channel_key")
+  @@index([organizationId])
+  @@map("notification_preferences")
   @@schema("public")
 }

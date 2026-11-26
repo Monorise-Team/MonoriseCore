@@ -80,7 +80,9 @@ export const ModelName = {
   AppAccess: 'AppAccess',
   OutboxEvent: 'OutboxEvent',
   IdempotencyKey: 'IdempotencyKey',
-  MailOutbox: 'MailOutbox'
+  MailOutbox: 'MailOutbox',
+  Notification: 'Notification',
+  NotificationPreference: 'NotificationPreference'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -580,6 +582,7 @@ export const MailOutboxScalarFieldEnum = {
   organizationId: 'organizationId',
   kind: 'kind',
   invitationId: 'invitationId',
+  notificationId: 'notificationId',
   status: 'status',
   attempts: 'attempts',
   nextAttemptAt: 'nextAttemptAt',
@@ -593,6 +596,37 @@ export const MailOutboxScalarFieldEnum = {
 } as const
 
 export type MailOutboxScalarFieldEnum = (typeof MailOutboxScalarFieldEnum)[keyof typeof MailOutboxScalarFieldEnum]
+
+
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  product: 'product',
+  category: 'category',
+  recipientAccountId: 'recipientAccountId',
+  title: 'title',
+  body: 'body',
+  actionUrl: 'actionUrl',
+  status: 'status',
+  skipReason: 'skipReason',
+  createdAt: 'createdAt',
+  sentAt: 'sentAt'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
+
+
+export const NotificationPreferenceScalarFieldEnum = {
+  id: 'id',
+  organizationId: 'organizationId',
+  accountId: 'accountId',
+  category: 'category',
+  channel: 'channel',
+  enabled: 'enabled',
+  updatedAt: 'updatedAt'
+} as const
+
+export type NotificationPreferenceScalarFieldEnum = (typeof NotificationPreferenceScalarFieldEnum)[keyof typeof NotificationPreferenceScalarFieldEnum]
 
 
 export const SortOrder = {
