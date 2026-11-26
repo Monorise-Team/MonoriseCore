@@ -57,6 +57,8 @@ Dostępne endpointy Core API (`/core/v1`):
 
 Endpointy listowe (`/employees`, `/invitations`, `/units`, `/units/{unitId}/members`, `/permissions`, `/roles`, `/role-assignments`, `/entitlements`, `/app-access`) przyjmują parametry `?limit=` (1–100, domyślnie 50) i `?cursor=` (kursor po `id`) oraz zwracają `meta.nextCursor` (`null` na ostatniej stronie). Odczyty (poza zaproszeniami oraz filtrowaniem widoczności przypisań i dostępu do aplikacji) działają dla każdego aktywnego konta firmy; operacje zapisu wymagają odpowiednich uprawnień `core.*` w wymaganym zakresie albo roli Ownera.
 
+Operacje tworzące (`POST`) przyjmują opcjonalny nagłówek `Idempotency-Key` (1–255 drukowalnych znaków ASCII, ważny 24 godziny, izolowany per firma i wywołujący w tabeli `idempotency_keys` z RLS): powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez powtarzania zapisu ani efektów ubocznych (np. wysyłki e-maila), a użycie tego samego klucza z inną treścią zwraca `409 CONFLICT`; nieprawidłowy nagłówek zwraca `400 VALIDATION_FAILED`, a odpowiedzi błędów nie są zapisywane. Wygasłe klucze usuwa okresowo funkcja bazy `idempotency_keys_cleanup_expired` (`CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS`, domyślnie co godzinę, `0` wyłącza).
+
 ## Zaproszenia pracowników (konto `INVITED` i aktywacja)
 
 Konta pracowników powstają wyłącznie z zaproszenia (ADR-0021). Adres e-mail musi należeć do zweryfikowanej domeny firmy (`OrganizationDomain.status = VERIFIED`); darmowe skrzynki pocztowe (ADR-0019) i zajęte adresy są odrzucane (`422` / `409` bez zdradzania innych firm).

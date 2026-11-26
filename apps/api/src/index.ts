@@ -1,5 +1,6 @@
 import { createDb } from "@core/db";
 import { startOutboxPublisher } from "./event-feed.js";
+import { parseIdempotencyCleanupIntervalMs, startIdempotencyCleanup } from "./idempotency.js";
 import { registerCorePermissions } from "./permissions-registry.js";
 import { registerCoreRoleTemplates } from "./role-templates-registry.js";
 import { buildServer } from "./server.js";
@@ -41,6 +42,21 @@ if (publishIntervalMs > 0) {
     onError: (error) => app.log.error({ err: error }, "wysyłka zdarzeń z outboxa nie powiodła się"),
   });
   app.addHook("onClose", async () => stopPublisher());
+}
+
+// Sprzątanie wygasłych kluczy powtórzeń Idempotency-Key (MonoriseCore#30); 0 wyłącza
+const idempotencyCleanupIntervalMs = parseIdempotencyCleanupIntervalMs(
+  process.env.CORE_IDEMPOTENCY_CLEANUP_INTERVAL_MS,
+);
+if (idempotencyCleanupIntervalMs > 0) {
+  const stopIdempotencyCleanup = startIdempotencyCleanup({
+    db,
+    intervalMs: idempotencyCleanupIntervalMs,
+    onError: (error) => app.log.error({ err: error }, "sprzątanie wygasłych kluczy Idempotency-Key nie powiodło się"),
+  });
+  app.addHook("onClose", async () => {
+    await stopIdempotencyCleanup();
+  });
 }
 
 await app.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 3200) });

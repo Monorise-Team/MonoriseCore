@@ -1,14 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "@core/contracts";
 import type { PrismaClient } from "@core/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildOpenApiDocument, serializeOpenApiDocument, type OpenApiSpec } from "../src/openapi.js";
-import { ROUTE_LIST, toOpenApiPath } from "../src/routes.js";
+import { ROUTE_LIST, supportsIdempotencyKey, toOpenApiPath } from "../src/routes.js";
 import { buildServer } from "../src/server.js";
 
 const COMMITTED_OPENAPI_PATH = resolve(import.meta.dirname, "../../../openapi/core-api.json");
 
-const registeredRoutes: { method: string; path: string }[] = [];
+const registeredRoutes: { method: string; path: string; idempotent: boolean }[] = [];
 let app: ReturnType<typeof buildServer>;
 let document: OpenApiSpec;
 
@@ -42,7 +43,8 @@ beforeAll(() => {
       for (const method of methods) {
         const upper = method.toUpperCase();
         if (upper === "HEAD" || upper === "OPTIONS") continue;
-        registeredRoutes.push({ method: upper, path: toOpenApiPath(route.url) });
+        const idempotent = Boolean((route.config as { idempotent?: boolean } | undefined)?.idempotent);
+        registeredRoutes.push({ method: upper, path: toOpenApiPath(route.url), idempotent });
       }
     },
   });
@@ -145,5 +147,42 @@ describe("OpenAPI Core API", () => {
     expect(response.json()).toEqual(document);
     expect(response.json()).not.toHaveProperty("data");
     expect(response.json()).not.toHaveProperty("error");
+  });
+
+  it("rejestruje każdą trasę POST z tokenem użytkownika przez registerPostRoute i dokumentuje Idempotency-Key dokładnie dla nich", () => {
+    const idempotentRoutes = ROUTE_LIST.filter(supportsIdempotencyKey);
+    expect(idempotentRoutes.length).toBeGreaterThan(0);
+
+    const registeredByKey = new Map(registeredRoutes.map((route) => [`${route.method} ${route.path}`, route]));
+
+    for (const route of ROUTE_LIST) {
+      const expectedIdempotent = supportsIdempotencyKey(route);
+      const registered = registeredByKey.get(`${route.method} ${route.path}`);
+      expect(registered, `Brak zarejestrowanej trasy ${route.method} ${route.path}`).toBeDefined();
+      expect(
+        registered?.idempotent,
+        `Trasa ${route.method} ${route.path} powinna mieć idempotent=${String(expectedIdempotent)}`,
+      ).toBe(expectedIdempotent);
+
+      const operation = document.paths[route.path]?.[route.method.toLowerCase()];
+      expect(operation).toBeDefined();
+      const idemParam = operation?.parameters?.find((p) => p.in === "header" && p.name === IDEMPOTENCY_KEY_HEADER);
+      const successResponse = operation?.responses[String(route.successStatus)];
+
+      if (expectedIdempotent) {
+        expect(idemParam, `Brak nagłówka ${IDEMPOTENCY_KEY_HEADER} w ${route.method} ${route.path}`).toBeDefined();
+        expect(idemParam?.required).toBe(false);
+        expect(idemParam?.schema).toMatchObject({ type: "string", minLength: 1, maxLength: 255 });
+        expect(operation?.responses["400"]).toBeDefined();
+        expect(operation?.responses["409"]).toBeDefined();
+        expect(successResponse?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toMatchObject({
+          required: false,
+          schema: { type: "string", enum: ["true"] },
+        });
+      } else {
+        expect(idemParam).toBeUndefined();
+        expect(successResponse?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toBeUndefined();
+      }
+    }
   });
 });
