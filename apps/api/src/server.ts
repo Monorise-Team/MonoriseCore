@@ -7,12 +7,15 @@ import {
   CreateRoleAssignment,
   CreateUnit,
   DIRECTORY_READ_SCOPE,
+  emailDomain,
   EVENTS_READ_SCOPE,
   ProductEventsQuery,
   EntitlementStatus,
   IDEMPOTENCY_REPLAYED_HEADER,
   InvitationStatus,
+  isFreeEmailDomain,
   MAX_DIRECTORY_FILTER_IDS,
+  normalizeEmail,
   PageQuery,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
@@ -20,6 +23,7 @@ import {
   PutUnitMember,
   TransferOrganizationOwner,
   UnitStatus,
+  UpdateEmployee,
   UpdateRole,
   UpdateUnit,
   type ApiErrorBody,
@@ -126,6 +130,7 @@ interface MachineCaller {
   scopes: Set<string>;
 }
 
+const EmployeeIdParams = z.object({ employeeId: z.uuid() });
 const UnitIdParams = z.object({ unitId: z.uuid() });
 const UnitMemberParams = z.object({ unitId: z.uuid(), employeeId: z.uuid() });
 const ProductKeyParams = z.object({ productKey: ProductKey });
@@ -248,6 +253,73 @@ async function lockOrganizationUnits(tx: Tx, organizationId: string): Promise<vo
 /** Serializuje zapisy na roli i przypisaniach tej roli (archiwizacja vs nowe przypisanie). */
 async function lockRole(tx: Tx, roleId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('role:' || ${roleId}::uuid::text, 0))`;
+}
+
+/** Serializuje zapisy tego samego służbowego adresu e-mail w jednej firmie na czas transakcji. */
+async function lockEmployeeWorkEmail(tx: Tx, organizationId: string, normalizedEmail: string): Promise<void> {
+  const lockKey = `employee_work_email:${organizationId}:${normalizedEmail}`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}::text, 0))`;
+}
+
+/**
+ * Normalizuje służbowy adres e-mail pracownika i sprawdza reguły firmy: brak darmowej domeny (ADR-0019),
+ * zweryfikowana domena tej firmy (`VERIFIED`) oraz brak duplikatu wśród pracowników i kont firmy.
+ */
+async function validateOrganizationWorkEmail(
+  tx: Tx,
+  organizationId: string,
+  rawEmail: string,
+  excludeEmployeeId?: string,
+): Promise<string> {
+  const normalized = normalizeEmail(rawEmail);
+  const domain = emailDomain(normalized);
+  if (!domain || isFreeEmailDomain(domain)) {
+    throw new ApiFailure(
+      422,
+      "EMAIL_DOMAIN_NOT_ALLOWED",
+      "Służbowy adres e-mail nie może należeć do darmowej skrzynki pocztowej",
+      [{ field: "workEmail", message: "Darmowe domeny pocztowe nie mogą należeć do firmy" }],
+    );
+  }
+
+  const verifiedDomain = await tx.organizationDomain.findFirst({
+    where: { organizationId, domain, status: "VERIFIED" },
+    select: { id: true },
+  });
+  if (!verifiedDomain) {
+    throw new ApiFailure(
+      422,
+      "EMAIL_DOMAIN_NOT_ALLOWED",
+      "Służbowy adres e-mail musi należeć do zweryfikowanej domeny firmy",
+      [{ field: "workEmail", message: "Domena adresu e-mail nie jest zweryfikowaną domeną tej firmy" }],
+    );
+  }
+
+  await lockEmployeeWorkEmail(tx, organizationId, normalized);
+
+  const [duplicateEmployee, duplicateAccount] = await Promise.all([
+    tx.employee.findFirst({
+      where: {
+        organizationId,
+        workEmail: { equals: normalized, mode: "insensitive" },
+        ...(excludeEmployeeId !== undefined ? { id: { not: excludeEmployeeId } } : {}),
+      },
+      select: { id: true },
+    }),
+    tx.account.findFirst({
+      where: {
+        organizationId,
+        normalizedEmail: { equals: normalized, mode: "insensitive" },
+        ...(excludeEmployeeId !== undefined ? { employeeId: { not: excludeEmployeeId } } : {}),
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (duplicateEmployee || duplicateAccount) {
+    throw new ApiFailure(409, "CONFLICT", "Ten służbowy adres e-mail jest już używany w tej firmie");
+  }
+
+  return normalized;
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -842,13 +914,15 @@ export function buildServer({
     const body = parseInput(CreateEmployee, request.body);
     const snapshot = await loadPermissionSnapshot(tx, who);
     assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+    const normalizedWorkEmail =
+      body.workEmail !== undefined ? await validateOrganizationWorkEmail(tx, who.organizationId, body.workEmail) : null;
     const created = await tx.employee.create({
       data: {
         id: uuidv7(),
         organizationId: who.organizationId,
         firstName: body.firstName,
         lastName: body.lastName,
-        workEmail: body.workEmail ?? null,
+        workEmail: normalizedWorkEmail,
         jobTitle: body.jobTitle ?? null,
       },
     });
@@ -859,6 +933,94 @@ export function buildServer({
       metadata: {},
     });
     return serializeEmployee({ ...created, account: null });
+  });
+
+  app.route({
+    method: ROUTES.updateEmployee.method,
+    url: toFastifyPath(ROUTES.updateEmployee.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const params = parseInput(EmployeeIdParams, request.params);
+      const body = parseInput(UpdateEmployee, request.body);
+
+      const updated = await withOrganization(db, who.organizationId, async (tx) => {
+        const employee = await tx.employee.findUnique({
+          where: { id: params.employeeId },
+          include: { account: { select: { id: true, status: true, normalizedEmail: true } } },
+        });
+        if (!employee) throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono pracownika");
+
+        const snapshot = await loadPermissionSnapshot(tx, who);
+        assertCorePermission(snapshot, CORE_PERMISSIONS.keys["employees.manage"], {});
+
+        if (employee.status === "ANONYMIZED") {
+          throw new ApiFailure(409, "CONFLICT", "Nie można edytować zanonimizowanego pracownika");
+        }
+
+        let nextWorkEmail = employee.workEmail;
+        if (body.workEmail !== undefined) {
+          if (employee.account !== null) {
+            const accountNormalized = normalizeEmail(employee.account.normalizedEmail);
+            if (body.workEmail === null || normalizeEmail(body.workEmail) !== accountNormalized) {
+              throw new ApiFailure(
+                409,
+                "CONFLICT",
+                "Nie można zmienić służbowego adresu e-mail pracownika powiązanego z kontem logowania",
+              );
+            }
+            nextWorkEmail = accountNormalized;
+          } else if (body.workEmail === null) {
+            nextWorkEmail = null;
+          } else {
+            nextWorkEmail = await validateOrganizationWorkEmail(tx, who.organizationId, body.workEmail, employee.id);
+          }
+        }
+
+        const nextFirstName = body.firstName ?? employee.firstName;
+        const nextLastName = body.lastName ?? employee.lastName;
+        const nextJobTitle = body.jobTitle !== undefined ? body.jobTitle : employee.jobTitle;
+
+        const changedFields: ("firstName" | "lastName" | "workEmail" | "jobTitle")[] = [];
+        if (nextFirstName !== employee.firstName) changedFields.push("firstName");
+        if (nextLastName !== employee.lastName) changedFields.push("lastName");
+        if (nextWorkEmail !== employee.workEmail) changedFields.push("workEmail");
+        if (nextJobTitle !== employee.jobTitle) changedFields.push("jobTitle");
+
+        if (changedFields.length === 0) {
+          return serializeEmployee(employee);
+        }
+
+        const saved = await tx.employee.update({
+          where: { id: employee.id },
+          data: {
+            ...(nextFirstName !== employee.firstName ? { firstName: nextFirstName } : {}),
+            ...(nextLastName !== employee.lastName ? { lastName: nextLastName } : {}),
+            ...(nextWorkEmail !== employee.workEmail ? { workEmail: nextWorkEmail } : {}),
+            ...(nextJobTitle !== employee.jobTitle ? { jobTitle: nextJobTitle } : {}),
+          },
+          include: { account: { select: { id: true, status: true } } },
+        });
+
+        const nameChanged = nextFirstName !== employee.firstName || nextLastName !== employee.lastName;
+        if (employee.account !== null && nameChanged) {
+          await tx.authUser.update({
+            where: { id: employee.account.id },
+            data: { name: `${nextFirstName} ${nextLastName}` },
+          });
+        }
+
+        await writeAudit(tx, request, who, {
+          action: "employee.updated",
+          resourceType: "employee",
+          resourceId: saved.id,
+          metadata: { fields: changedFields },
+        });
+
+        return serializeEmployee(saved);
+      });
+
+      return send(request, updated);
+    },
   });
 
   function invitationActorFromRequest(request: FastifyRequest, who: Caller): InvitationActor {

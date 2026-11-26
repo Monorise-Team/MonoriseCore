@@ -43,13 +43,24 @@ interface Company extends Identity {
 
 async function createCompany(name: string): Promise<Company> {
   const id = uuidv7();
-  const domain = `${id.slice(-8)}-${name}.test`;
+  const domain = `${id.slice(-8)}-${name.toLowerCase()}.test`;
   const employeeId = uuidv7();
   const accountId = uuidv7();
   const email = `anna@${domain}`;
   await db.authUser.create({ data: { id: accountId, name: "Anna", email, emailVerified: true } });
   await withOrganization(db, id, async (tx) => {
     await tx.organization.create({ data: { id, name, createdVia: "SELF_SIGNUP", status: "ACTIVE" } });
+    await tx.organizationDomain.create({
+      data: {
+        id: uuidv7(),
+        organizationId: id,
+        domain,
+        status: "VERIFIED",
+        verificationMethod: "DNS_TXT",
+        verifiedAt: new Date("2026-11-20T00:00:00.000Z"),
+        isPrimary: true,
+      },
+    });
     await tx.employee.create({ data: { id: employeeId, organizationId: id, firstName: "Anna", lastName: name } });
     await tx.account.create({
       data: { id: accountId, organizationId: id, employeeId, email, normalizedEmail: email, status: "ACTIVE" },
@@ -1638,16 +1649,6 @@ describe("Core API", () => {
     const deactivated = await createMember(company, "Adam", "Wylaczony");
 
     await withOrganization(db, company.id, async (tx) => {
-      await tx.organizationDomain.create({
-        data: {
-          id: uuidv7(),
-          organizationId: company.id,
-          domain: company.domain,
-          status: "VERIFIED",
-          verificationMethod: "DNS_TXT",
-          isPrimary: true,
-        },
-      });
       await tx.account.update({ where: { id: invited.accountId }, data: { status: "INVITED" } });
       await tx.account.update({
         where: { id: deactivated.accountId },

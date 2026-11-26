@@ -51,7 +51,7 @@ Każda firma ma jednego Ownera (`Organization.ownerAccountId`, ustawianego przy 
 Dostępne endpointy Core API (`/core/v1`):
 
 - `GET /core/v1/me`, `GET /core/v1/organization` — konto (z `isOwner`), pracownik i firma,
-- `GET /core/v1/employees`, `POST /core/v1/employees` — stronicowana lista i dodawanie pracowników,
+- `GET /core/v1/employees`, `POST /core/v1/employees`, `PATCH /core/v1/employees/{employeeId}` — stronicowana lista, dodawanie i edycja danych pracowników (z weryfikacją domeny `workEmail` i synchronizacją nazwy konta logowania),
 - `GET /core/v1/units`, `POST /core/v1/units`, `PATCH /core/v1/units/{unitId}` — stronicowane drzewo jednostek (filtrowanie `?status=`, zmiana nazwy, przenoszenie z kontrolą cykli, archiwizacja bez aktywnych dzieci),
 - `GET /core/v1/units/{unitId}/members`, `PUT /core/v1/units/{unitId}/members/{employeeId}`, `DELETE /core/v1/units/{unitId}/members/{employeeId}` — stronicowani członkowie jednostek.
 
@@ -147,7 +147,7 @@ Produkty deklarują swoje uprawnienia w kodzie za pomocą `definePermissions` z 
 
 - `core_app` ma na tabeli `audit_log` wyłącznie `SELECT` i `INSERT`, a wyzwalacz `BEFORE UPDATE` blokuje modyfikację wpisów nawet dla roli właściciela tabel (`core_owner`). Usunięcie firmy kaskadowo usuwa jej wpisy (ADR-0041).
 - RLS odcina firmy od cudzych wpisów i od wpisów platformy (`organizationId = null`); zapisy firmowe wymagają `withOrganization`, a platformowe (rejestracja uprawnień) działają bez kontekstu firmy.
-- Zapisy w Core API (`employee.created`, `unit.created`, `unit.updated`, `unit.member.set`, `unit.member.removed`) zapisują wpis w tej samej transakcji bez danych osobowych w `metadata`, a rejestracja uprawnień zapisuje wpis `product.permissions.registered` tylko wtedy, gdy manifest coś zmienił.
+- Zapisy w Core API (`employee.created`, `employee.updated`, `unit.created`, `unit.updated`, `unit.member.set`, `unit.member.removed`) zapisują wpis w tej samej transakcji bez danych osobowych w `metadata`, a rejestracja uprawnień zapisuje wpis `product.permissions.registered` tylko wtedy, gdy manifest coś zmienił.
 
 ## Opis API (OpenAPI)
 
