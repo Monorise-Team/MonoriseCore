@@ -82,6 +82,17 @@ export function workScheduleEquals(a: WorkSchedule | null, b: WorkSchedule | nul
   return true;
 }
 
+/**
+ * Efektywny harmonogram pracy pracownika: indywidualny harmonogram pracownika, gdy jest ustawiony
+ * (nie-`null`), w przeciwnym razie domyślny harmonogram firmy, albo `null`, gdy oba są nieustawione.
+ */
+export function effectiveWorkSchedule(
+  employeeSchedule: WorkSchedule | null | undefined,
+  organizationDefault: WorkSchedule | null | undefined,
+): WorkSchedule | null {
+  return employeeSchedule ?? organizationDefault ?? null;
+}
+
 const SUPPORTED_IANA_TIME_ZONES: ReadonlySet<string> = new Set([...Intl.supportedValuesOf("timeZone"), "UTC"]);
 
 /** Identyfikatory IANA z podziałem na region i miasto/alias (odrzuca stałe przesunięcia typu `+02:00` i skróty typu `EST`). */

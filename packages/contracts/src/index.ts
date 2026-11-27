@@ -51,6 +51,7 @@ export {
 
 export {
   DEFAULT_ORGANIZATION_TIME_ZONE,
+  effectiveWorkSchedule,
   isValidIanaTimeZone,
   MAX_TIME_ZONE_LENGTH,
   TimeZone,
@@ -269,6 +270,7 @@ export const Organization = z.object({
   name: z.string(),
   status: OrganizationStatus,
   timeZone: TimeZone,
+  defaultWorkSchedule: WorkSchedule.nullable(),
   domains: z.array(OrganizationDomain),
   createdAt: z.string(),
 });
@@ -278,9 +280,10 @@ export const UpdateOrganization = z
   .object({
     name: z.string().trim().min(2).max(120).optional(),
     timeZone: TimeZone.optional(),
+    defaultWorkSchedule: WorkSchedule.nullable().optional(),
   })
   .strict()
-  .refine((data) => data.name !== undefined || data.timeZone !== undefined, {
+  .refine((data) => data.name !== undefined || data.timeZone !== undefined || data.defaultWorkSchedule !== undefined, {
     message: "Podaj co najmniej jedno pole do zmiany",
   });
 export type UpdateOrganization = z.infer<typeof UpdateOrganization>;
@@ -359,7 +362,7 @@ export const UpdateEmployee = z
   );
 export type UpdateEmployee = z.infer<typeof UpdateEmployee>;
 
-/** Kim jestem: konto, pracownik i firma z tokenu. */
+/** Kim jestem: konto, pracownik (z efektywnym harmonogramem pracy) i firma z tokenu. */
 export const Me = z.object({
   account: z.object({
     id: z.uuid(),
@@ -367,8 +370,16 @@ export const Me = z.object({
     status: AccountStatus,
     isOwner: z.boolean(),
   }),
-  employee: Employee,
-  organization: Organization.pick({ id: true, name: true, status: true, timeZone: true }),
+  employee: Employee.extend({
+    effectiveWorkSchedule: WorkSchedule.nullable(),
+  }),
+  organization: Organization.pick({
+    id: true,
+    name: true,
+    status: true,
+    timeZone: true,
+    defaultWorkSchedule: true,
+  }),
 });
 export type Me = z.infer<typeof Me>;
 
@@ -695,6 +706,7 @@ export const DirectoryUnitMember = z.object({
   accountId: z.uuid().nullable(),
   role: UnitMembershipRole,
   workSchedule: WorkSchedule.nullable(),
+  effectiveWorkSchedule: WorkSchedule.nullable(),
 });
 export type DirectoryUnitMember = z.infer<typeof DirectoryUnitMember>;
 
@@ -705,6 +717,7 @@ export const DirectoryEmployee = z.object({
   lastName: z.string(),
   status: EmployeeStatus,
   workSchedule: WorkSchedule.nullable(),
+  effectiveWorkSchedule: WorkSchedule.nullable(),
 });
 export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
 
@@ -714,6 +727,7 @@ export const DirectoryOrganization = Organization.pick({
   name: true,
   status: true,
   timeZone: true,
+  defaultWorkSchedule: true,
 });
 export type DirectoryOrganization = z.infer<typeof DirectoryOrganization>;
 

@@ -36,6 +36,7 @@ import {
   DomainName,
   Employee,
   DirectoryUnitMember,
+  effectiveWorkSchedule,
   emailDomain,
   Entitlement,
   getNotificationCategory,
@@ -446,9 +447,16 @@ describe("kontrakty", () => {
           workEmail: "anna@acme.test",
           jobTitle: null,
           workSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
+          effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
           status: "ACTIVE",
         },
-        organization: { id: UUID_3, name: "Acme", status: "ACTIVE", timeZone: "Europe/Warsaw" },
+        organization: {
+          id: UUID_3,
+          name: "Acme",
+          status: "ACTIVE",
+          timeZone: "Europe/Warsaw",
+          defaultWorkSchedule: null,
+        },
       }).account.isOwner,
     ).toBe(true);
   });
@@ -743,11 +751,13 @@ describe("kontrakty", () => {
       name: "Acme",
       status: "ACTIVE",
       timeZone: "Europe/Warsaw",
+      defaultWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
       domains: [parsedDomain],
       createdAt: "2026-11-26T10:00:00.000Z",
     });
     expect(parsedOrg.domains).toHaveLength(1);
     expect(parsedOrg.timeZone).toBe("Europe/Warsaw");
+    expect(parsedOrg.defaultWorkSchedule).toEqual({ "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 });
   });
 
   it("waliduje schematy dostępu do produktów, aplikacji i migawki uprawnień", () => {
@@ -812,8 +822,13 @@ describe("kontrakty", () => {
         accountId: UUID_3,
         role: "LEADER",
         workSchedule: { "1": 480, "2": 480 },
+        effectiveWorkSchedule: { "1": 480, "2": 480 },
       }),
-    ).toMatchObject({ accountId: UUID_3, workSchedule: { "1": 480, "2": 480 } });
+    ).toMatchObject({
+      accountId: UUID_3,
+      workSchedule: { "1": 480, "2": 480 },
+      effectiveWorkSchedule: { "1": 480, "2": 480 },
+    });
     expect(
       DirectoryEmployee.parse({
         id: UUID_1,
@@ -822,20 +837,27 @@ describe("kontrakty", () => {
         lastName: "Nowak",
         status: "ACTIVE",
         workSchedule: null,
+        effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
       }),
-    ).toMatchObject({ accountId: null, workSchedule: null });
+    ).toMatchObject({
+      accountId: null,
+      workSchedule: null,
+      effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
+    });
     expect(
       DirectoryOrganization.parse({
         id: UUID_2,
         name: "Acme",
         status: "ACTIVE",
         timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
       }),
     ).toEqual({
       id: UUID_2,
       name: "Acme",
       status: "ACTIVE",
       timeZone: "Europe/Warsaw",
+      defaultWorkSchedule: null,
     });
   });
 
@@ -1305,11 +1327,34 @@ describe("kontrakty", () => {
       expect(TimeZone.safeParse(badTz).success, `Powinno odrzucić strefę "${badTz}"`).toBe(false);
     }
 
-    // UpdateOrganization akceptuje samo name, samo timeZone, oba pola; odrzuca {} i null
+    // Efektywny harmonogram: własny pracownika -> domyślny firmy -> null
+    const companyDefault = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+    // Jan z własnym harmonogramem zachowuje swój mimo domyślnego harmonogramu firmy
+    expect(effectiveWorkSchedule(janPartTime, companyDefault)).toEqual(janPartTime);
+    // Anna bez indywidualnego harmonogramu dostaje domyślny harmonogram firmy
+    expect(effectiveWorkSchedule(null, companyDefault)).toEqual(companyDefault);
+    expect(effectiveWorkSchedule(undefined, companyDefault)).toEqual(companyDefault);
+    // Jawny pusty harmonogram pracownika {} nie spada do domyślnego firmy
+    expect(effectiveWorkSchedule({}, companyDefault)).toEqual({});
+    // Oba nieustawione -> null
+    expect(effectiveWorkSchedule(null, null)).toBeNull();
+    expect(effectiveWorkSchedule(undefined, undefined)).toBeNull();
+
+    // UpdateOrganization akceptuje samo name, samo timeZone, samo defaultWorkSchedule (obiekt albo null), dowolną kombinację; odrzuca {} i błędne wartości
     expect(UpdateOrganization.parse({ timeZone: "  America/New_York " })).toEqual({ timeZone: "America/New_York" });
-    expect(UpdateOrganization.parse({ name: "Acme", timeZone: "UTC" })).toEqual({ name: "Acme", timeZone: "UTC" });
+    expect(UpdateOrganization.parse({ defaultWorkSchedule: companyDefault })).toEqual({
+      defaultWorkSchedule: companyDefault,
+    });
+    expect(UpdateOrganization.parse({ defaultWorkSchedule: null })).toEqual({ defaultWorkSchedule: null });
+    expect(UpdateOrganization.parse({ name: "Acme", timeZone: "UTC", defaultWorkSchedule: janPartTime })).toEqual({
+      name: "Acme",
+      timeZone: "UTC",
+      defaultWorkSchedule: janPartTime,
+    });
     expect(UpdateOrganization.safeParse({}).success).toBe(false);
     expect(UpdateOrganization.safeParse({ timeZone: null }).success).toBe(false);
     expect(UpdateOrganization.safeParse({ timeZone: "Mars/Olympus" }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ defaultWorkSchedule: { "0": 480 } }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ defaultWorkSchedule: [480] }).success).toBe(false);
   });
 });
