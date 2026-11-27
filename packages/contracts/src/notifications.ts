@@ -62,6 +62,14 @@ export const NOTIFICATION_CATEGORIES = [
     name: "Przypisane zadania KivoTasks",
     description: "Powiadomienia o przypisaniu do zadań w KivoTasks.",
   },
+  {
+    key: "avenmail.alerts",
+    product: "avenmail",
+    channel: "notifications",
+    optional: true,
+    name: "Problemy ze skrzynką AvenMail",
+    description: "Powiadomienia, gdy AvenMail traci połączenie z Twoją skrzynką, na przykład po zmianie hasła.",
+  },
 ] as const;
 
 export type NotificationCategoryDefinition = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -72,6 +80,7 @@ export const NOTIFICATION_CATEGORY_KEYS = [
   "account",
   "timotime.reminders",
   "kivotasks.assignments",
+  "avenmail.alerts",
 ] as const satisfies readonly NotificationCategoryKey[];
 
 export const NotificationCategoryKey = z.enum(NOTIFICATION_CATEGORY_KEYS);

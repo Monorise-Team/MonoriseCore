@@ -44,7 +44,7 @@ const secrets = await ensureFirstPartyClients({
       redirectUris: [`${AVEN_WEB}/api/auth/callback`],
       confidential: true,
       resources: [AVEN_API, CORE_API],
-      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES],
+      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES, NOTIFICATIONS_SEND_SCOPE],
     },
     {
       clientId: "avenmail-desktop",
