@@ -1915,13 +1915,66 @@
       }
     },
     "/core/v1/notifications/unsubscribe/{token}": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "getUnsubscribeNotificationPage",
+        "summary": "Strona potwierdzenia wypisania z kategorii powiadomień",
+        "description": "Publiczna strona HTML otwierana po kliknięciu linku wypisania w stopce wiadomości e-mail. Żądanie `GET` nigdy nie zmienia ustawień (chroni przed automatycznym otwieraniem linków przez skanery poczty): wyświetla nazwę kategorii i firmy oraz formularz z przyciskiem wysyłającym `POST` na ten sam adres. Nieprawidłowy, zmanipulowany albo nieaktywny link zwraca neutralną stronę HTML ze statusem `404`.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "description": "Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona HTML z formularzem potwierdzenia wyłączenia powiadomień.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "Notifications"
         ],
         "operationId": "unsubscribeNotification",
         "summary": "Jednoklikowe wypisanie z kategorii powiadomień (RFC 8058)",
-        "description": "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`). Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed`. Nieprawidłowy albo zmanipulowany token zwraca `404 NOT_FOUND`.",
+        "description": "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; przyjmuje `application/x-www-form-urlencoded`, `multipart/form-data` lub puste żądanie). Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed` (tylko przy faktycznej zmianie wartości). Gdy żądanie akceptuje `text/html` (formularz ze strony potwierdzenia), zwraca stronę HTML z potwierdzeniem albo neutralny komunikat `404`; klienci jednoklikowi dostają JSON. Nieprawidłowy, zmanipulowany albo nieaktywny token zwraca `404 NOT_FOUND`.",
         "parameters": [
           {
             "name": "token",
@@ -1943,6 +1996,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/UnsubscribeNotificationResponse"
                 }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1952,6 +2010,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

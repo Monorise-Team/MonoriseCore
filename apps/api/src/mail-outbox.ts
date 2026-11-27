@@ -1,4 +1,4 @@
-import { getNotificationCategory, type NotificationCategoryKey } from "@core/contracts";
+import { getNotificationCategory, hasUnsafeUrlChars, type NotificationCategoryKey } from "@core/contracts";
 import {
   claimMailOutboxJobs,
   cleanupMailOutbox,
@@ -22,7 +22,9 @@ import {
   checkRecipientProductAccess,
   createUnsubscribeToken,
   isEmailPreferenceEnabled,
+  isOrganizationBlockedForNotifications,
   lockNotification,
+  redactUnsubscribeUrlTokens,
   resolveNotificationsUnsubscribeSecret,
 } from "./notifications.js";
 
@@ -174,15 +176,14 @@ export function computeMailBackoffMs(attempts: number): number {
 
 /**
  * Formatuje wewnętrzny komunikat błędu dla `mail_outbox.lastError`: przed przycięciem do 500 znaków
- * usuwa znaki NUL oraz cenzuruje dane uwierzytelniające z adresów URL (`://user:pass@`) i wartości `token=`.
+ * usuwa znaki NUL oraz cenzuruje dane uwierzytelniające z adresów URL (`://user:pass@`), wartości `token=`
+ * i ścieżki wypisania z powiadomień (`/core/v1/notifications/unsubscribe/<token>`).
  */
 export function formatMailError(error: unknown, maxLength = MAIL_LAST_ERROR_MAX_LENGTH): string {
   const raw = error instanceof Error ? error.message || error.name : String(error);
-  const redacted = raw
-    .replaceAll("\0", "")
-    .replace(URL_USERINFO_RE, "$1[redacted]@")
-    .replace(TOKEN_PARAM_RE, "$1[redacted]")
-    .trim();
+  const redacted = redactUnsubscribeUrlTokens(
+    raw.replaceAll("\0", "").replace(URL_USERINFO_RE, "$1[redacted]@").replace(TOKEN_PARAM_RE, "$1[redacted]"),
+  ).trim();
   const cleaned = redacted || "Nieznany błąd wysyłki poczty";
   if (cleaned.length <= maxLength) return cleaned;
   // Przycinamy po punktach kodowych Unicode, żeby nie rozciąć pary surogatów (UTF-8 w PostgreSQL).
@@ -394,18 +395,27 @@ export async function deliverMailJob(
   const explicitNow = options.now;
 
   const prepared: PreparedDelivery = await withOrganization(db, job.organizationId, async (tx) => {
-    if (job.kind === "INVITATION") {
-      if (!job.invitationId) {
-        const cancelled = await cancelJobFenced(tx, job, explicitNow);
-        return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+    switch (job.kind) {
+      case "INVITATION": {
+        if (!job.invitationId) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+        }
+        await lockInvitation(tx, job.invitationId);
+        break;
       }
-      await lockInvitation(tx, job.invitationId);
-    } else {
-      if (!job.notificationId) {
-        const cancelled = await cancelJobFenced(tx, job, explicitNow);
-        return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+      case "NOTIFICATION": {
+        if (!job.notificationId) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+        }
+        await lockNotification(tx, job.notificationId);
+        break;
       }
-      await lockNotification(tx, job.notificationId);
+      default: {
+        const exhaustive: never = job.kind;
+        throw new Error(`Nieobsługiwany rodzaj zadania mail_outbox: ${String(exhaustive)}`);
+      }
     }
 
     const currentJob = await tx.mailOutbox.findUnique({
@@ -476,13 +486,23 @@ export async function deliverMailJob(
             body: true,
             actionUrl: true,
             status: true,
-            organization: { select: { name: true } },
+            organization: { select: { name: true, status: true } },
           },
         });
 
         if (!notification || notification.status !== "QUEUED") {
           const cancelled = await cancelJobFenced(tx, job, explicitNow);
           return cancelled === 0 ? { action: "skip" } : { action: "cancelled" };
+        }
+
+        if (isOrganizationBlockedForNotifications(notification.organization.status)) {
+          const cancelled = await cancelJobFenced(tx, job, explicitNow);
+          if (cancelled === 0) return { action: "skip" };
+          await tx.notification.updateMany({
+            where: { id: notification.id, status: "QUEUED" },
+            data: { status: "SKIPPED", skipReason: "NO_ACCESS" },
+          });
+          return { action: "cancelled" };
         }
 
         const categoryDef = getNotificationCategory(notification.category);
@@ -540,6 +560,18 @@ export async function deliverMailJob(
           return { action: "skip" };
         }
 
+        let canonicalActionUrl: string | null = null;
+        if (notification.actionUrl !== null && !hasUnsafeUrlChars(notification.actionUrl)) {
+          try {
+            const parsed = new URL(notification.actionUrl);
+            if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+              canonicalActionUrl = parsed.href;
+            }
+          } catch {
+            canonicalActionUrl = null;
+          }
+        }
+
         return {
           action: "send_notification",
           to: access.email,
@@ -551,8 +583,13 @@ export async function deliverMailJob(
           categoryName: categoryDef.name,
           title: notification.title,
           body: notification.body,
-          actionUrl: notification.actionUrl,
+          actionUrl: canonicalActionUrl,
         };
+      }
+
+      default: {
+        const exhaustive: never = job.kind;
+        throw new Error(`Nieobsługiwany rodzaj zadania mail_outbox: ${String(exhaustive)}`);
       }
     }
   });
@@ -606,72 +643,97 @@ export async function deliverMailJob(
     const backoffMs = computeMailBackoffMs(job.attempts);
 
     const failureStatus = await withOrganization(db, job.organizationId, async (tx) => {
-      if (job.kind === "INVITATION") {
-        const invitation = await tx.invitation.findUnique({
-          where: { id: job.invitationId! },
-          select: {
-            status: true,
-            expiresAt: true,
-            account: { select: { status: true } },
-          },
-        });
-        const effectiveNow = explicitNow ?? (await readDbNow(tx));
-        if (
-          !invitation ||
-          effectiveInvitationStatus(invitation.status, invitation.expiresAt, effectiveNow) !== "PENDING" ||
-          invitation.account.status !== "INVITED"
-        ) {
-          const cancelled = await cancelJobFenced(tx, job, explicitNow);
-          return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
+      switch (job.kind) {
+        case "INVITATION": {
+          const invitation = await tx.invitation.findUnique({
+            where: { id: job.invitationId! },
+            select: {
+              status: true,
+              expiresAt: true,
+              account: { select: { status: true } },
+            },
+          });
+          const effectiveNow = explicitNow ?? (await readDbNow(tx));
+          if (
+            !invitation ||
+            effectiveInvitationStatus(invitation.status, invitation.expiresAt, effectiveNow) !== "PENDING" ||
+            invitation.account.status !== "INVITED"
+          ) {
+            const cancelled = await cancelJobFenced(tx, job, explicitNow);
+            return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
+          }
+
+          if (reachedMax) {
+            const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
+            return affected === 0 ? ("SKIPPED" as const) : ("FAILED" as const);
+          }
+
+          const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
+          return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
         }
 
-        if (reachedMax) {
-          const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
-          return affected === 0 ? ("SKIPPED" as const) : ("FAILED" as const);
+        case "NOTIFICATION": {
+          await lockNotification(tx, job.notificationId!);
+          const notification = await tx.notification.findUnique({
+            where: { id: job.notificationId! },
+            select: {
+              id: true,
+              recipientAccountId: true,
+              category: true,
+              status: true,
+              organization: { select: { status: true } },
+            },
+          });
+          if (!notification || notification.status !== "QUEUED") {
+            const cancelled = await cancelJobFenced(tx, job, explicitNow);
+            return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
+          }
+
+          if (isOrganizationBlockedForNotifications(notification.organization.status)) {
+            const cancelled = await cancelJobFenced(tx, job, explicitNow);
+            if (cancelled === 0) return "SKIPPED" as const;
+            await tx.notification.updateMany({
+              where: { id: notification.id, status: "QUEUED" },
+              data: { status: "SKIPPED", skipReason: "NO_ACCESS" },
+            });
+            return "CANCELLED" as const;
+          }
+
+          const stillEnabled = await isEmailPreferenceEnabled(
+            tx,
+            job.organizationId,
+            notification.recipientAccountId,
+            notification.category,
+          );
+          if (!stillEnabled) {
+            const cancelled = await cancelJobFenced(tx, job, explicitNow);
+            if (cancelled === 0) return "SKIPPED" as const;
+            await tx.notification.updateMany({
+              where: { id: notification.id, status: "QUEUED" },
+              data: { status: "SKIPPED", skipReason: "PREFERENCE_OFF" },
+            });
+            return "CANCELLED" as const;
+          }
+
+          if (reachedMax) {
+            const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
+            if (affected === 0) return "SKIPPED" as const;
+            await tx.notification.updateMany({
+              where: { id: notification.id, status: "QUEUED" },
+              data: { status: "FAILED" },
+            });
+            return "FAILED" as const;
+          }
+
+          const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
+          return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
         }
 
-        const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
-        return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
+        default: {
+          const exhaustive: never = job.kind;
+          throw new Error(`Nieobsługiwany rodzaj zadania mail_outbox: ${String(exhaustive)}`);
+        }
       }
-
-      await lockNotification(tx, job.notificationId!);
-      const notification = await tx.notification.findUnique({
-        where: { id: job.notificationId! },
-        select: { id: true, recipientAccountId: true, category: true, status: true },
-      });
-      if (!notification || notification.status !== "QUEUED") {
-        const cancelled = await cancelJobFenced(tx, job, explicitNow);
-        return cancelled === 0 ? ("SKIPPED" as const) : ("CANCELLED" as const);
-      }
-
-      const stillEnabled = await isEmailPreferenceEnabled(
-        tx,
-        job.organizationId,
-        notification.recipientAccountId,
-        notification.category,
-      );
-      if (!stillEnabled) {
-        const cancelled = await cancelJobFenced(tx, job, explicitNow);
-        if (cancelled === 0) return "SKIPPED" as const;
-        await tx.notification.updateMany({
-          where: { id: notification.id, status: "QUEUED" },
-          data: { status: "SKIPPED", skipReason: "PREFERENCE_OFF" },
-        });
-        return "CANCELLED" as const;
-      }
-
-      if (reachedMax) {
-        const affected = await markJobFailedFenced(tx, job, lastError, explicitNow);
-        if (affected === 0) return "SKIPPED" as const;
-        await tx.notification.updateMany({
-          where: { id: notification.id, status: "QUEUED" },
-          data: { status: "FAILED" },
-        });
-        return "FAILED" as const;
-      }
-
-      const affected = await scheduleJobRetryFenced(tx, job, backoffMs, lastError, explicitNow);
-      return affected === 0 ? ("SKIPPED" as const) : ("PENDING" as const);
     });
 
     return { status: failureStatus };

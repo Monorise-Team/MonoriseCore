@@ -20,6 +20,7 @@ const authIssuer = required("CORE_AUTH_ISSUER");
 const authUrl = process.env.CORE_AUTH_URL?.trim() || authIssuer;
 const apiAudience = required("CORE_API_AUDIENCE");
 const apiUrl = resolveApiUrl(process.env.CORE_API_URL, {
+  NODE_ENV: process.env.NODE_ENV,
   CORE_API_URL: process.env.CORE_API_URL,
   CORE_API_AUDIENCE: apiAudience,
 });

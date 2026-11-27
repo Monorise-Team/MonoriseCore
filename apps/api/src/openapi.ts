@@ -179,8 +179,11 @@ export interface OpenApiResponseObject {
   description: string;
   headers?: Record<string, OpenApiHeaderObject>;
   content?: {
-    "application/json": {
+    "application/json"?: {
       schema: { $ref: string };
+    };
+    "text/html"?: {
+      schema: { type: "string" };
     };
   };
 }
@@ -383,6 +386,16 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
       description: route.responseDescription,
       ...(replayHeaders ? { headers: replayHeaders } : {}),
     };
+  } else if (route.responseContentType === "text/html") {
+    responses[String(route.successStatus)] = {
+      description: route.responseDescription,
+      ...(replayHeaders ? { headers: replayHeaders } : {}),
+      content: {
+        "text/html": {
+          schema: { type: "string" },
+        },
+      },
+    };
   } else {
     const successSchemaName =
       route.envelope && route.responseSchemaName ? route.responseSchemaName : route.dataSchemaName;
@@ -396,6 +409,7 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
         "application/json": {
           schema: { $ref: `#/components/schemas/${successSchemaName}` },
         },
+        ...(route.htmlResponse ? { "text/html": { schema: { type: "string" as const } } } : {}),
       },
     };
   }
@@ -413,12 +427,24 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
   for (const status of errorStatuses) {
     const codes = effectiveErrors[status];
     if (!codes) continue;
+    if (route.responseContentType === "text/html" && status === 404) {
+      responses[String(status)] = {
+        description: describeError(status, codes),
+        content: {
+          "text/html": {
+            schema: { type: "string" },
+          },
+        },
+      };
+      continue;
+    }
     responses[String(status)] = {
       description: describeError(status, codes),
       content: {
         "application/json": {
           schema: { $ref: "#/components/schemas/ApiErrorResponse" },
         },
+        ...(route.htmlResponse && status === 404 ? { "text/html": { schema: { type: "string" as const } } } : {}),
       },
     };
   }

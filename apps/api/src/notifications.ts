@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   API_PREFIX,
   getNotificationCategory,
+  hasUnsafeUrlChars,
   NOTIFICATION_CATEGORIES,
   NotificationCategoryKey,
   type ApiErrorBody,
@@ -12,12 +13,34 @@ import {
 } from "@core/contracts";
 import { uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
 import { z } from "zod";
+import { escapeHtml } from "./mail.js";
 
 export const MIN_NOTIFICATIONS_UNSUBSCRIBE_SECRET_LENGTH = 32;
 
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
+const HEADER_CRLF_OR_NUL_RE = /[\r\n\0]/;
 const UNSUBSCRIBE_TOKEN_MAX_LENGTH = 1024;
 const UNSUBSCRIBE_SECRET_DOMAIN = "monorise:core:notifications:unsubscribe:v1";
+const UNSUBSCRIBE_PATH_TOKEN_RE = /(\/core\/v1\/notifications\/unsubscribe\/)[^/?#\s"'<>]+/gi;
+
+/** Nagłówki bezpieczeństwa ustawiane na każdej stronie HTML wypisania z powiadomień (200 i 404). */
+export const UNSUBSCRIBE_HTML_HEADERS = {
+  "Content-Type": "text/html; charset=utf-8",
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "Cache-Control": "no-store",
+} as const;
+
+/** Cenzuruje podpisany token wypisania w ścieżce `/core/v1/notifications/unsubscribe/<token>`. */
+export function redactUnsubscribeUrlTokens(value: string): string {
+  return value.replace(UNSUBSCRIBE_PATH_TOKEN_RE, "$1[redacted]");
+}
+
+/** Zwraca `true`, gdy firma w danym statusie nie może zlecać ani wysyłać powiadomień produktów. */
+export function isOrganizationBlockedForNotifications(status: string): boolean {
+  return status === "SUSPENDED" || status === "DELETED";
+}
 
 const UnsubscribeTokenPayloadSchema = z
   .object({
@@ -115,13 +138,58 @@ export function resolveNotificationsUnsubscribeSecret(
   throw new Error("Brak zmiennej środowiskowej CORE_NOTIFICATIONS_UNSUBSCRIBE_SECRET (lokalnie: pnpm setup:env)");
 }
 
-/** Wyznacza publiczny bazowy adres Core API do linków wypisania z powiadomień. */
+/**
+ * Wyznacza publiczny bazowy adres Core API do linków wypisania z powiadomień (`List-Unsubscribe`).
+ * Na produkcji (`NODE_ENV === "production"`) wymaga poprawnego adresu `https://` bez danych
+ * uwierzytelniających, parametrów zapytania, fragmentu ani znaków sterujących.
+ */
 export function resolveApiUrl(
   apiUrl?: string,
-  env: { CORE_API_URL?: string | undefined; CORE_API_AUDIENCE?: string | undefined } = process.env,
+  env: {
+    NODE_ENV?: string | undefined;
+    CORE_API_URL?: string | undefined;
+    CORE_API_AUDIENCE?: string | undefined;
+  } = process.env,
 ): string {
-  const raw = apiUrl?.trim() || env.CORE_API_URL?.trim() || env.CORE_API_AUDIENCE?.trim() || "http://localhost:3200";
-  return raw.replace(/\/+$/, "");
+  const isProd = env.NODE_ENV === "production";
+  const rawCandidate =
+    apiUrl !== undefined && apiUrl.trim().length > 0
+      ? apiUrl
+      : env.CORE_API_URL !== undefined && env.CORE_API_URL.trim().length > 0
+        ? env.CORE_API_URL
+        : (env.CORE_API_AUDIENCE ?? "");
+  const trimmed = rawCandidate.trim();
+
+  if (isProd) {
+    if (!trimmed) {
+      throw new Error("Zmienna środowiskowa CORE_API_URL jest wymagana na produkcji i musi być adresem https://");
+    }
+    if (HEADER_CRLF_OR_NUL_RE.test(rawCandidate) || hasUnsafeUrlChars(trimmed)) {
+      throw new Error(
+        "Zmienna środowiskowa CORE_API_URL musi być poprawnym adresem https:// bez białych znaków i znaków sterujących",
+      );
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      throw new Error("Zmienna środowiskowa CORE_API_URL musi być poprawnym adresem https:// na produkcji");
+    }
+    if (
+      parsed.protocol !== "https:" ||
+      !parsed.hostname ||
+      parsed.origin === "null" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.search !== "" ||
+      parsed.hash !== ""
+    ) {
+      throw new Error("Zmienna środowiskowa CORE_API_URL musi być poprawnym adresem https:// na produkcji");
+    }
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
+  }
+
+  return (trimmed || "http://localhost:3200").replace(/\/+$/, "");
 }
 
 /**
@@ -202,11 +270,23 @@ export function buildUnsubscribeUrl(token: string, apiUrl?: string): string {
 }
 
 /**
- * Pilnuje, żeby `actionUrl` w powiadomieniu produktu wskazywał wyłącznie ten sam origin (schemat, host, port)
- * co zarejestrowane pole `uri` klienta OAuth tego produktu, bez danych uwierzytelniających w URL.
+ * Pilnuje, żeby `actionUrl` w powiadomieniu produktu:
+ * - nie zawierał białych znaków, znaków sterujących (w tym NUL) ani ukośników odwrotnych (`\`),
+ * - używał `https:` (lub `http:` wyłącznie gdy zarejestrowany origin produktu sam jest `http:`, np. lokalnie),
+ * - wskazywał dokładnie ten sam origin (schemat, host, port) co pole `uri` klienta OAuth produktu bez userinfo.
+ * Zwraca zkanonizowany adres `new URL(actionUrl).href` do zapisu i renderowania.
  */
-export function validateActionUrlOrigin(actionUrl: string, clientUri: string | null): void {
-  if (!clientUri) {
+export function validateActionUrlOrigin(actionUrl: string, clientUri: string | null): string {
+  if (hasUnsafeUrlChars(actionUrl)) {
+    throw new NotificationError(422, "VALIDATION_FAILED", "Błędne dane wejściowe", [
+      {
+        field: "actionUrl",
+        message: "Adres actionUrl nie może zawierać białych znaków, znaków sterujących ani ukośników odwrotnych",
+      },
+    ]);
+  }
+
+  if (!clientUri || hasUnsafeUrlChars(clientUri)) {
     throw new NotificationError(422, "VALIDATION_FAILED", "Klient produktu nie ma skonfigurowanego adresu aplikacji", [
       { field: "actionUrl", message: "Nie można zweryfikować originu actionUrl dla tego produktu" },
     ]);
@@ -235,8 +315,11 @@ export function validateActionUrlOrigin(actionUrl: string, clientUri: string | n
     ]);
   }
 
+  const protocolAllowed =
+    parsedAction.protocol === "https:" || (parsedAction.protocol === "http:" && allowedUrl.protocol === "http:");
+
   if (
-    (parsedAction.protocol !== "http:" && parsedAction.protocol !== "https:") ||
+    !protocolAllowed ||
     parsedAction.origin === "null" ||
     parsedAction.username !== "" ||
     parsedAction.password !== "" ||
@@ -249,6 +332,8 @@ export function validateActionUrlOrigin(actionUrl: string, clientUri: string | n
       [{ field: "actionUrl", message: "Adres actionUrl musi mieć ten sam origin co adres produktu" }],
     );
   }
+
+  return parsedAction.href;
 }
 
 /** Serializuje operacje na pojedynczym powiadomieniu (np. wysyłka w workerze) do końca transakcji. */
@@ -332,10 +417,13 @@ export async function createNotification(tx: Tx, input: CreateNotificationInput)
 
   const organization = await tx.organization.findUnique({
     where: { id: input.organizationId },
-    select: { id: true },
+    select: { id: true, status: true },
   });
   if (!organization) {
     throw new NotificationError(404, "NOT_FOUND", "Nie znaleziono firmy");
+  }
+  if (isOrganizationBlockedForNotifications(organization.status)) {
+    throw new NotificationError(403, "PERMISSION_DENIED", "Firma nie może wysyłać powiadomień");
   }
 
   const activeEntitlement = await tx.entitlement.findFirst({
@@ -494,9 +582,26 @@ export async function listNotificationPreferencesForAccount(
   return items;
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  const err = error as { code?: string; message?: string } | null;
+  if (err?.code === "P2002" || err?.code === "23505") return true;
+  return /duplicate key value violates unique constraint/i.test(String(err?.message ?? ""));
+}
+
+async function lockNotificationPreference(
+  tx: Tx,
+  organizationId: string,
+  accountId: string,
+  category: string,
+): Promise<void> {
+  const lockKey = `notification_preference:${organizationId}:${accountId}:${category}:EMAIL`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}::text, 0))`;
+}
+
 /**
- * Zapisuje ustawienie kategorii powiadomień dla konta na kanale `EMAIL` i dopisuje wpis
- * `notification.preference_changed` do dziennika zdarzeń firmy w tej samej transakcji.
+ * Zapisuje ustawienie kategorii powiadomień dla konta na kanale `EMAIL` (bezpiecznie przy
+ * równoczesnych zapisach dzięki blokadzie doradczej i obsłudze konfliktu unikalności) oraz
+ * dopisuje wpis `notification.preference_changed` do dziennika zdarzeń wyłącznie przy faktycznej zmianie.
  */
 export async function updateNotificationPreferenceForAccount(
   tx: Tx,
@@ -522,41 +627,83 @@ export async function updateNotificationPreferenceForAccount(
     ]);
   }
 
+  const key = {
+    organizationId: input.organizationId,
+    accountId: input.accountId,
+    category: categoryDef.key,
+    channel: "EMAIL" as const,
+  };
+
+  await lockNotificationPreference(tx, input.organizationId, input.accountId, categoryDef.key);
+
   const existing = await tx.notificationPreference.findUnique({
-    where: {
-      organizationId_accountId_category_channel: {
-        organizationId: input.organizationId,
-        accountId: input.accountId,
-        category: categoryDef.key,
-        channel: "EMAIL",
-      },
-    },
+    where: { organizationId_accountId_category_channel: key },
     select: { id: true, enabled: true },
   });
   const previousEnabled = existing ? existing.enabled : true;
 
-  const saved = await tx.notificationPreference.upsert({
-    where: {
-      organizationId_accountId_category_channel: {
+  if (previousEnabled === input.enabled) {
+    return {
+      category: categoryDef.key,
+      product: categoryDef.product,
+      channel: categoryDef.channel,
+      optional: categoryDef.optional,
+      name: categoryDef.name,
+      description: categoryDef.description,
+      enabled: previousEnabled,
+    };
+  }
+
+  let saved: { id: string; enabled: boolean };
+  let effectivePreviousEnabled = previousEnabled;
+
+  try {
+    saved = await tx.notificationPreference.upsert({
+      where: { organizationId_accountId_category_channel: key },
+      create: {
+        id: uuidv7(input.now.getTime()),
         organizationId: input.organizationId,
         accountId: input.accountId,
         category: categoryDef.key,
         channel: "EMAIL",
+        enabled: input.enabled,
+        updatedAt: input.now,
       },
-    },
-    create: {
-      id: uuidv7(input.now.getTime()),
-      organizationId: input.organizationId,
-      accountId: input.accountId,
-      category: categoryDef.key,
-      channel: "EMAIL",
-      enabled: input.enabled,
-    },
-    update: {
-      enabled: input.enabled,
-    },
-    select: { id: true, enabled: true },
-  });
+      update: {
+        enabled: input.enabled,
+        updatedAt: input.now,
+      },
+      select: { id: true, enabled: true },
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    const raced = await tx.notificationPreference.findUnique({
+      where: { organizationId_accountId_category_channel: key },
+      select: { id: true, enabled: true },
+    });
+    if (!raced) {
+      throw error;
+    }
+    effectivePreviousEnabled = raced.enabled;
+    if (raced.enabled === input.enabled) {
+      return {
+        category: categoryDef.key,
+        product: categoryDef.product,
+        channel: categoryDef.channel,
+        optional: categoryDef.optional,
+        name: categoryDef.name,
+        description: categoryDef.description,
+        enabled: raced.enabled,
+      };
+    }
+    saved = await tx.notificationPreference.update({
+      where: { id: raced.id },
+      data: { enabled: input.enabled, updatedAt: input.now },
+      select: { id: true, enabled: true },
+    });
+  }
 
   await tx.auditLog.create({
     data: {
@@ -571,13 +718,14 @@ export async function updateNotificationPreferenceForAccount(
         accountId: input.accountId,
         category: categoryDef.key,
         channel: "EMAIL",
-        previousEnabled,
+        previousEnabled: effectivePreviousEnabled,
         enabled: saved.enabled,
         source: input.source,
       },
       ipAddress: input.auditMeta.ipAddress,
       userAgent: input.auditMeta.userAgent,
       requestId: input.auditMeta.requestId,
+      createdAt: input.now,
     },
   });
 
@@ -592,10 +740,57 @@ export async function updateNotificationPreferenceForAccount(
   };
 }
 
+export interface UnsubscribeTokenContext {
+  category: NotificationCategoryKey;
+  categoryName: string;
+  organizationName: string;
+}
+
+/**
+ * Odczytuje kontekst strony potwierdzenia wypisania (`GET /core/v1/notifications/unsubscribe/{token}`)
+ * bez jakiejkolwiek zmiany stanu w bazie (ochrona przed automatycznym prefetchowaniem linków przez skanery).
+ * Odrzuca zmanipulowane tokeny oraz konta niebędące w statusie `ACTIVE` neutralnym błędem `404`.
+ */
+export async function inspectUnsubscribeToken(
+  db: PrismaClient,
+  input: { token: string; secret: string },
+): Promise<UnsubscribeTokenContext> {
+  const payload = verifyUnsubscribeToken(input.token, input.secret);
+  if (!payload) {
+    throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+  }
+  const categoryDef = getNotificationCategory(payload.category);
+  if (!categoryDef || !categoryDef.optional) {
+    throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+  }
+
+  const organizationName = await withOrganization(db, payload.organizationId, async (tx) => {
+    const account = await tx.account.findUnique({
+      where: { id: payload.accountId },
+      select: {
+        id: true,
+        status: true,
+        organization: { select: { name: true } },
+      },
+    });
+    if (!account || account.status !== "ACTIVE") {
+      throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+    }
+    return account.organization.name;
+  });
+
+  return {
+    category: payload.category,
+    categoryName: categoryDef.name,
+    organizationName,
+  };
+}
+
 /**
  * Obsługuje jednoklikowe wypisanie z powiadomień (RFC 8058) bez logowania:
- * weryfikuje podpisany token HMAC-SHA256 w stałym czasie, sprawdza konto pod RLS firmy z tokenu,
- * ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed`.
+ * weryfikuje podpisany token HMAC-SHA256 w stałym czasie, sprawdza aktywność konta pod RLS firmy z tokenu,
+ * ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed`
+ * wyłącznie przy faktycznej zmianie wartości.
  */
 export async function unsubscribeNotificationByToken(
   db: PrismaClient,
@@ -605,18 +800,22 @@ export async function unsubscribeNotificationByToken(
     now: Date;
     auditMeta: NotificationAuditMeta;
   },
-): Promise<UnsubscribeNotificationResult> {
+): Promise<UnsubscribeNotificationResult & { categoryName: string }> {
   const payload = verifyUnsubscribeToken(input.token, input.secret);
   if (!payload) {
+    throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+  }
+  const categoryDef = getNotificationCategory(payload.category);
+  if (!categoryDef || !categoryDef.optional) {
     throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
   }
 
   await withOrganization(db, payload.organizationId, async (tx) => {
     const account = await tx.account.findUnique({
       where: { id: payload.accountId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (!account) {
+    if (!account || account.status !== "ACTIVE") {
       throw new NotificationError(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
     }
 
@@ -633,6 +832,107 @@ export async function unsubscribeNotificationByToken(
 
   return {
     category: payload.category,
+    categoryName: categoryDef.name,
     enabled: false,
   };
+}
+
+/**
+ * Sprawdza, czy nagłówek `Accept` jawnie preferuje `text/html` (np. przeglądarka po wysłaniu formularza).
+ * Brak nagłówka albo ogólny wzorzec dowolnego typu zwraca `false`, żeby klienci RFC 8058 i API
+ * dostawali standardową odpowiedź JSON.
+ */
+export function acceptsHtml(acceptHeader: string | string[] | undefined): boolean {
+  const raw = Array.isArray(acceptHeader) ? acceptHeader.join(",") : (acceptHeader ?? "");
+  if (!raw.trim()) return false;
+
+  let htmlQ = 0;
+  let jsonQ = 0;
+
+  for (const part of raw.split(",")) {
+    const segments = part.split(";").map((s) => s.trim());
+    const mediaType = (segments[0] ?? "").toLowerCase();
+    if (mediaType !== "text/html" && mediaType !== "application/json") continue;
+
+    let q = 1;
+    for (const param of segments.slice(1)) {
+      const [key, val] = param.split("=").map((s) => s.trim());
+      if (key?.toLowerCase() === "q" && val !== undefined) {
+        const parsed = Number(val);
+        q = Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : 0;
+      }
+    }
+
+    if (mediaType === "text/html") {
+      htmlQ = Math.max(htmlQ, q);
+    } else if (mediaType === "application/json") {
+      jsonQ = Math.max(jsonQ, q);
+    }
+  }
+
+  return htmlQ > 0 && htmlQ >= jsonQ;
+}
+
+function renderUnsubscribeHtmlLayout(pageTitle: string, bodyHtml: string): string {
+  return [
+    "<!doctype html>",
+    '<html lang="pl">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escapeHtml(pageTitle)} · Monorise</title>`,
+    "<style>",
+    "body{margin:0;padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f9fafb;color:#111827;line-height:1.5}",
+    ".card{max-width:480px;margin:48px auto;padding:32px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px}",
+    "h1{margin:0 0 12px;font-size:20px;line-height:1.3}",
+    "p{margin:0 0 16px;font-size:15px;color:#374151}",
+    "button{display:inline-block;padding:10px 18px;font-size:15px;font-weight:600;color:#ffffff;background:#111827;border:0;border-radius:8px;cursor:pointer}",
+    "button:hover{background:#1f2937}",
+    ".brand{margin:0 0 16px;font-size:13px;font-weight:600;color:#6b7280}",
+    "</style>",
+    "</head>",
+    "<body>",
+    '<main class="card">',
+    '<p class="brand">Monorise</p>',
+    bodyHtml,
+    "</main>",
+    "</body>",
+    "</html>",
+  ].join("");
+}
+
+export function renderUnsubscribeConfirmHtml(params: {
+  categoryName: string;
+  organizationName: string;
+  actionPath: string;
+}): string {
+  const escapedCategory = escapeHtml(params.categoryName);
+  const escapedOrg = escapeHtml(params.organizationName);
+  const escapedAction = escapeHtml(params.actionPath);
+  return renderUnsubscribeHtmlLayout(
+    "Wyłącz powiadomienia",
+    [
+      "<h1>Wyłącz powiadomienia</h1>",
+      `<p>Czy chcesz wyłączyć powiadomienia z kategorii <strong>${escapedCategory}</strong> dla firmy <strong>${escapedOrg}</strong>?</p>`,
+      `<form method="post" action="${escapedAction}">`,
+      '<input type="hidden" name="List-Unsubscribe" value="One-Click">',
+      '<button type="submit">Wyłącz powiadomienia</button>',
+      "</form>",
+    ].join(""),
+  );
+}
+
+export function renderUnsubscribeDoneHtml(params: { categoryName: string }): string {
+  const escapedCategory = escapeHtml(params.categoryName);
+  return renderUnsubscribeHtmlLayout(
+    "Powiadomienia wyłączone",
+    ["<h1>Powiadomienia wyłączone</h1>", `<p>Powiadomienia z kategorii ${escapedCategory} są wyłączone.</p>`].join(""),
+  );
+}
+
+export function renderUnsubscribeInvalidHtml(): string {
+  return renderUnsubscribeHtmlLayout(
+    "Nieaktualny link",
+    ["<h1>Nieaktualny link</h1>", "<p>Ten link jest nieaktualny.</p>"].join(""),
+  );
 }

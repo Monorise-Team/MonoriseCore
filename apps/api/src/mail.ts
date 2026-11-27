@@ -1,3 +1,4 @@
+import { hasUnsafeUrlChars } from "@core/contracts";
 import nodemailer from "nodemailer";
 
 export interface OutgoingMail {
@@ -58,6 +59,8 @@ export function currentMailFrom(): string {
  * - poza produkcją (development, test) domyślnie wraca do ustawień kanału logowania (`CORE_SMTP_URL`,
  *   `CORE_MAIL_FROM`, lokalnie Mailpit albo `memory`).
  */
+const HEADER_CRLF_OR_NUL_RE = /[\r\n\0]/;
+
 export function resolveNotificationsMailConfig(
   env: {
     NODE_ENV?: string | undefined;
@@ -68,12 +71,38 @@ export function resolveNotificationsMailConfig(
   } = process.env,
 ): MailChannelConfig {
   const isProd = env.NODE_ENV === "production";
-  const smtpUrl = env.CORE_NOTIFICATIONS_SMTP_URL?.trim() ?? "";
-  const from = env.CORE_NOTIFICATIONS_FROM?.trim() ?? "";
+  const rawSmtpUrl = env.CORE_NOTIFICATIONS_SMTP_URL ?? "";
+  const rawFrom = env.CORE_NOTIFICATIONS_FROM ?? "";
+  const smtpUrl = rawSmtpUrl.trim();
+  const from = rawFrom.trim();
 
   if (isProd) {
     if (!smtpUrl) {
       throw new Error("Zmienna środowiskowa CORE_NOTIFICATIONS_SMTP_URL jest wymagana na produkcji");
+    }
+    if (HEADER_CRLF_OR_NUL_RE.test(rawSmtpUrl) || hasUnsafeUrlChars(smtpUrl)) {
+      throw new Error(
+        "Zmienna środowiskowa CORE_NOTIFICATIONS_SMTP_URL musi być poprawnym adresem smtp:// lub smtps:// na produkcji",
+      );
+    }
+    if (smtpUrl.toLowerCase() === "memory") {
+      throw new Error('Zmienna środowiskowa CORE_NOTIFICATIONS_SMTP_URL nie może mieć wartości "memory" na produkcji');
+    }
+    let parsedSmtp: URL;
+    try {
+      parsedSmtp = new URL(smtpUrl);
+    } catch {
+      throw new Error(
+        "Zmienna środowiskowa CORE_NOTIFICATIONS_SMTP_URL musi być poprawnym adresem smtp:// lub smtps:// na produkcji",
+      );
+    }
+    if ((parsedSmtp.protocol !== "smtp:" && parsedSmtp.protocol !== "smtps:") || !parsedSmtp.hostname) {
+      throw new Error(
+        "Zmienna środowiskowa CORE_NOTIFICATIONS_SMTP_URL musi być poprawnym adresem smtp:// lub smtps:// na produkcji",
+      );
+    }
+    if (HEADER_CRLF_OR_NUL_RE.test(rawFrom)) {
+      throw new Error("Zmienna środowiskowa CORE_NOTIFICATIONS_FROM nie może zawierać znaków nowej linii (CR/LF)");
     }
     if (!from) {
       throw new Error("Zmienna środowiskowa CORE_NOTIFICATIONS_FROM jest wymagana na produkcji");

@@ -155,6 +155,10 @@ export interface RouteDefinition {
   successStatus: SuccessStatus;
   /** Czy odpowiedź sukcesu jest owinięta w kopertę `{ data, meta, error }` (nie dotyczy 204). */
   envelope: boolean;
+  /** Typ treści odpowiedzi, gdy operacja zwraca wyłącznie dokument HTML (np. strona potwierdzenia wypisania). */
+  responseContentType?: "application/json" | "text/html";
+  /** Czy operacja oprócz JSON może zwrócić stronę HTML przy nagłówku `Accept: text/html`. */
+  htmlResponse?: boolean;
   /** Czy odpowiedź listy używa stronicowania kursorowego (`meta.nextCursor`). */
   paginated?: boolean;
   /** Parametry ścieżki (`path`) i zapytania (`query`). */
@@ -1838,6 +1842,28 @@ export const ROUTES = {
       500: ["INTERNAL_ERROR"],
     },
   },
+  getUnsubscribeNotificationPage: {
+    method: "GET",
+    path: `${API_PREFIX}/notifications/unsubscribe/{token}`,
+    operationId: "getUnsubscribeNotificationPage",
+    tag: "Notifications",
+    summary: "Strona potwierdzenia wypisania z kategorii powiadomień",
+    description:
+      "Publiczna strona HTML otwierana po kliknięciu linku wypisania w stopce wiadomości e-mail. " +
+      "Żądanie `GET` nigdy nie zmienia ustawień (chroni przed automatycznym otwieraniem linków przez skanery poczty): " +
+      "wyświetla nazwę kategorii i firmy oraz formularz z przyciskiem wysyłającym `POST` na ten sam adres. " +
+      "Nieprawidłowy, zmanipulowany albo nieaktywny link zwraca neutralną stronę HTML ze statusem `404`.",
+    auth: false,
+    successStatus: 200,
+    envelope: false,
+    responseContentType: "text/html",
+    parameters: [UNSUBSCRIBE_TOKEN_PARAM],
+    responseDescription: "Strona HTML z formularzem potwierdzenia wyłączenia powiadomień.",
+    errors: {
+      404: ["NOT_FOUND"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
   unsubscribeNotification: {
     method: "POST",
     path: `${API_PREFIX}/notifications/unsubscribe/{token}`,
@@ -1845,13 +1871,17 @@ export const ROUTES = {
     tag: "Notifications",
     summary: "Jednoklikowe wypisanie z kategorii powiadomień (RFC 8058)",
     description:
-      "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`). " +
+      "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; " +
+      "przyjmuje `application/x-www-form-urlencoded`, `multipart/form-data` lub puste żądanie). " +
       "Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia " +
-      "`enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed`. Nieprawidłowy " +
-      "albo zmanipulowany token zwraca `404 NOT_FOUND`.",
+      "`enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed` (tylko przy " +
+      "faktycznej zmianie wartości). Gdy żądanie akceptuje `text/html` (formularz ze strony potwierdzenia), " +
+      "zwraca stronę HTML z potwierdzeniem albo neutralny komunikat `404`; klienci jednoklikowi dostają JSON. " +
+      "Nieprawidłowy, zmanipulowany albo nieaktywny token zwraca `404 NOT_FOUND`.",
     auth: false,
     successStatus: 200,
     envelope: true,
+    htmlResponse: true,
     parameters: [UNSUBSCRIBE_TOKEN_PARAM],
     dataSchemaName: "UnsubscribeNotificationResult",
     dataSchema: UnsubscribeNotificationResult,
