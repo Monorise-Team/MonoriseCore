@@ -54,6 +54,7 @@ interface MockOrg {
   id: string;
   name: string;
   status: OrganizationStatus;
+  timeZone: string;
   ownerAccountId: string;
   createdAt: Date;
 }
@@ -137,6 +138,7 @@ function createInMemoryDomainDb() {
         id: ORG_ACME,
         name: "Acme",
         status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
         ownerAccountId: OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -147,6 +149,7 @@ function createInMemoryDomainDb() {
         id: ORG_GLOBEX,
         name: "Globex",
         status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
         ownerAccountId: GLOBEX_OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -157,6 +160,7 @@ function createInMemoryDomainDb() {
         id: ORG_SIGNUP,
         name: "SignupCo",
         status: "PENDING_VERIFICATION",
+        timeZone: "Europe/Warsaw",
         ownerAccountId: SIGNUP_OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -1039,7 +1043,75 @@ describe("Firma i zarządzanie domenami (testy jednostkowe HTTP bez bazy)", () =
       });
       expect(adminUpdated.statusCode).toBe(200);
       expect(adminUpdated.json().data.name).toBe("Acme Holding");
+      expect(adminUpdated.json().data.timeZone).toBe("Europe/Warsaw");
       expect(audits).toHaveLength(2);
+
+      // Walidacja timeZone: puste {}, błędna strefa, null -> 422
+      for (const badPayload of [
+        {},
+        { timeZone: "" },
+        { timeZone: "Mars/Olympus" },
+        { timeZone: "+02:00" },
+        { timeZone: "europe/warsaw" },
+        { timeZone: null },
+      ]) {
+        const bad = await app.inject({
+          method: "PATCH",
+          url: "/core/v1/organization",
+          headers: { authorization: ownerBearer },
+          payload: badPayload,
+        });
+        expect(bad.statusCode).toBe(422);
+        expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+      }
+
+      // Zmiana samej strefy czasowej
+      const tzUpdated = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: ownerBearer },
+        payload: { timeZone: "  Europe/London  " },
+      });
+      expect(tzUpdated.statusCode).toBe(200);
+      expect(tzUpdated.json().data.timeZone).toBe("Europe/London");
+      expect(audits[2]).toEqual({
+        organizationId: ORG_ACME,
+        action: "organization.updated",
+        resourceType: "organization",
+        resourceId: ORG_ACME,
+        metadata: {
+          fields: ["timeZone"],
+          previousTimeZone: "Europe/Warsaw",
+          timeZone: "Europe/London",
+        },
+      });
+
+      // No-op tej samej strefy nie tworzy nowego wpisu audytu
+      const tzNoop = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { timeZone: "Europe/London" },
+      });
+      expect(tzNoop.statusCode).toBe(200);
+      expect(audits).toHaveLength(3);
+
+      // Jednoczesna zmiana name i timeZone zapisuje oba pola w audycie
+      const bothUpdated = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { name: "Acme Global", timeZone: "America/New_York" },
+      });
+      expect(bothUpdated.statusCode).toBe(200);
+      expect(bothUpdated.json().data).toMatchObject({ name: "Acme Global", timeZone: "America/New_York" });
+      expect(audits[3]?.metadata).toEqual({
+        fields: ["name", "timeZone"],
+        previousName: "Acme Holding",
+        name: "Acme Global",
+        previousTimeZone: "Europe/London",
+        timeZone: "America/New_York",
+      });
     } finally {
       await app.close();
     }

@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER, NOTIFICATIONS_SEND_SCOPE } from "@core/contracts";
+import {
+  DIRECTORY_READ_SCOPE,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_REPLAYED_HEADER,
+  NOTIFICATIONS_SEND_SCOPE,
+} from "@core/contracts";
 import type { PrismaClient } from "@core/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildOpenApiDocument, serializeOpenApiDocument, type OpenApiSpec } from "../src/openapi.js";
@@ -353,5 +358,63 @@ describe("OpenAPI Core API", () => {
       $ref: "#/components/schemas/ApiErrorResponse",
     });
     expect(unsubOp?.responses["404"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+  });
+
+  it("dokumentuje WorkSchedule, TimeZone oraz GET /core/v1/products/{productKey}/directory/organization", () => {
+    expect(document.components.schemas.WorkSchedule).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        "1": { type: "integer", minimum: 0, maximum: 1440 },
+        "7": { type: "integer", minimum: 0, maximum: 1440 },
+      },
+    });
+    expect(document.components.schemas.TimeZone).toMatchObject({ type: "string", minLength: 1, maxLength: 64 });
+
+    const employeeProps = (document.components.schemas.Employee?.properties ?? {}) as Record<string, unknown>;
+    expect(employeeProps.workSchedule).toBeDefined();
+
+    const updateEmployeeProps = (document.components.schemas.UpdateEmployee?.properties ?? {}) as Record<
+      string,
+      unknown
+    >;
+    expect(updateEmployeeProps.workSchedule).toBeDefined();
+
+    const orgProps = (document.components.schemas.Organization?.properties ?? {}) as Record<string, unknown>;
+    expect(orgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+
+    const updateOrgProps = (document.components.schemas.UpdateOrganization?.properties ?? {}) as Record<
+      string,
+      unknown
+    >;
+    expect(updateOrgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+
+    const meOrgProps =
+      (document.components.schemas.Me?.properties as Record<string, { properties?: Record<string, unknown> }>)
+        ?.organization?.properties ?? {};
+    expect(meOrgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+
+    const dirEmpProps = (document.components.schemas.DirectoryEmployee?.properties ?? {}) as Record<string, unknown>;
+    expect(dirEmpProps.workSchedule).toBeDefined();
+
+    const dirMemberProps = (document.components.schemas.DirectoryUnitMember?.properties ?? {}) as Record<
+      string,
+      unknown
+    >;
+    expect(dirMemberProps.workSchedule).toBeDefined();
+
+    const dirOrgOp = document.paths["/core/v1/products/{productKey}/directory/organization"]?.get;
+    expect(dirOrgOp?.operationId).toBe("getProductDirectoryOrganization");
+    expect(dirOrgOp?.tags).toEqual(["Directory"]);
+    expect(dirOrgOp?.security).toEqual([{ productOAuth: [DIRECTORY_READ_SCOPE] }]);
+    expect(dirOrgOp?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/DirectoryOrganizationResponse",
+    });
+
+    const dirOrgProps = (document.components.schemas.DirectoryOrganization?.properties ?? {}) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(dirOrgProps).sort()).toEqual(["id", "name", "status", "timeZone"]);
   });
 });

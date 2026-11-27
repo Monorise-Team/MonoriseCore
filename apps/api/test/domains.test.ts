@@ -357,6 +357,79 @@ describe("Dane firmy i zarządzanie domenami (MonoriseCore#66)", () => {
       previousName: "Acme Sp. z o.o.",
       name: "Acme Europe",
     });
+
+    // Domyślna strefa czasowa to Europe/Warsaw (widoczna w /organization i /me)
+    const orgBefore = await inject(app, "GET", "/core/v1/organization", ownerToken);
+    expect(orgBefore.statusCode).toBe(200);
+    expect(orgBefore.json().data.timeZone).toBe("Europe/Warsaw");
+
+    const meBefore = await inject(app, "GET", "/core/v1/me", regularToken);
+    expect(meBefore.statusCode).toBe(200);
+    expect(meBefore.json().data.organization.timeZone).toBe("Europe/Warsaw");
+
+    // Brak uprawnień lub zakres UNIT dla zmiany timeZone -> 403
+    for (const deniedToken of [regularToken, unitAdminToken]) {
+      const denied = await inject(app, "PATCH", "/core/v1/organization", deniedToken, { timeZone: "Europe/London" });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().error.code).toBe("PERMISSION_DENIED");
+    }
+
+    // Nieprawidłowa strefa, null lub puste {} -> 422
+    for (const badPayload of [
+      {},
+      { timeZone: "" },
+      { timeZone: "Mars/Olympus" },
+      { timeZone: "+02:00" },
+      { timeZone: null },
+    ]) {
+      const bad = await inject(app, "PATCH", "/core/v1/organization", ownerToken, badPayload);
+      expect(bad.statusCode).toBe(422);
+      expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+    }
+
+    // Zmiana samej strefy czasowej przez Ownera
+    const tzUpdated = await inject(app, "PATCH", "/core/v1/organization", ownerToken, {
+      timeZone: "  America/New_York  ",
+    });
+    expect(tzUpdated.statusCode).toBe(200);
+    expect(tzUpdated.json().data.timeZone).toBe("America/New_York");
+
+    // Odzwierciedlone w GET /core/v1/me
+    const meAfter = await inject(app, "GET", "/core/v1/me", regularToken);
+    expect(meAfter.statusCode).toBe(200);
+    expect(meAfter.json().data.organization.timeZone).toBe("America/New_York");
+
+    // No-op tej samej strefy nie tworzy nowego wpisu audytu
+    const tzNoop = await inject(app, "PATCH", "/core/v1/organization", adminToken, { timeZone: "America/New_York" });
+    expect(tzNoop.statusCode).toBe(200);
+
+    // Jednoczesna zmiana name i timeZone przez Administratora firmy
+    const bothUpdated = await inject(app, "PATCH", "/core/v1/organization", adminToken, {
+      name: "Acme Global",
+      timeZone: "Europe/Warsaw",
+    });
+    expect(bothUpdated.statusCode).toBe(200);
+    expect(bothUpdated.json().data).toMatchObject({ name: "Acme Global", timeZone: "Europe/Warsaw" });
+
+    const auditRowsAfterTz = await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.findMany({
+        where: { action: "organization.updated", resourceId: acme.id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+    expect(auditRowsAfterTz).toHaveLength(4);
+    expect(auditRowsAfterTz[2]?.metadata).toEqual({
+      fields: ["timeZone"],
+      previousTimeZone: "Europe/Warsaw",
+      timeZone: "America/New_York",
+    });
+    expect(auditRowsAfterTz[3]?.metadata).toEqual({
+      fields: ["name", "timeZone"],
+      previousName: "Acme Europe",
+      name: "Acme Global",
+      previousTimeZone: "America/New_York",
+      timeZone: "Europe/Warsaw",
+    });
   });
 
   it("dodaje domenę, weryfikuje DNS TXT i trustLocally, obsługuje Idempotency-Key oraz umożliwia zaproszenia w nowej domenie", async () => {

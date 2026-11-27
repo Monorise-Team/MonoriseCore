@@ -2214,10 +2214,28 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(200);
 
+      const janSchedule = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+      const piotrSchedule = { "1": 240, "2": 240, "3": 240 };
+      expect(
+        (
+          await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
+            workSchedule: janSchedule,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await request("PATCH", `/core/v1/employees/${piotr.employeeId}`, ownerToken, {
+            workSchedule: piotrSchedule,
+          })
+        ).statusCode,
+      ).toBe(200);
+
       // 1. Odmowy uwierzytelniania i uprawnień: user token -> 401, zły zakres -> 403, inny produkt -> 403, nieznana firma -> 404, brak Entitlement -> 403
       for (const path of [
         `/core/v1/products/${productKey}/directory/unit-members`,
         `/core/v1/products/${productKey}/directory/employees`,
+        `/core/v1/products/${productKey}/directory/organization`,
       ]) {
         expect((await get(`${path}?organizationId=${company.id}`, ownerToken)).statusCode).toBe(401);
         expect((await get(`${path}?organizationId=${company.id}`, wrongScopeToken)).statusCode).toBe(403);
@@ -2238,9 +2256,27 @@ describe("Core API", () => {
       expect(allMembersRes.json().data).toHaveLength(3);
       expect(allMembersRes.json().data).toEqual(
         expect.arrayContaining([
-          { unitId: krakow.id, employeeId: jan.employeeId, accountId: jan.accountId, role: "LEADER" },
-          { unitId: krakow.id, employeeId: noAccountEmp.id, accountId: null, role: "MEMBER" },
-          { unitId: warszawa.id, employeeId: piotr.employeeId, accountId: piotr.accountId, role: "MEMBER" },
+          {
+            unitId: krakow.id,
+            employeeId: jan.employeeId,
+            accountId: jan.accountId,
+            role: "LEADER",
+            workSchedule: janSchedule,
+          },
+          {
+            unitId: krakow.id,
+            employeeId: noAccountEmp.id,
+            accountId: null,
+            role: "MEMBER",
+            workSchedule: null,
+          },
+          {
+            unitId: warszawa.id,
+            employeeId: piotr.employeeId,
+            accountId: piotr.accountId,
+            role: "MEMBER",
+            workSchedule: piotrSchedule,
+          },
         ]),
       );
 
@@ -2296,7 +2332,7 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(422);
 
-      // 4. directory/employees: minimalne pola (bez workEmail i jobTitle), powtarzalny employeeId, stronicowanie, RLS
+      // 4. directory/employees: minimalne pola + workSchedule (bez workEmail i jobTitle), powtarzalny employeeId, stronicowanie, RLS
       const allEmpsRes = await get(
         `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}`,
         dirToken,
@@ -2305,14 +2341,36 @@ describe("Core API", () => {
       const allEmps = allEmpsRes.json().data as Record<string, unknown>[];
       expect(allEmps).toHaveLength(4);
       for (const emp of allEmps) {
-        expect(Object.keys(emp).sort()).toEqual(["accountId", "firstName", "id", "lastName", "status"]);
+        expect(Object.keys(emp).sort()).toEqual(["accountId", "firstName", "id", "lastName", "status", "workSchedule"]);
         expect("workEmail" in emp).toBe(false);
         expect("jobTitle" in emp).toBe(false);
       }
       expect(allEmps).toEqual(
         expect.arrayContaining([
-          { id: noAccountEmp.id, accountId: null, firstName: "Marek", lastName: "BezKonta", status: "ACTIVE" },
-          { id: jan.employeeId, accountId: jan.accountId, firstName: "Jan", lastName: "Kierownik", status: "ACTIVE" },
+          {
+            id: noAccountEmp.id,
+            accountId: null,
+            firstName: "Marek",
+            lastName: "BezKonta",
+            status: "ACTIVE",
+            workSchedule: null,
+          },
+          {
+            id: jan.employeeId,
+            accountId: jan.accountId,
+            firstName: "Jan",
+            lastName: "Kierownik",
+            status: "ACTIVE",
+            workSchedule: janSchedule,
+          },
+          {
+            id: piotr.employeeId,
+            accountId: piotr.accountId,
+            firstName: "Piotr",
+            lastName: "Pracownik",
+            status: "ACTIVE",
+            workSchedule: piotrSchedule,
+          },
         ]),
       );
 
@@ -2354,6 +2412,30 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(422);
 
+      // 4b. directory/organization: profil firmy ze strefą czasową (bez domen), reaguje na PATCH /organization
+      const dirOrgDefault = await get(
+        `/core/v1/products/${productKey}/directory/organization?organizationId=${company.id}`,
+        dirToken,
+      );
+      expect(dirOrgDefault.statusCode).toBe(200);
+      expect(dirOrgDefault.json().data).toEqual({
+        id: company.id,
+        name: `dir-${suffix}`,
+        status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
+      });
+
+      expect(
+        (await request("PATCH", "/core/v1/organization", ownerToken, { timeZone: "Europe/London" })).statusCode,
+      ).toBe(200);
+
+      const dirOrgUpdated = await get(
+        `/core/v1/products/${productKey}/directory/organization?organizationId=${company.id}`,
+        dirToken,
+      );
+      expect(dirOrgUpdated.statusCode).toBe(200);
+      expect(dirOrgUpdated.json().data.timeZone).toBe("Europe/London");
+
       // 5. Po zakończeniu Entitlement dostęp do katalogu znowu daje 403
       await endEntitlement(db, { organization: company.id, product: productKey });
       expect(
@@ -2362,6 +2444,10 @@ describe("Core API", () => {
       ).toBe(403);
       expect(
         (await get(`/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}`, dirToken))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (await get(`/core/v1/products/${productKey}/directory/organization?organizationId=${company.id}`, dirToken))
           .statusCode,
       ).toBe(403);
     } finally {
