@@ -382,26 +382,36 @@ describe("OpenAPI Core API", () => {
 
     const orgProps = (document.components.schemas.Organization?.properties ?? {}) as Record<string, unknown>;
     expect(orgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+    expect(orgProps.defaultWorkSchedule).toBeDefined();
 
     const updateOrgProps = (document.components.schemas.UpdateOrganization?.properties ?? {}) as Record<
       string,
       unknown
     >;
     expect(updateOrgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+    expect(updateOrgProps.defaultWorkSchedule).toBeDefined();
 
-    const meOrgProps =
-      (document.components.schemas.Me?.properties as Record<string, { properties?: Record<string, unknown> }>)
-        ?.organization?.properties ?? {};
+    const meProps = document.components.schemas.Me?.properties as Record<
+      string,
+      { properties?: Record<string, unknown> }
+    >;
+    const meOrgProps = meProps?.organization?.properties ?? {};
     expect(meOrgProps.timeZone).toEqual({ $ref: "#/components/schemas/TimeZone" });
+    expect(meOrgProps.defaultWorkSchedule).toBeDefined();
+    const meEmpProps = meProps?.employee?.properties ?? {};
+    expect(meEmpProps.workSchedule).toBeDefined();
+    expect(meEmpProps.effectiveWorkSchedule).toBeDefined();
 
     const dirEmpProps = (document.components.schemas.DirectoryEmployee?.properties ?? {}) as Record<string, unknown>;
     expect(dirEmpProps.workSchedule).toBeDefined();
+    expect(dirEmpProps.effectiveWorkSchedule).toBeDefined();
 
     const dirMemberProps = (document.components.schemas.DirectoryUnitMember?.properties ?? {}) as Record<
       string,
       unknown
     >;
     expect(dirMemberProps.workSchedule).toBeDefined();
+    expect(dirMemberProps.effectiveWorkSchedule).toBeDefined();
 
     const dirOrgOp = document.paths["/core/v1/products/{productKey}/directory/organization"]?.get;
     expect(dirOrgOp?.operationId).toBe("getProductDirectoryOrganization");
@@ -415,6 +425,6 @@ describe("OpenAPI Core API", () => {
       string,
       unknown
     >;
-    expect(Object.keys(dirOrgProps).sort()).toEqual(["id", "name", "status", "timeZone"]);
+    expect(Object.keys(dirOrgProps).sort()).toEqual(["defaultWorkSchedule", "id", "name", "status", "timeZone"]);
   });
 });

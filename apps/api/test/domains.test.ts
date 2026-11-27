@@ -430,6 +430,77 @@ describe("Dane firmy i zarządzanie domenami (MonoriseCore#66)", () => {
       previousTimeZone: "America/New_York",
       timeZone: "Europe/Warsaw",
     });
+
+    // Domyślny harmonogram firmy (defaultWorkSchedule): domyślnie null, uprawnienia, walidacja, ustawienie, /me, no-op, null i audyt
+    expect(orgBefore.json().data.defaultWorkSchedule).toBeNull();
+    expect(meBefore.json().data.organization.defaultWorkSchedule).toBeNull();
+    expect(meBefore.json().data.employee.effectiveWorkSchedule).toBeNull();
+
+    const companyDefault = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+    for (const deniedToken of [regularToken, unitAdminToken]) {
+      const denied = await inject(app, "PATCH", "/core/v1/organization", deniedToken, {
+        defaultWorkSchedule: companyDefault,
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().error.code).toBe("PERMISSION_DENIED");
+    }
+
+    for (const badSchedule of [{ "0": 480 }, { "8": 480 }, { "1": 1441 }, { "1": 480.5 }, [480]]) {
+      const bad = await inject(app, "PATCH", "/core/v1/organization", ownerToken, {
+        defaultWorkSchedule: badSchedule,
+      });
+      expect(bad.statusCode).toBe(422);
+      expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+    }
+
+    const setDefaultRes = await inject(app, "PATCH", "/core/v1/organization", ownerToken, {
+      defaultWorkSchedule: companyDefault,
+    });
+    expect(setDefaultRes.statusCode).toBe(200);
+    expect(setDefaultRes.json().data.defaultWorkSchedule).toEqual(companyDefault);
+
+    // Pracownik bez własnego harmonogramu dostaje effectiveWorkSchedule = companyDefault w GET /core/v1/me
+    const meWithDefault = await inject(app, "GET", "/core/v1/me", regularToken);
+    expect(meWithDefault.statusCode).toBe(200);
+    expect(meWithDefault.json().data.organization.defaultWorkSchedule).toEqual(companyDefault);
+    expect(meWithDefault.json().data.employee.workSchedule).toBeNull();
+    expect(meWithDefault.json().data.employee.effectiveWorkSchedule).toEqual(companyDefault);
+
+    // No-op tej samej zawartości w innej kolejności kluczy nie dopisuje audytu
+    const defaultNoop = await inject(app, "PATCH", "/core/v1/organization", adminToken, {
+      defaultWorkSchedule: { "5": 480, "4": 480, "3": 480, "2": 480, "1": 480 },
+    });
+    expect(defaultNoop.statusCode).toBe(200);
+
+    // Wyczyszczenie defaultWorkSchedule: null -> 200, /me wraca do null
+    const clearedDefault = await inject(app, "PATCH", "/core/v1/organization", adminToken, {
+      defaultWorkSchedule: null,
+    });
+    expect(clearedDefault.statusCode).toBe(200);
+    expect(clearedDefault.json().data.defaultWorkSchedule).toBeNull();
+
+    const meAfterClear = await inject(app, "GET", "/core/v1/me", regularToken);
+    expect(meAfterClear.statusCode).toBe(200);
+    expect(meAfterClear.json().data.organization.defaultWorkSchedule).toBeNull();
+    expect(meAfterClear.json().data.employee.effectiveWorkSchedule).toBeNull();
+
+    const auditRowsAfterDefault = await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.findMany({
+        where: { action: "organization.updated", resourceId: acme.id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+    expect(auditRowsAfterDefault).toHaveLength(6);
+    expect(auditRowsAfterDefault[4]?.metadata).toEqual({
+      fields: ["defaultWorkSchedule"],
+      previousDefaultWorkSchedule: null,
+      defaultWorkSchedule: companyDefault,
+    });
+    expect(auditRowsAfterDefault[5]?.metadata).toEqual({
+      fields: ["defaultWorkSchedule"],
+      previousDefaultWorkSchedule: companyDefault,
+      defaultWorkSchedule: null,
+    });
   });
 
   it("dodaje domenę, weryfikuje DNS TXT i trustLocally, obsługuje Idempotency-Key oraz umożliwia zaproszenia w nowej domenie", async () => {

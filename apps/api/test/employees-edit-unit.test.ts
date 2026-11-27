@@ -68,12 +68,36 @@ interface MockAudit {
 function createInMemoryEmployeeDb() {
   const organizations = new Map<
     string,
-    { id: string; name: string; status: "ACTIVE"; timeZone: string; ownerAccountId: string }
+    {
+      id: string;
+      name: string;
+      status: "ACTIVE";
+      timeZone: string;
+      defaultWorkSchedule: WorkSchedule | null;
+      ownerAccountId: string;
+    }
   >([
-    [ORG_ACME, { id: ORG_ACME, name: "Acme", status: "ACTIVE", timeZone: "Europe/Warsaw", ownerAccountId: OWNER_ACC }],
+    [
+      ORG_ACME,
+      {
+        id: ORG_ACME,
+        name: "Acme",
+        status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
+        ownerAccountId: OWNER_ACC,
+      },
+    ],
     [
       ORG_GLOBEX,
-      { id: ORG_GLOBEX, name: "Globex", status: "ACTIVE", timeZone: "America/New_York", ownerAccountId: "" },
+      {
+        id: ORG_GLOBEX,
+        name: "Globex",
+        status: "ACTIVE",
+        timeZone: "America/New_York",
+        defaultWorkSchedule: null,
+        ownerAccountId: "",
+      },
     ],
   ]);
   const entitlements = new Map<string, boolean>([[`${ORG_ACME}:${PROD_TIMOTIME}`, true]]);
@@ -799,17 +823,43 @@ describe("Edycja pracownika i walidacja workEmail (testy jednostkowe HTTP bez ba
       expect(noop.statusCode).toBe(200);
       expect(audits).toHaveLength(2);
 
-      // GET /core/v1/me zwraca workSchedule pracownika i timeZone firmy
-      const meRes = await app.inject({
+      // GET /core/v1/me zwraca workSchedule, effectiveWorkSchedule oraz timeZone i defaultWorkSchedule firmy
+      const meJan = await app.inject({
         method: "GET",
         url: "/core/v1/me",
         headers: { authorization: regularBearer },
       });
-      expect(meRes.statusCode).toBe(200);
-      expect(meRes.json().data.employee.workSchedule).toEqual(janPartTime);
-      expect(meRes.json().data.organization.timeZone).toBe("Europe/Warsaw");
+      expect(meJan.statusCode).toBe(200);
+      expect(meJan.json().data.employee.workSchedule).toEqual(janPartTime);
+      expect(meJan.json().data.employee.effectiveWorkSchedule).toEqual(janPartTime);
+      expect(meJan.json().data.organization.timeZone).toBe("Europe/Warsaw");
+      expect(meJan.json().data.organization.defaultWorkSchedule).toBeNull();
 
-      // Katalog produktu: employees, unit-members i organization
+      // Bez domyślnego harmonogramu firmy Marta (HR, workSchedule: null) ma effectiveWorkSchedule: null
+      const meHrBeforeDefault = await app.inject({
+        method: "GET",
+        url: "/core/v1/me",
+        headers: { authorization: hrBearer },
+      });
+      expect(meHrBeforeDefault.statusCode).toBe(200);
+      expect(meHrBeforeDefault.json().data.employee.workSchedule).toBeNull();
+      expect(meHrBeforeDefault.json().data.employee.effectiveWorkSchedule).toBeNull();
+
+      // Po ustawieniu domyślnego harmonogramu firmy Marta dziedziczy domyślny, a Jan zachowuje swój
+      const companyDefault = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+      organizations.get(ORG_ACME)!.defaultWorkSchedule = companyDefault;
+
+      const meHrWithDefault = await app.inject({
+        method: "GET",
+        url: "/core/v1/me",
+        headers: { authorization: hrBearer },
+      });
+      expect(meHrWithDefault.statusCode).toBe(200);
+      expect(meHrWithDefault.json().data.employee.workSchedule).toBeNull();
+      expect(meHrWithDefault.json().data.employee.effectiveWorkSchedule).toEqual(companyDefault);
+      expect(meHrWithDefault.json().data.organization.defaultWorkSchedule).toEqual(companyDefault);
+
+      // Katalog produktu: employees, unit-members (z workSchedule i effectiveWorkSchedule) i organization (z defaultWorkSchedule)
       const dirEmps = await app.inject({
         method: "GET",
         url: `/core/v1/products/timotime/directory/employees?organizationId=${ORG_ACME}`,
@@ -818,9 +868,21 @@ describe("Edycja pracownika i walidacja workEmail (testy jednostkowe HTTP bez ba
       expect(dirEmps.statusCode).toBe(200);
       expect(dirEmps.json().data).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: OWNER_EMP, workSchedule: annaFullTime }),
-          expect.objectContaining({ id: REGULAR_EMP, workSchedule: janPartTime }),
-          expect.objectContaining({ id: HR_EMP, workSchedule: null }),
+          expect.objectContaining({
+            id: OWNER_EMP,
+            workSchedule: annaFullTime,
+            effectiveWorkSchedule: annaFullTime,
+          }),
+          expect.objectContaining({
+            id: REGULAR_EMP,
+            workSchedule: janPartTime,
+            effectiveWorkSchedule: janPartTime,
+          }),
+          expect.objectContaining({
+            id: HR_EMP,
+            workSchedule: null,
+            effectiveWorkSchedule: companyDefault,
+          }),
         ]),
       );
 
@@ -838,6 +900,7 @@ describe("Edycja pracownika i walidacja workEmail (testy jednostkowe HTTP bez ba
             accountId: OWNER_ACC,
             role: "LEADER",
             workSchedule: annaFullTime,
+            effectiveWorkSchedule: annaFullTime,
           },
           {
             unitId: UNIT_KRAKOW,
@@ -845,6 +908,7 @@ describe("Edycja pracownika i walidacja workEmail (testy jednostkowe HTTP bez ba
             accountId: REGULAR_ACC,
             role: "MEMBER",
             workSchedule: janPartTime,
+            effectiveWorkSchedule: janPartTime,
           },
         ]),
       );
@@ -861,6 +925,7 @@ describe("Edycja pracownika i walidacja workEmail (testy jednostkowe HTTP bez ba
         name: "Acme",
         status: "ACTIVE",
         timeZone: "Europe/London",
+        defaultWorkSchedule: companyDefault,
       });
 
       // Odmowy na directory/organization: token użytkownika -> 401, zły zakres -> 403, zły klient -> 403, brak Entitlement -> 403, nieznana firma -> 404

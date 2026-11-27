@@ -2214,8 +2214,16 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(200);
 
+      const companyDefaultSchedule = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
       const janSchedule = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
       const piotrSchedule = { "1": 240, "2": 240, "3": 240 };
+      expect(
+        (
+          await request("PATCH", "/core/v1/organization", ownerToken, {
+            defaultWorkSchedule: companyDefaultSchedule,
+          })
+        ).statusCode,
+      ).toBe(200);
       expect(
         (
           await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
@@ -2262,6 +2270,7 @@ describe("Core API", () => {
             accountId: jan.accountId,
             role: "LEADER",
             workSchedule: janSchedule,
+            effectiveWorkSchedule: janSchedule,
           },
           {
             unitId: krakow.id,
@@ -2269,6 +2278,7 @@ describe("Core API", () => {
             accountId: null,
             role: "MEMBER",
             workSchedule: null,
+            effectiveWorkSchedule: companyDefaultSchedule,
           },
           {
             unitId: warszawa.id,
@@ -2276,6 +2286,7 @@ describe("Core API", () => {
             accountId: piotr.accountId,
             role: "MEMBER",
             workSchedule: piotrSchedule,
+            effectiveWorkSchedule: piotrSchedule,
           },
         ]),
       );
@@ -2332,7 +2343,7 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(422);
 
-      // 4. directory/employees: minimalne pola + workSchedule (bez workEmail i jobTitle), powtarzalny employeeId, stronicowanie, RLS
+      // 4. directory/employees: minimalne pola + workSchedule i effectiveWorkSchedule (bez workEmail i jobTitle), powtarzalny employeeId, stronicowanie, RLS
       const allEmpsRes = await get(
         `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}`,
         dirToken,
@@ -2341,7 +2352,15 @@ describe("Core API", () => {
       const allEmps = allEmpsRes.json().data as Record<string, unknown>[];
       expect(allEmps).toHaveLength(4);
       for (const emp of allEmps) {
-        expect(Object.keys(emp).sort()).toEqual(["accountId", "firstName", "id", "lastName", "status", "workSchedule"]);
+        expect(Object.keys(emp).sort()).toEqual([
+          "accountId",
+          "effectiveWorkSchedule",
+          "firstName",
+          "id",
+          "lastName",
+          "status",
+          "workSchedule",
+        ]);
         expect("workEmail" in emp).toBe(false);
         expect("jobTitle" in emp).toBe(false);
       }
@@ -2354,6 +2373,7 @@ describe("Core API", () => {
             lastName: "BezKonta",
             status: "ACTIVE",
             workSchedule: null,
+            effectiveWorkSchedule: companyDefaultSchedule,
           },
           {
             id: jan.employeeId,
@@ -2362,6 +2382,7 @@ describe("Core API", () => {
             lastName: "Kierownik",
             status: "ACTIVE",
             workSchedule: janSchedule,
+            effectiveWorkSchedule: janSchedule,
           },
           {
             id: piotr.employeeId,
@@ -2370,6 +2391,7 @@ describe("Core API", () => {
             lastName: "Pracownik",
             status: "ACTIVE",
             workSchedule: piotrSchedule,
+            effectiveWorkSchedule: piotrSchedule,
           },
         ]),
       );
@@ -2412,7 +2434,7 @@ describe("Core API", () => {
         ).statusCode,
       ).toBe(422);
 
-      // 4b. directory/organization: profil firmy ze strefą czasową (bez domen), reaguje na PATCH /organization
+      // 4b. directory/organization: profil firmy ze strefą czasową i defaultWorkSchedule (bez domen), reaguje na PATCH /organization
       const dirOrgDefault = await get(
         `/core/v1/products/${productKey}/directory/organization?organizationId=${company.id}`,
         dirToken,
@@ -2423,10 +2445,16 @@ describe("Core API", () => {
         name: `dir-${suffix}`,
         status: "ACTIVE",
         timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: companyDefaultSchedule,
       });
 
       expect(
-        (await request("PATCH", "/core/v1/organization", ownerToken, { timeZone: "Europe/London" })).statusCode,
+        (
+          await request("PATCH", "/core/v1/organization", ownerToken, {
+            timeZone: "Europe/London",
+            defaultWorkSchedule: null,
+          })
+        ).statusCode,
       ).toBe(200);
 
       const dirOrgUpdated = await get(
@@ -2435,6 +2463,15 @@ describe("Core API", () => {
       );
       expect(dirOrgUpdated.statusCode).toBe(200);
       expect(dirOrgUpdated.json().data.timeZone).toBe("Europe/London");
+      expect(dirOrgUpdated.json().data.defaultWorkSchedule).toBeNull();
+
+      // Po wyczyszczeniu domyślnego harmonogramu firmy pracownik bez własnego harmonogramu ma effectiveWorkSchedule: null
+      const noAccountAfterClear = await get(
+        `/core/v1/products/${productKey}/directory/employees?organizationId=${company.id}&employeeId=${noAccountEmp.id}`,
+        dirToken,
+      );
+      expect(noAccountAfterClear.statusCode).toBe(200);
+      expect(noAccountAfterClear.json().data[0]?.effectiveWorkSchedule).toBeNull();
 
       // 5. Po zakończeniu Entitlement dostęp do katalogu znowu daje 403
       await endEntitlement(db, { organization: company.id, product: productKey });
