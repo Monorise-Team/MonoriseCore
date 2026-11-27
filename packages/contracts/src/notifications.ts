@@ -85,6 +85,19 @@ export function getNotificationCategory(key: string): NotificationCategoryDefini
   return NOTIFICATION_CATEGORY_BY_KEY.get(key);
 }
 
+/** Zwraca `true`, gdy surowy URL zawiera białe znaki, znaki sterujące (w tym NUL) lub ukośnik odwrotny (`\`). */
+export function hasUnsafeUrlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f || code === 0x5c || /\s/.test(value[i]!)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const RawUrlFormat = z.url("Podaj poprawny adres URL");
+
 /** Żądanie zlecenia powiadomienia e-mail przez serwer produktu (`POST /core/v1/organizations/{organizationId}/notifications`). */
 export const CreateNotification = z
   .object({
@@ -108,11 +121,18 @@ export const CreateNotification = z
         `Treść powiadomienia może mieć co najwyżej ${NOTIFICATION_BODY_MAX_LENGTH} znaków`,
       ),
     actionUrl: z
-      .url("Podaj poprawny adres URL")
+      .string()
       .max(
         NOTIFICATION_ACTION_URL_MAX_LENGTH,
         `Adres actionUrl może mieć co najwyżej ${NOTIFICATION_ACTION_URL_MAX_LENGTH} znaków`,
       )
+      .refine((value) => !hasUnsafeUrlChars(value), {
+        message: "Adres actionUrl nie może zawierać białych znaków, znaków sterujących ani ukośników odwrotnych",
+      })
+      .refine((value) => RawUrlFormat.safeParse(value).success, {
+        message: "Podaj poprawny adres URL",
+      })
+      .meta({ format: "uri" })
       .nullable()
       .optional(),
   })

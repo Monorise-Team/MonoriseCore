@@ -1105,6 +1105,24 @@ describe("kontrakty", () => {
         actionUrl: "not-a-url",
       }).success,
     ).toBe(false);
+    for (const unsafeUrl of [
+      "https://kivotasks.monorise.studio\\@evil.example/x",
+      "https://kivotasks.monorise.studio/issues/KT 1",
+      " https://kivotasks.monorise.studio/issues/KT-1",
+      "https://kivotasks.monorise.studio/issues/KT-1\u0000",
+      "https://kivotasks.monorise.studio/issues/KT-1\t",
+    ]) {
+      expect(
+        CreateNotification.safeParse({
+          recipientAccountId: UUID_1,
+          category: "timotime.reminders",
+          title: "Tytuł",
+          body: "Treść",
+          actionUrl: unsafeUrl,
+        }).success,
+        `Powinno odrzucić ${JSON.stringify(unsafeUrl)}`,
+      ).toBe(false);
+    }
     expect(
       CreateNotification.safeParse({
         recipientAccountId: UUID_1,

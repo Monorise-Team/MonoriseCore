@@ -26,6 +26,7 @@ export {
 export {
   CreateNotification,
   getNotificationCategory,
+  hasUnsafeUrlChars,
   NOTIFICATION_ACTION_URL_MAX_LENGTH,
   NOTIFICATION_BODY_MAX_LENGTH,
   NOTIFICATION_CATEGORIES,
