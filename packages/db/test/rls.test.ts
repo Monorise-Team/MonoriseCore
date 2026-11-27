@@ -2732,4 +2732,76 @@ describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86
       });
     }
   });
+
+  it("wymusza CHECK na Employee.workSchedule i Organization.timeZone oraz ustawia wartości domyślne pod RLS", async () => {
+    const org = await withOrganization(db, acme.id, (tx) =>
+      tx.organization.findUniqueOrThrow({ where: { id: acme.id }, select: { timeZone: true } }),
+    );
+    expect(org.timeZone).toBe("Europe/Warsaw");
+
+    const emp = await withOrganization(db, acme.id, (tx) =>
+      tx.employee.findUniqueOrThrow({ where: { id: acme.employeeId }, select: { workSchedule: true } }),
+    );
+    expect(emp.workSchedule).toBeNull();
+
+    // Nieprawidłowa pusta strefa czasowa odrzucona przez CHECK
+    await expect(
+      withOrganization(
+        db,
+        acme.id,
+        (tx) => tx.$executeRaw`UPDATE "public"."organizations" SET "timeZone" = '   ' WHERE "id" = ${acme.id}::uuid`,
+      ),
+    ).rejects.toThrow(/organizations_timeZone_non_empty|check constraint|violates/i);
+
+    // Poprawne harmonogramy JSONB przechodzą CHECK
+    const validSchedules = [
+      '{"1":480,"2":480,"3":480,"4":480,"5":480}',
+      '{"1":240,"2":240,"3":240}',
+      '{"1":0,"7":1440}',
+      "{}",
+    ];
+    for (const raw of validSchedules) {
+      await withOrganization(
+        db,
+        acme.id,
+        (tx) =>
+          tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = ${raw}::jsonb WHERE "id" = ${acme.employeeId}::uuid`,
+      );
+    }
+
+    // SQL NULL czyści harmonogram
+    await withOrganization(
+      db,
+      acme.id,
+      (tx) =>
+        tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = NULL WHERE "id" = ${acme.employeeId}::uuid`,
+    );
+
+    // Niepoprawne wartości JSONB są odrzucane przez CHECK (zły klucz, >1440, <0, ułamek, typ nie-liczbowy, tablica, JSON null)
+    const invalidSchedules = [
+      '{"0":480}',
+      '{"8":480}',
+      '{"mon":480}',
+      '{"1":1441}',
+      '{"1":-1}',
+      '{"1":480.5}',
+      '{"1":"480"}',
+      '{"1":null}',
+      '{"1":true}',
+      "[480]",
+      "null",
+      "480",
+    ];
+    for (const raw of invalidSchedules) {
+      await expect(
+        withOrganization(
+          db,
+          acme.id,
+          (tx) =>
+            tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = ${raw}::jsonb WHERE "id" = ${acme.employeeId}::uuid`,
+        ),
+        `CHECK powinien odrzucić ${raw}`,
+      ).rejects.toThrow(/employees_workSchedule_valid|check constraint|violates/i);
+    }
+  });
 });

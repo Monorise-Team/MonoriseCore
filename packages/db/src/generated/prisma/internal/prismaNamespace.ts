@@ -3072,6 +3072,7 @@ export const OrganizationScalarFieldEnum = {
   id: 'id',
   name: 'name',
   status: 'status',
+  timeZone: 'timeZone',
   createdVia: 'createdVia',
   ownerAccountId: 'ownerAccountId',
   mfaRequiredForAll: 'mfaRequiredForAll',
@@ -3107,6 +3108,7 @@ export const EmployeeScalarFieldEnum = {
   lastName: 'lastName',
   workEmail: 'workEmail',
   jobTitle: 'jobTitle',
+  workSchedule: 'workSchedule',
   status: 'status',
   anonymizedAt: 'anonymizedAt',
   createdAt: 'createdAt',
@@ -3391,6 +3393,14 @@ export const SortOrder = {
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
 
 
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
+
+
 export const JsonNullValueInput = {
   JsonNull: JsonNull
 } as const
@@ -3535,6 +3545,20 @@ export type ListEnumDomainVerificationMethodFieldRefInput<$PrismaModel> = FieldR
 
 
 /**
+ * Reference to a field of type 'Json'
+ */
+export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+/**
+ * Reference to a field of type 'QueryMode'
+ */
+export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
  * Reference to a field of type 'EmployeeStatus'
  */
 export type EnumEmployeeStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EmployeeStatus'>
@@ -3643,20 +3667,6 @@ export type EnumAuditActorTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$P
  * Reference to a field of type 'AuditActorType[]'
  */
 export type ListEnumAuditActorTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AuditActorType[]'>
-    
-
-
-/**
- * Reference to a field of type 'Json'
- */
-export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
-    
-
-
-/**
- * Reference to a field of type 'QueryMode'
- */
-export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
     
 
 

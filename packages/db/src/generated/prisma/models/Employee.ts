@@ -57,6 +57,7 @@ export type EmployeeCountAggregateOutputType = {
   lastName: number
   workEmail: number
   jobTitle: number
+  workSchedule: number
   status: number
   anonymizedAt: number
   createdAt: number
@@ -98,6 +99,7 @@ export type EmployeeCountAggregateInputType = {
   lastName?: true
   workEmail?: true
   jobTitle?: true
+  workSchedule?: true
   status?: true
   anonymizedAt?: true
   createdAt?: true
@@ -184,6 +186,7 @@ export type EmployeeGroupByOutputType = {
   lastName: string
   workEmail: string | null
   jobTitle: string | null
+  workSchedule: runtime.JsonValue | null
   status: $Enums.EmployeeStatus
   anonymizedAt: Date | null
   createdAt: Date
@@ -218,6 +221,7 @@ export type EmployeeWhereInput = {
   lastName?: Prisma.StringFilter<"Employee"> | string
   workEmail?: Prisma.StringNullableFilter<"Employee"> | string | null
   jobTitle?: Prisma.StringNullableFilter<"Employee"> | string | null
+  workSchedule?: Prisma.JsonNullableFilter<"Employee">
   status?: Prisma.EnumEmployeeStatusFilter<"Employee"> | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.DateTimeNullableFilter<"Employee"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Employee"> | Date | string
@@ -234,6 +238,7 @@ export type EmployeeOrderByWithRelationInput = {
   lastName?: Prisma.SortOrder
   workEmail?: Prisma.SortOrderInput | Prisma.SortOrder
   jobTitle?: Prisma.SortOrderInput | Prisma.SortOrder
+  workSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   anonymizedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -254,6 +259,7 @@ export type EmployeeWhereUniqueInput = Prisma.AtLeast<{
   lastName?: Prisma.StringFilter<"Employee"> | string
   workEmail?: Prisma.StringNullableFilter<"Employee"> | string | null
   jobTitle?: Prisma.StringNullableFilter<"Employee"> | string | null
+  workSchedule?: Prisma.JsonNullableFilter<"Employee">
   status?: Prisma.EnumEmployeeStatusFilter<"Employee"> | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.DateTimeNullableFilter<"Employee"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Employee"> | Date | string
@@ -270,6 +276,7 @@ export type EmployeeOrderByWithAggregationInput = {
   lastName?: Prisma.SortOrder
   workEmail?: Prisma.SortOrderInput | Prisma.SortOrder
   jobTitle?: Prisma.SortOrderInput | Prisma.SortOrder
+  workSchedule?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   anonymizedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -289,6 +296,7 @@ export type EmployeeScalarWhereWithAggregatesInput = {
   lastName?: Prisma.StringWithAggregatesFilter<"Employee"> | string
   workEmail?: Prisma.StringNullableWithAggregatesFilter<"Employee"> | string | null
   jobTitle?: Prisma.StringNullableWithAggregatesFilter<"Employee"> | string | null
+  workSchedule?: Prisma.JsonNullableWithAggregatesFilter<"Employee">
   status?: Prisma.EnumEmployeeStatusWithAggregatesFilter<"Employee"> | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Employee"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Employee"> | Date | string
@@ -301,6 +309,7 @@ export type EmployeeCreateInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -317,6 +326,7 @@ export type EmployeeUncheckedCreateInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -331,6 +341,7 @@ export type EmployeeUpdateInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -347,6 +358,7 @@ export type EmployeeUncheckedUpdateInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -362,6 +374,7 @@ export type EmployeeCreateManyInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -374,6 +387,7 @@ export type EmployeeUpdateManyMutationInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -387,6 +401,7 @@ export type EmployeeUncheckedUpdateManyInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -415,6 +430,7 @@ export type EmployeeCountOrderByAggregateInput = {
   lastName?: Prisma.SortOrder
   workEmail?: Prisma.SortOrder
   jobTitle?: Prisma.SortOrder
+  workSchedule?: Prisma.SortOrder
   status?: Prisma.SortOrder
   anonymizedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -532,6 +548,7 @@ export type EmployeeCreateWithoutOrganizationInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -546,6 +563,7 @@ export type EmployeeUncheckedCreateWithoutOrganizationInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -590,6 +608,7 @@ export type EmployeeScalarWhereInput = {
   lastName?: Prisma.StringFilter<"Employee"> | string
   workEmail?: Prisma.StringNullableFilter<"Employee"> | string | null
   jobTitle?: Prisma.StringNullableFilter<"Employee"> | string | null
+  workSchedule?: Prisma.JsonNullableFilter<"Employee">
   status?: Prisma.EnumEmployeeStatusFilter<"Employee"> | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.DateTimeNullableFilter<"Employee"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Employee"> | Date | string
@@ -602,6 +621,7 @@ export type EmployeeCreateWithoutAccountInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -617,6 +637,7 @@ export type EmployeeUncheckedCreateWithoutAccountInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -646,6 +667,7 @@ export type EmployeeUpdateWithoutAccountInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -661,6 +683,7 @@ export type EmployeeUncheckedUpdateWithoutAccountInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -674,6 +697,7 @@ export type EmployeeCreateWithoutUnitMembershipsInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -689,6 +713,7 @@ export type EmployeeUncheckedCreateWithoutUnitMembershipsInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -718,6 +743,7 @@ export type EmployeeUpdateWithoutUnitMembershipsInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -733,6 +759,7 @@ export type EmployeeUncheckedUpdateWithoutUnitMembershipsInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -746,6 +773,7 @@ export type EmployeeCreateManyOrganizationInput = {
   lastName: string
   workEmail?: string | null
   jobTitle?: string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: $Enums.EmployeeStatus
   anonymizedAt?: Date | string | null
   createdAt?: Date | string
@@ -758,6 +786,7 @@ export type EmployeeUpdateWithoutOrganizationInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -772,6 +801,7 @@ export type EmployeeUncheckedUpdateWithoutOrganizationInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -786,6 +816,7 @@ export type EmployeeUncheckedUpdateManyWithoutOrganizationInput = {
   lastName?: Prisma.StringFieldUpdateOperationsInput | string
   workEmail?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   jobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  workSchedule?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   status?: Prisma.EnumEmployeeStatusFieldUpdateOperationsInput | $Enums.EmployeeStatus
   anonymizedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -830,6 +861,7 @@ export type EmployeeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs
   lastName?: boolean
   workEmail?: boolean
   jobTitle?: boolean
+  workSchedule?: boolean
   status?: boolean
   anonymizedAt?: boolean
   createdAt?: boolean
@@ -847,6 +879,7 @@ export type EmployeeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exte
   lastName?: boolean
   workEmail?: boolean
   jobTitle?: boolean
+  workSchedule?: boolean
   status?: boolean
   anonymizedAt?: boolean
   createdAt?: boolean
@@ -861,6 +894,7 @@ export type EmployeeSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exte
   lastName?: boolean
   workEmail?: boolean
   jobTitle?: boolean
+  workSchedule?: boolean
   status?: boolean
   anonymizedAt?: boolean
   createdAt?: boolean
@@ -875,13 +909,14 @@ export type EmployeeSelectScalar = {
   lastName?: boolean
   workEmail?: boolean
   jobTitle?: boolean
+  workSchedule?: boolean
   status?: boolean
   anonymizedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type EmployeeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "firstName" | "lastName" | "workEmail" | "jobTitle" | "status" | "anonymizedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
+export type EmployeeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "firstName" | "lastName" | "workEmail" | "jobTitle" | "workSchedule" | "status" | "anonymizedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["employee"]>
 export type EmployeeInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
   account?: boolean | Prisma.Employee$accountArgs<ExtArgs>
@@ -909,6 +944,7 @@ export type $EmployeePayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     lastName: string
     workEmail: string | null
     jobTitle: string | null
+    workSchedule: runtime.JsonValue | null
     status: $Enums.EmployeeStatus
     anonymizedAt: Date | null
     createdAt: Date
@@ -1345,6 +1381,7 @@ export interface EmployeeFieldRefs {
   readonly lastName: Prisma.FieldRef<"Employee", 'String'>
   readonly workEmail: Prisma.FieldRef<"Employee", 'String'>
   readonly jobTitle: Prisma.FieldRef<"Employee", 'String'>
+  readonly workSchedule: Prisma.FieldRef<"Employee", 'Json'>
   readonly status: Prisma.FieldRef<"Employee", 'EmployeeStatus'>
   readonly anonymizedAt: Prisma.FieldRef<"Employee", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"Employee", 'DateTime'>

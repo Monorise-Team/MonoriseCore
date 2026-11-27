@@ -28,6 +28,7 @@ export type OrganizationMinAggregateOutputType = {
   id: string | null
   name: string | null
   status: $Enums.OrganizationStatus | null
+  timeZone: string | null
   createdVia: $Enums.OrganizationCreatedVia | null
   ownerAccountId: string | null
   mfaRequiredForAll: boolean | null
@@ -41,6 +42,7 @@ export type OrganizationMaxAggregateOutputType = {
   id: string | null
   name: string | null
   status: $Enums.OrganizationStatus | null
+  timeZone: string | null
   createdVia: $Enums.OrganizationCreatedVia | null
   ownerAccountId: string | null
   mfaRequiredForAll: boolean | null
@@ -54,6 +56,7 @@ export type OrganizationCountAggregateOutputType = {
   id: number
   name: number
   status: number
+  timeZone: number
   createdVia: number
   ownerAccountId: number
   mfaRequiredForAll: number
@@ -69,6 +72,7 @@ export type OrganizationMinAggregateInputType = {
   id?: true
   name?: true
   status?: true
+  timeZone?: true
   createdVia?: true
   ownerAccountId?: true
   mfaRequiredForAll?: true
@@ -82,6 +86,7 @@ export type OrganizationMaxAggregateInputType = {
   id?: true
   name?: true
   status?: true
+  timeZone?: true
   createdVia?: true
   ownerAccountId?: true
   mfaRequiredForAll?: true
@@ -95,6 +100,7 @@ export type OrganizationCountAggregateInputType = {
   id?: true
   name?: true
   status?: true
+  timeZone?: true
   createdVia?: true
   ownerAccountId?: true
   mfaRequiredForAll?: true
@@ -181,6 +187,7 @@ export type OrganizationGroupByOutputType = {
   id: string
   name: string
   status: $Enums.OrganizationStatus
+  timeZone: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId: string | null
   mfaRequiredForAll: boolean
@@ -215,6 +222,7 @@ export type OrganizationWhereInput = {
   id?: Prisma.UuidFilter<"Organization"> | string
   name?: Prisma.StringFilter<"Organization"> | string
   status?: Prisma.EnumOrganizationStatusFilter<"Organization"> | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFilter<"Organization"> | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFilter<"Organization"> | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.UuidNullableFilter<"Organization"> | string | null
   mfaRequiredForAll?: Prisma.BoolFilter<"Organization"> | boolean
@@ -245,6 +253,7 @@ export type OrganizationOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  timeZone?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
   ownerAccountId?: Prisma.SortOrderInput | Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
@@ -279,6 +288,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.OrganizationWhereInput | Prisma.OrganizationWhereInput[]
   name?: Prisma.StringFilter<"Organization"> | string
   status?: Prisma.EnumOrganizationStatusFilter<"Organization"> | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFilter<"Organization"> | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFilter<"Organization"> | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFilter<"Organization"> | boolean
   suspendedAt?: Prisma.DateTimeNullableFilter<"Organization"> | Date | string | null
@@ -308,6 +318,7 @@ export type OrganizationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  timeZone?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
   ownerAccountId?: Prisma.SortOrderInput | Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
@@ -327,6 +338,7 @@ export type OrganizationScalarWhereWithAggregatesInput = {
   id?: Prisma.UuidWithAggregatesFilter<"Organization"> | string
   name?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   status?: Prisma.EnumOrganizationStatusWithAggregatesFilter<"Organization"> | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringWithAggregatesFilter<"Organization"> | string
   createdVia?: Prisma.EnumOrganizationCreatedViaWithAggregatesFilter<"Organization"> | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.UuidNullableWithAggregatesFilter<"Organization"> | string | null
   mfaRequiredForAll?: Prisma.BoolWithAggregatesFilter<"Organization"> | boolean
@@ -340,6 +352,7 @@ export type OrganizationCreateInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -369,6 +382,7 @@ export type OrganizationUncheckedCreateInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -398,6 +412,7 @@ export type OrganizationUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -427,6 +442,7 @@ export type OrganizationUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -456,6 +472,7 @@ export type OrganizationCreateManyInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -469,6 +486,7 @@ export type OrganizationUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -481,6 +499,7 @@ export type OrganizationUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -494,6 +513,7 @@ export type OrganizationCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  timeZone?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
   ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
@@ -507,6 +527,7 @@ export type OrganizationMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  timeZone?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
   ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
@@ -520,6 +541,7 @@ export type OrganizationMinOrderByAggregateInput = {
   id?: Prisma.SortOrder
   name?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  timeZone?: Prisma.SortOrder
   createdVia?: Prisma.SortOrder
   ownerAccountId?: Prisma.SortOrder
   mfaRequiredForAll?: Prisma.SortOrder
@@ -813,6 +835,7 @@ export type OrganizationCreateWithoutDomainsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -841,6 +864,7 @@ export type OrganizationUncheckedCreateWithoutDomainsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -885,6 +909,7 @@ export type OrganizationUpdateWithoutDomainsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -913,6 +938,7 @@ export type OrganizationUncheckedUpdateWithoutDomainsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -941,6 +967,7 @@ export type OrganizationCreateWithoutEmployeesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -969,6 +996,7 @@ export type OrganizationUncheckedCreateWithoutEmployeesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1013,6 +1041,7 @@ export type OrganizationUpdateWithoutEmployeesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1041,6 +1070,7 @@ export type OrganizationUncheckedUpdateWithoutEmployeesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1069,6 +1099,7 @@ export type OrganizationCreateWithoutAccountsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1097,6 +1128,7 @@ export type OrganizationUncheckedCreateWithoutAccountsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1130,6 +1162,7 @@ export type OrganizationCreateWithoutOwnerAccountInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1158,6 +1191,7 @@ export type OrganizationUncheckedCreateWithoutOwnerAccountInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1202,6 +1236,7 @@ export type OrganizationUpdateWithoutAccountsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1230,6 +1265,7 @@ export type OrganizationUncheckedUpdateWithoutAccountsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1269,6 +1305,7 @@ export type OrganizationUpdateWithoutOwnerAccountInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1297,6 +1334,7 @@ export type OrganizationUncheckedUpdateWithoutOwnerAccountInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1325,6 +1363,7 @@ export type OrganizationCreateWithoutInvitationsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1353,6 +1392,7 @@ export type OrganizationUncheckedCreateWithoutInvitationsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1397,6 +1437,7 @@ export type OrganizationUpdateWithoutInvitationsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1425,6 +1466,7 @@ export type OrganizationUncheckedUpdateWithoutInvitationsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1453,6 +1495,7 @@ export type OrganizationCreateWithoutUnitsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1481,6 +1524,7 @@ export type OrganizationUncheckedCreateWithoutUnitsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1525,6 +1569,7 @@ export type OrganizationUpdateWithoutUnitsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1553,6 +1598,7 @@ export type OrganizationUncheckedUpdateWithoutUnitsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1581,6 +1627,7 @@ export type OrganizationCreateWithoutUnitMembershipsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1609,6 +1656,7 @@ export type OrganizationUncheckedCreateWithoutUnitMembershipsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1653,6 +1701,7 @@ export type OrganizationUpdateWithoutUnitMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1681,6 +1730,7 @@ export type OrganizationUncheckedUpdateWithoutUnitMembershipsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1709,6 +1759,7 @@ export type OrganizationCreateWithoutRolesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1737,6 +1788,7 @@ export type OrganizationUncheckedCreateWithoutRolesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1781,6 +1833,7 @@ export type OrganizationUpdateWithoutRolesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1809,6 +1862,7 @@ export type OrganizationUncheckedUpdateWithoutRolesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1837,6 +1891,7 @@ export type OrganizationCreateWithoutRoleAssignmentsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1865,6 +1920,7 @@ export type OrganizationUncheckedCreateWithoutRoleAssignmentsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -1909,6 +1965,7 @@ export type OrganizationUpdateWithoutRoleAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -1937,6 +1994,7 @@ export type OrganizationUncheckedUpdateWithoutRoleAssignmentsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -1965,6 +2023,7 @@ export type OrganizationCreateWithoutAuditLogsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -1993,6 +2052,7 @@ export type OrganizationUncheckedCreateWithoutAuditLogsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2037,6 +2097,7 @@ export type OrganizationUpdateWithoutAuditLogsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2065,6 +2126,7 @@ export type OrganizationUncheckedUpdateWithoutAuditLogsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2093,6 +2155,7 @@ export type OrganizationCreateWithoutEntitlementsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2121,6 +2184,7 @@ export type OrganizationUncheckedCreateWithoutEntitlementsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2165,6 +2229,7 @@ export type OrganizationUpdateWithoutEntitlementsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2193,6 +2258,7 @@ export type OrganizationUncheckedUpdateWithoutEntitlementsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2221,6 +2287,7 @@ export type OrganizationCreateWithoutAppAccessesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2249,6 +2316,7 @@ export type OrganizationUncheckedCreateWithoutAppAccessesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2293,6 +2361,7 @@ export type OrganizationUpdateWithoutAppAccessesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2321,6 +2390,7 @@ export type OrganizationUncheckedUpdateWithoutAppAccessesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2349,6 +2419,7 @@ export type OrganizationCreateWithoutOutboxEventsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2377,6 +2448,7 @@ export type OrganizationUncheckedCreateWithoutOutboxEventsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2421,6 +2493,7 @@ export type OrganizationUpdateWithoutOutboxEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2449,6 +2522,7 @@ export type OrganizationUncheckedUpdateWithoutOutboxEventsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2477,6 +2551,7 @@ export type OrganizationCreateWithoutIdempotencyKeysInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2505,6 +2580,7 @@ export type OrganizationUncheckedCreateWithoutIdempotencyKeysInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2549,6 +2625,7 @@ export type OrganizationUpdateWithoutIdempotencyKeysInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2577,6 +2654,7 @@ export type OrganizationUncheckedUpdateWithoutIdempotencyKeysInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2605,6 +2683,7 @@ export type OrganizationCreateWithoutMailOutboxInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2633,6 +2712,7 @@ export type OrganizationUncheckedCreateWithoutMailOutboxInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2677,6 +2757,7 @@ export type OrganizationUpdateWithoutMailOutboxInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2705,6 +2786,7 @@ export type OrganizationUncheckedUpdateWithoutMailOutboxInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2733,6 +2815,7 @@ export type OrganizationCreateWithoutNotificationsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2761,6 +2844,7 @@ export type OrganizationUncheckedCreateWithoutNotificationsInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2805,6 +2889,7 @@ export type OrganizationUpdateWithoutNotificationsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2833,6 +2918,7 @@ export type OrganizationUncheckedUpdateWithoutNotificationsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -2861,6 +2947,7 @@ export type OrganizationCreateWithoutNotificationPreferencesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: boolean
   suspendedAt?: Date | string | null
@@ -2889,6 +2976,7 @@ export type OrganizationUncheckedCreateWithoutNotificationPreferencesInput = {
   id: string
   name: string
   status?: $Enums.OrganizationStatus
+  timeZone?: string
   createdVia: $Enums.OrganizationCreatedVia
   ownerAccountId?: string | null
   mfaRequiredForAll?: boolean
@@ -2933,6 +3021,7 @@ export type OrganizationUpdateWithoutNotificationPreferencesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
   suspendedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -2961,6 +3050,7 @@ export type OrganizationUncheckedUpdateWithoutNotificationPreferencesInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumOrganizationStatusFieldUpdateOperationsInput | $Enums.OrganizationStatus
+  timeZone?: Prisma.StringFieldUpdateOperationsInput | string
   createdVia?: Prisma.EnumOrganizationCreatedViaFieldUpdateOperationsInput | $Enums.OrganizationCreatedVia
   ownerAccountId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   mfaRequiredForAll?: Prisma.BoolFieldUpdateOperationsInput | boolean
@@ -3155,6 +3245,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   id?: boolean
   name?: boolean
   status?: boolean
+  timeZone?: boolean
   createdVia?: boolean
   ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
@@ -3186,6 +3277,7 @@ export type OrganizationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   name?: boolean
   status?: boolean
+  timeZone?: boolean
   createdVia?: boolean
   ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
@@ -3200,6 +3292,7 @@ export type OrganizationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   id?: boolean
   name?: boolean
   status?: boolean
+  timeZone?: boolean
   createdVia?: boolean
   ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
@@ -3214,6 +3307,7 @@ export type OrganizationSelectScalar = {
   id?: boolean
   name?: boolean
   status?: boolean
+  timeZone?: boolean
   createdVia?: boolean
   ownerAccountId?: boolean
   mfaRequiredForAll?: boolean
@@ -3223,7 +3317,7 @@ export type OrganizationSelectScalar = {
   updatedAt?: boolean
 }
 
-export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "status" | "createdVia" | "ownerAccountId" | "mfaRequiredForAll" | "suspendedAt" | "offboardingStartedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
+export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "status" | "timeZone" | "createdVia" | "ownerAccountId" | "mfaRequiredForAll" | "suspendedAt" | "offboardingStartedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["organization"]>
 export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   ownerAccount?: boolean | Prisma.Organization$ownerAccountArgs<ExtArgs>
   domains?: boolean | Prisma.Organization$domainsArgs<ExtArgs>
@@ -3276,6 +3370,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
     id: string
     name: string
     status: $Enums.OrganizationStatus
+    timeZone: string
     createdVia: $Enums.OrganizationCreatedVia
     ownerAccountId: string | null
     mfaRequiredForAll: boolean
@@ -3726,6 +3821,7 @@ export interface OrganizationFieldRefs {
   readonly id: Prisma.FieldRef<"Organization", 'String'>
   readonly name: Prisma.FieldRef<"Organization", 'String'>
   readonly status: Prisma.FieldRef<"Organization", 'OrganizationStatus'>
+  readonly timeZone: Prisma.FieldRef<"Organization", 'String'>
   readonly createdVia: Prisma.FieldRef<"Organization", 'OrganizationCreatedVia'>
   readonly ownerAccountId: Prisma.FieldRef<"Organization", 'String'>
   readonly mfaRequiredForAll: Prisma.FieldRef<"Organization", 'Boolean'>

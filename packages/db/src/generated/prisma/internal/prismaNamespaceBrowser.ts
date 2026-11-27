@@ -318,6 +318,7 @@ export const OrganizationScalarFieldEnum = {
   id: 'id',
   name: 'name',
   status: 'status',
+  timeZone: 'timeZone',
   createdVia: 'createdVia',
   ownerAccountId: 'ownerAccountId',
   mfaRequiredForAll: 'mfaRequiredForAll',
@@ -353,6 +354,7 @@ export const EmployeeScalarFieldEnum = {
   lastName: 'lastName',
   workEmail: 'workEmail',
   jobTitle: 'jobTitle',
+  workSchedule: 'workSchedule',
   status: 'status',
   anonymizedAt: 'anonymizedAt',
   createdAt: 'createdAt',
@@ -635,6 +637,14 @@ export const SortOrder = {
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const JsonNullValueInput = {
