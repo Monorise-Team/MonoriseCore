@@ -995,8 +995,19 @@ describe("kontrakty", () => {
     expect(NOTIFICATION_TITLE_MAX_LENGTH).toBe(200);
     expect(NOTIFICATION_BODY_MAX_LENGTH).toBe(4000);
 
-    expect(NOTIFICATION_CATEGORY_KEYS).toEqual(["security", "account", "timotime.reminders", "kivotasks.assignments"]);
-    expect(NOTIFICATION_CATEGORIES).toHaveLength(4);
+    expect(NOTIFICATION_CATEGORY_KEYS).toEqual([
+      "security",
+      "account",
+      "timotime.reminders",
+      "kivotasks.assignments",
+      "avenmail.alerts",
+    ]);
+    expect(NOTIFICATION_CATEGORIES).toHaveLength(5);
+    expect(getNotificationCategory("avenmail.alerts")).toMatchObject({
+      product: "avenmail",
+      channel: "notifications",
+      optional: true,
+    });
 
     expect(getNotificationCategory("security")).toMatchObject({
       key: "security",

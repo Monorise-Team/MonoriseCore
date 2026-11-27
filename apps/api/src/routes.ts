@@ -286,7 +286,8 @@ const NOTIFICATION_CATEGORY_PARAM: ParameterDefinition = {
   name: "category",
   in: "path",
   required: true,
-  description: "Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`).",
+  description:
+    "Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`, `avenmail.alerts`).",
   schema: NotificationCategoryKey,
 };
 
