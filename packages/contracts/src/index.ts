@@ -49,6 +49,24 @@ export {
   type NotificationCategoryDefinition,
 } from "./notifications.js";
 
+export {
+  DEFAULT_ORGANIZATION_TIME_ZONE,
+  effectiveWorkSchedule,
+  isValidIanaTimeZone,
+  MAX_TIME_ZONE_LENGTH,
+  TimeZone,
+  WORK_SCHEDULE_DAYS,
+  WORK_SCHEDULE_FULL_TIME_MINUTES,
+  WORK_SCHEDULE_MAX_DAY_MINUTES,
+  WorkSchedule,
+  WorkScheduleDayMinutes,
+  workScheduleEquals,
+  workScheduleFte,
+  workScheduleWeeklyMinutes,
+  type IsoWeekday,
+} from "./work-schedule.js";
+import { TimeZone, WorkSchedule } from "./work-schedule.js";
+
 export const API_PREFIX = "/core/v1";
 export const PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const PERMISSIONS_READ_SCOPE = "core:permissions.read";
@@ -251,6 +269,8 @@ export const Organization = z.object({
   id: z.uuid(),
   name: z.string(),
   status: OrganizationStatus,
+  timeZone: TimeZone,
+  defaultWorkSchedule: WorkSchedule.nullable(),
   domains: z.array(OrganizationDomain),
   createdAt: z.string(),
 });
@@ -258,9 +278,14 @@ export type Organization = z.infer<typeof Organization>;
 
 export const UpdateOrganization = z
   .object({
-    name: z.string().trim().min(2).max(120),
+    name: z.string().trim().min(2).max(120).optional(),
+    timeZone: TimeZone.optional(),
+    defaultWorkSchedule: WorkSchedule.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => data.name !== undefined || data.timeZone !== undefined || data.defaultWorkSchedule !== undefined, {
+    message: "Podaj co najmniej jedno pole do zmiany",
+  });
 export type UpdateOrganization = z.infer<typeof UpdateOrganization>;
 
 export const CreateOrganizationDomain = z
@@ -302,6 +327,7 @@ export const Employee = z.object({
   lastName: z.string(),
   workEmail: z.string().nullable(),
   jobTitle: z.string().nullable(),
+  workSchedule: WorkSchedule.nullable(),
   status: EmployeeStatus,
 });
 export type Employee = z.infer<typeof Employee>;
@@ -320,6 +346,7 @@ export const UpdateEmployee = z
     lastName: z.string().trim().min(1).max(80).optional(),
     workEmail: z.email().max(254).nullable().optional(),
     jobTitle: z.string().trim().min(1).max(120).nullable().optional(),
+    workSchedule: WorkSchedule.nullable().optional(),
   })
   .strict()
   .refine(
@@ -327,14 +354,15 @@ export const UpdateEmployee = z
       data.firstName !== undefined ||
       data.lastName !== undefined ||
       data.workEmail !== undefined ||
-      data.jobTitle !== undefined,
+      data.jobTitle !== undefined ||
+      data.workSchedule !== undefined,
     {
       message: "Podaj co najmniej jedno pole do zmiany",
     },
   );
 export type UpdateEmployee = z.infer<typeof UpdateEmployee>;
 
-/** Kim jestem: konto, pracownik i firma z tokenu. */
+/** Kim jestem: konto, pracownik (z efektywnym harmonogramem pracy) i firma z tokenu. */
 export const Me = z.object({
   account: z.object({
     id: z.uuid(),
@@ -342,8 +370,16 @@ export const Me = z.object({
     status: AccountStatus,
     isOwner: z.boolean(),
   }),
-  employee: Employee,
-  organization: Organization.pick({ id: true, name: true, status: true }),
+  employee: Employee.extend({
+    effectiveWorkSchedule: WorkSchedule.nullable(),
+  }),
+  organization: Organization.pick({
+    id: true,
+    name: true,
+    status: true,
+    timeZone: true,
+    defaultWorkSchedule: true,
+  }),
 });
 export type Me = z.infer<typeof Me>;
 
@@ -669,6 +705,8 @@ export const DirectoryUnitMember = z.object({
   employeeId: z.uuid(),
   accountId: z.uuid().nullable(),
   role: UnitMembershipRole,
+  workSchedule: WorkSchedule.nullable(),
+  effectiveWorkSchedule: WorkSchedule.nullable(),
 });
 export type DirectoryUnitMember = z.infer<typeof DirectoryUnitMember>;
 
@@ -678,8 +716,20 @@ export const DirectoryEmployee = z.object({
   firstName: z.string(),
   lastName: z.string(),
   status: EmployeeStatus,
+  workSchedule: WorkSchedule.nullable(),
+  effectiveWorkSchedule: WorkSchedule.nullable(),
 });
 export type DirectoryEmployee = z.infer<typeof DirectoryEmployee>;
+
+/** Podstawowe dane firmy udostępniane serwerom produktów przez katalog (`core:directory.read`). */
+export const DirectoryOrganization = Organization.pick({
+  id: true,
+  name: true,
+  status: true,
+  timeZone: true,
+  defaultWorkSchedule: true,
+});
+export type DirectoryOrganization = z.infer<typeof DirectoryOrganization>;
 
 // ── Zaproszenia pracowników (ADR-0021) ──────────────────────────────────────────────────────────
 

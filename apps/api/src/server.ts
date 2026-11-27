@@ -9,6 +9,7 @@ import {
   CreateRoleAssignment,
   CreateUnit,
   DIRECTORY_READ_SCOPE,
+  effectiveWorkSchedule,
   emailDomain,
   EVENTS_READ_SCOPE,
   ProductEventsQuery,
@@ -34,11 +35,13 @@ import {
   UpdateRole,
   UpdateUnit,
   VerifyOrganizationDomain,
+  workScheduleEquals,
   type ApiErrorBody,
   type ApiListResponse,
   type ApiResponse,
   type AppAccess,
   type DirectoryEmployee,
+  type DirectoryOrganization,
   type DirectoryUnitMember,
   type AccountStatus,
   type Employee,
@@ -56,7 +59,7 @@ import {
   type Unit,
   type UnitMember,
 } from "@core/contracts";
-import { revokeUserAuthTokens, uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
+import { Prisma, revokeUserAuthTokens, uuidv7, withOrganization, type PrismaClient, type Tx } from "@core/db";
 import { PermissionError } from "@monorise-team/permissions";
 import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from "fastify";
 import { z } from "zod";
@@ -81,6 +84,7 @@ import {
   getOrganizationForCaller,
   lockOrganizationDomains,
   prepareVerifyOrganizationDomain,
+  serializeWorkSchedule,
   setPrimaryOrganizationDomain,
   updateOrganization,
   type DomainServiceOptions,
@@ -202,6 +206,9 @@ const DirectoryUnitMembersFilter = z.object({
 const DirectoryEmployeesFilter = z.object({
   organizationId: z.uuid(),
   employeeId: RepeatableUuidFilter,
+});
+const DirectoryOrganizationQuery = z.object({
+  organizationId: z.uuid(),
 });
 const ListUnitsFilter = z.object({ status: UnitStatus.optional() });
 const ListEntitlementsFilter = z.object({ status: EntitlementStatus.optional() });
@@ -392,6 +399,7 @@ function serializeEmployee(employee: {
   lastName: string;
   workEmail: string | null;
   jobTitle: string | null;
+  workSchedule?: unknown;
   status: Employee["status"];
 }): Employee {
   return {
@@ -402,6 +410,7 @@ function serializeEmployee(employee: {
     lastName: employee.lastName,
     workEmail: employee.workEmail,
     jobTitle: employee.jobTitle,
+    workSchedule: serializeWorkSchedule(employee.workSchedule),
     status: employee.status,
   };
 }
@@ -438,6 +447,7 @@ function serializeUnitMember(membership: {
     lastName: string;
     workEmail: string | null;
     jobTitle: string | null;
+    workSchedule?: unknown;
     status: Employee["status"];
   };
 }): UnitMember {
@@ -981,6 +991,11 @@ export function buildServer({
           where: { id: who.accountId },
           include: { employee: true, organization: true },
         });
+        const serializedEmployee = serializeEmployee({
+          ...account.employee,
+          account: { id: account.id, status: account.status },
+        });
+        const organizationDefaultSchedule = serializeWorkSchedule(account.organization.defaultWorkSchedule);
         return {
           account: {
             id: account.id,
@@ -988,11 +1003,16 @@ export function buildServer({
             status: account.status,
             isOwner: account.organization.ownerAccountId === account.id,
           },
-          employee: serializeEmployee({ ...account.employee, account: { id: account.id, status: account.status } }),
+          employee: {
+            ...serializedEmployee,
+            effectiveWorkSchedule: effectiveWorkSchedule(serializedEmployee.workSchedule, organizationDefaultSchedule),
+          },
           organization: {
             id: account.organization.id,
             name: account.organization.name,
             status: account.organization.status,
+            timeZone: account.organization.timeZone,
+            defaultWorkSchedule: organizationDefaultSchedule,
           },
         } satisfies Me;
       });
@@ -1202,12 +1222,16 @@ export function buildServer({
         const nextFirstName = body.firstName ?? employee.firstName;
         const nextLastName = body.lastName ?? employee.lastName;
         const nextJobTitle = body.jobTitle !== undefined ? body.jobTitle : employee.jobTitle;
+        const currentWorkSchedule = serializeWorkSchedule(employee.workSchedule);
+        const nextWorkSchedule = body.workSchedule !== undefined ? body.workSchedule : currentWorkSchedule;
+        const workScheduleChanged = !workScheduleEquals(currentWorkSchedule, nextWorkSchedule);
 
-        const changedFields: ("firstName" | "lastName" | "workEmail" | "jobTitle")[] = [];
+        const changedFields: ("firstName" | "lastName" | "workEmail" | "jobTitle" | "workSchedule")[] = [];
         if (nextFirstName !== employee.firstName) changedFields.push("firstName");
         if (nextLastName !== employee.lastName) changedFields.push("lastName");
         if (nextWorkEmail !== employee.workEmail) changedFields.push("workEmail");
         if (nextJobTitle !== employee.jobTitle) changedFields.push("jobTitle");
+        if (workScheduleChanged) changedFields.push("workSchedule");
 
         if (changedFields.length === 0) {
           return serializeEmployee(employee);
@@ -1220,6 +1244,9 @@ export function buildServer({
             ...(nextLastName !== employee.lastName ? { lastName: nextLastName } : {}),
             ...(nextWorkEmail !== employee.workEmail ? { workEmail: nextWorkEmail } : {}),
             ...(nextJobTitle !== employee.jobTitle ? { jobTitle: nextJobTitle } : {}),
+            ...(workScheduleChanged
+              ? { workSchedule: nextWorkSchedule === null ? Prisma.DbNull : nextWorkSchedule }
+              : {}),
           },
           include: { account: { select: { id: true, status: true } } },
         });
@@ -2479,7 +2506,7 @@ export function buildServer({
   async function assertOrganizationHasActiveEntitlement(tx: Tx, organizationId: string, productId: string) {
     const org = await tx.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true },
+      select: { id: true, defaultWorkSchedule: true },
     });
     if (!org) {
       throw new ApiFailure(404, "NOT_FOUND", "Nie znaleziono firmy");
@@ -2497,6 +2524,7 @@ export function buildServer({
     if (!entitlement) {
       throw new ApiFailure(403, "PERMISSION_DENIED", "Firma nie ma aktywnego dostępu do tego produktu");
     }
+    return org;
   }
 
   app.route({
@@ -2513,9 +2541,9 @@ export function buildServer({
       );
 
       const unitIds = page.unitId ? [...new Set(page.unitId)] : undefined;
-      const rows = await withOrganization(db, page.organizationId, async (tx) => {
-        await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
-        return tx.unitMembership.findMany({
+      const { rows, orgDefaultSchedule } = await withOrganization(db, page.organizationId, async (tx) => {
+        const org = await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
+        const rows = await tx.unitMembership.findMany({
           where: {
             ...(unitIds ? { unitId: { in: unitIds } } : {}),
             ...(page.afterId ? { id: { gt: page.afterId } } : {}),
@@ -2525,22 +2553,28 @@ export function buildServer({
             unitId: true,
             employeeId: true,
             role: true,
-            employee: { select: { account: { select: { id: true } } } },
+            employee: { select: { workSchedule: true, account: { select: { id: true } } } },
           },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         });
+        return { rows, orgDefaultSchedule: serializeWorkSchedule(org.defaultWorkSchedule) };
       });
 
       const { items, nextCursor } = paginateRows(rows, page.limit);
       return sendList(
         request,
-        items.map((row): DirectoryUnitMember => ({
-          unitId: row.unitId,
-          employeeId: row.employeeId,
-          accountId: row.employee.account?.id ?? null,
-          role: row.role,
-        })),
+        items.map((row): DirectoryUnitMember => {
+          const schedule = serializeWorkSchedule(row.employee.workSchedule);
+          return {
+            unitId: row.unitId,
+            employeeId: row.employeeId,
+            accountId: row.employee.account?.id ?? null,
+            role: row.role,
+            workSchedule: schedule,
+            effectiveWorkSchedule: effectiveWorkSchedule(schedule, orgDefaultSchedule),
+          };
+        }),
         nextCursor,
       );
     },
@@ -2579,9 +2613,9 @@ export function buildServer({
       );
 
       const employeeIds = page.employeeId ? [...new Set(page.employeeId)] : undefined;
-      const rows = await withOrganization(db, page.organizationId, async (tx) => {
-        await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
-        return tx.employee.findMany({
+      const { rows, orgDefaultSchedule } = await withOrganization(db, page.organizationId, async (tx) => {
+        const org = await assertOrganizationHasActiveEntitlement(tx, page.organizationId, product.id);
+        const rows = await tx.employee.findMany({
           where: {
             ...(employeeIds ? { id: { in: employeeIds } } : {}),
             ...(page.afterId ? { id: { gt: page.afterId } } : {}),
@@ -2591,25 +2625,63 @@ export function buildServer({
             firstName: true,
             lastName: true,
             status: true,
+            workSchedule: true,
             account: { select: { id: true } },
           },
           orderBy: { id: "asc" },
           take: page.limit + 1,
         });
+        return { rows, orgDefaultSchedule: serializeWorkSchedule(org.defaultWorkSchedule) };
       });
 
       const { items, nextCursor } = paginateRows(rows, page.limit);
       return sendList(
         request,
-        items.map((row): DirectoryEmployee => ({
-          id: row.id,
-          accountId: row.account?.id ?? null,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          status: row.status,
-        })),
+        items.map((row): DirectoryEmployee => {
+          const schedule = serializeWorkSchedule(row.workSchedule);
+          return {
+            id: row.id,
+            accountId: row.account?.id ?? null,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            status: row.status,
+            workSchedule: schedule,
+            effectiveWorkSchedule: effectiveWorkSchedule(schedule, orgDefaultSchedule),
+          };
+        }),
         nextCursor,
       );
+    },
+  });
+
+  app.route({
+    method: ROUTES.getProductDirectoryOrganization.method,
+    url: toFastifyPath(ROUTES.getProductDirectoryOrganization.path),
+    handler: async (request) => {
+      const machine = await machineCaller(request, DIRECTORY_READ_SCOPE);
+      const params = parseInput(ProductKeyParams, request.params);
+      const query = parseInput(DirectoryOrganizationQuery, request.query ?? {});
+      const product = await requireProductForMachine(
+        params.productKey,
+        machine.clientId,
+        "Ten klient nie może odczytywać katalogu wskazanego produktu",
+      );
+
+      const organization = await withOrganization(db, query.organizationId, async (tx) => {
+        await assertOrganizationHasActiveEntitlement(tx, query.organizationId, product.id);
+        return tx.organization.findUniqueOrThrow({
+          where: { id: query.organizationId },
+          select: { id: true, name: true, status: true, timeZone: true, defaultWorkSchedule: true },
+        });
+      });
+
+      return send(request, {
+        id: organization.id,
+        name: organization.name,
+        status: organization.status,
+        timeZone: organization.timeZone,
+        defaultWorkSchedule: serializeWorkSchedule(organization.defaultWorkSchedule),
+      } satisfies DirectoryOrganization);
     },
   });
 

@@ -8,6 +8,7 @@ import {
   type DomainStatus,
   type InvitationStatus,
   type OrganizationStatus,
+  type WorkSchedule,
 } from "@core/contracts";
 import {
   domainTxtValue,
@@ -17,6 +18,7 @@ import {
   matchesAnyDomainTokenHash,
   matchesDomainTokenHash,
   MIN_DOMAIN_VERIFICATION_SECRET_LENGTH,
+  Prisma,
   resolveDomainVerificationSecret,
   type PrismaClient,
 } from "@core/db";
@@ -54,6 +56,8 @@ interface MockOrg {
   id: string;
   name: string;
   status: OrganizationStatus;
+  timeZone: string;
+  defaultWorkSchedule: WorkSchedule | null;
   ownerAccountId: string;
   createdAt: Date;
 }
@@ -137,6 +141,8 @@ function createInMemoryDomainDb() {
         id: ORG_ACME,
         name: "Acme",
         status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
         ownerAccountId: OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -147,6 +153,8 @@ function createInMemoryDomainDb() {
         id: ORG_GLOBEX,
         name: "Globex",
         status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
         ownerAccountId: GLOBEX_OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -157,6 +165,8 @@ function createInMemoryDomainDb() {
         id: ORG_SIGNUP,
         name: "SignupCo",
         status: "PENDING_VERIFICATION",
+        timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
         ownerAccountId: SIGNUP_OWNER_ACC,
         createdAt: new Date("2026-11-20T00:00:00.000Z"),
       },
@@ -463,10 +473,24 @@ function createInMemoryDomainDb() {
             if (!org || org.id !== currentOrgId) throw new Error("Org not found");
             return { ...org, domains: sortedDomainsForOrg(org.id) };
           },
-          update: async ({ where, data }: { where: { id: string }; data: Partial<MockOrg> }) => {
+          update: async ({
+            where,
+            data,
+          }: {
+            where: { id: string };
+            data: Partial<Omit<MockOrg, "defaultWorkSchedule">> & {
+              defaultWorkSchedule?: WorkSchedule | typeof Prisma.DbNull | null;
+            };
+          }) => {
             const org = orgs.get(where.id);
             if (!org || org.id !== currentOrgId) throw new Error("Org not found");
-            const next = { ...org, ...data };
+            const nextDefaultWorkSchedule: WorkSchedule | null =
+              data.defaultWorkSchedule === undefined
+                ? org.defaultWorkSchedule
+                : data.defaultWorkSchedule === Prisma.DbNull
+                  ? null
+                  : (data.defaultWorkSchedule as WorkSchedule | null);
+            const next: MockOrg = { ...org, ...data, defaultWorkSchedule: nextDefaultWorkSchedule };
             orgs.set(org.id, next);
             return { ...next, domains: sortedDomainsForOrg(org.id) };
           },
@@ -1039,7 +1063,138 @@ describe("Firma i zarządzanie domenami (testy jednostkowe HTTP bez bazy)", () =
       });
       expect(adminUpdated.statusCode).toBe(200);
       expect(adminUpdated.json().data.name).toBe("Acme Holding");
+      expect(adminUpdated.json().data.timeZone).toBe("Europe/Warsaw");
       expect(audits).toHaveLength(2);
+
+      // Walidacja timeZone: puste {}, błędna strefa, null -> 422
+      for (const badPayload of [
+        {},
+        { timeZone: "" },
+        { timeZone: "Mars/Olympus" },
+        { timeZone: "+02:00" },
+        { timeZone: "europe/warsaw" },
+        { timeZone: null },
+      ]) {
+        const bad = await app.inject({
+          method: "PATCH",
+          url: "/core/v1/organization",
+          headers: { authorization: ownerBearer },
+          payload: badPayload,
+        });
+        expect(bad.statusCode).toBe(422);
+        expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+      }
+
+      // Zmiana samej strefy czasowej
+      const tzUpdated = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: ownerBearer },
+        payload: { timeZone: "  Europe/London  " },
+      });
+      expect(tzUpdated.statusCode).toBe(200);
+      expect(tzUpdated.json().data.timeZone).toBe("Europe/London");
+      expect(audits[2]).toEqual({
+        organizationId: ORG_ACME,
+        action: "organization.updated",
+        resourceType: "organization",
+        resourceId: ORG_ACME,
+        metadata: {
+          fields: ["timeZone"],
+          previousTimeZone: "Europe/Warsaw",
+          timeZone: "Europe/London",
+        },
+      });
+
+      // No-op tej samej strefy nie tworzy nowego wpisu audytu
+      const tzNoop = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { timeZone: "Europe/London" },
+      });
+      expect(tzNoop.statusCode).toBe(200);
+      expect(audits).toHaveLength(3);
+
+      // Jednoczesna zmiana name i timeZone zapisuje oba pola w audycie
+      const bothUpdated = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { name: "Acme Global", timeZone: "America/New_York" },
+      });
+      expect(bothUpdated.statusCode).toBe(200);
+      expect(bothUpdated.json().data).toMatchObject({ name: "Acme Global", timeZone: "America/New_York" });
+      expect(audits[3]?.metadata).toEqual({
+        fields: ["name", "timeZone"],
+        previousName: "Acme Holding",
+        name: "Acme Global",
+        previousTimeZone: "Europe/London",
+        timeZone: "America/New_York",
+      });
+
+      // Domyślny harmonogram firmy (defaultWorkSchedule): uprawnienia, walidacja, ustawienie, no-op i czyszczenie null
+      const companyDefault = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+      for (const bearer of [regularBearer, unitAdminBearer]) {
+        const denied = await app.inject({
+          method: "PATCH",
+          url: "/core/v1/organization",
+          headers: { authorization: bearer },
+          payload: { defaultWorkSchedule: companyDefault },
+        });
+        expect(denied.statusCode).toBe(403);
+        expect(denied.json().error.code).toBe("PERMISSION_DENIED");
+      }
+
+      for (const badSchedule of [{ "0": 480 }, { "8": 480 }, { "1": 1441 }, { "1": 480.5 }, [480]]) {
+        const bad = await app.inject({
+          method: "PATCH",
+          url: "/core/v1/organization",
+          headers: { authorization: ownerBearer },
+          payload: { defaultWorkSchedule: badSchedule },
+        });
+        expect(bad.statusCode).toBe(422);
+        expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+      }
+
+      const setDefault = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: ownerBearer },
+        payload: { defaultWorkSchedule: companyDefault },
+      });
+      expect(setDefault.statusCode).toBe(200);
+      expect(setDefault.json().data.defaultWorkSchedule).toEqual(companyDefault);
+      expect(audits[4]?.metadata).toEqual({
+        fields: ["defaultWorkSchedule"],
+        previousDefaultWorkSchedule: null,
+        defaultWorkSchedule: companyDefault,
+      });
+
+      // No-op tej samej zawartości w innej kolejności kluczy nie tworzy nowego wpisu audytu
+      const defaultNoop = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { defaultWorkSchedule: { "5": 480, "4": 480, "3": 480, "2": 480, "1": 480 } },
+      });
+      expect(defaultNoop.statusCode).toBe(200);
+      expect(audits).toHaveLength(5);
+
+      // Wyczyszczenie defaultWorkSchedule: null -> 200 i wpis audytu
+      const clearedDefault = await app.inject({
+        method: "PATCH",
+        url: "/core/v1/organization",
+        headers: { authorization: adminBearer },
+        payload: { defaultWorkSchedule: null },
+      });
+      expect(clearedDefault.statusCode).toBe(200);
+      expect(clearedDefault.json().data.defaultWorkSchedule).toBeNull();
+      expect(audits[5]?.metadata).toEqual({
+        fields: ["defaultWorkSchedule"],
+        previousDefaultWorkSchedule: companyDefault,
+        defaultWorkSchedule: null,
+      });
     } finally {
       await app.close();
     }

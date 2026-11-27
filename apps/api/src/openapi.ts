@@ -26,6 +26,7 @@ import {
   DIRECTORY_READ_SCOPE,
   EVENTS_READ_SCOPE,
   DirectoryEmployee,
+  DirectoryOrganization,
   DirectoryUnitMember,
   DomainName,
   DomainStatus,
@@ -71,6 +72,7 @@ import {
   RoleTemplateManifestEntry,
   ScopeType,
   SnapshotUnit,
+  TimeZone,
   TransferOrganizationOwner,
   Unit,
   UnitMember,
@@ -84,6 +86,7 @@ import {
   UpdateRole,
   UpdateUnit,
   VerifyOrganizationDomain,
+  WorkSchedule,
 } from "@core/contracts";
 import { z } from "zod";
 import {
@@ -239,6 +242,7 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("DomainStatus", DomainStatus);
   register("DomainName", DomainName);
   register("OrganizationDomain", OrganizationDomain);
+  register("TimeZone", TimeZone);
   register("Organization", Organization);
   register("UpdateOrganization", UpdateOrganization);
   register("CreateOrganizationDomain", CreateOrganizationDomain);
@@ -246,6 +250,7 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("OrganizationOwner", OrganizationOwner);
   register("TransferOrganizationOwner", TransferOrganizationOwner);
   register("EmployeeStatus", EmployeeStatus);
+  register("WorkSchedule", WorkSchedule);
   register("Employee", Employee);
   register("CreateEmployee", CreateEmployee);
   register("UpdateEmployee", UpdateEmployee);
@@ -294,6 +299,7 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("PermissionSnapshot", PermissionSnapshot);
   register("DirectoryUnitMember", DirectoryUnitMember);
   register("DirectoryEmployee", DirectoryEmployee);
+  register("DirectoryOrganization", DirectoryOrganization);
   register("NotificationCategoryKey", NotificationCategoryKey);
   register("NotificationMailChannel", NotificationMailChannel);
   register("NotificationStatus", NotificationStatus);

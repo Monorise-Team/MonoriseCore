@@ -28,12 +28,15 @@ import {
   CreateRoleAssignment,
   CreateRoleFromScratch,
   CreateUnit,
+  DEFAULT_ORGANIZATION_TIME_ZONE,
   DEFAULT_PAGE_LIMIT,
   DIRECTORY_READ_SCOPE,
   DirectoryEmployee,
+  DirectoryOrganization,
   DomainName,
   Employee,
   DirectoryUnitMember,
+  effectiveWorkSchedule,
   emailDomain,
   Entitlement,
   getNotificationCategory,
@@ -50,6 +53,7 @@ import {
   INVITATION_TTL_DAYS,
   INVITATION_TTL_MS,
   isFreeEmailDomain,
+  isValidIanaTimeZone,
   ListAuditLogQuery,
   MachineTokenClaims,
   MailDeliveryStatus,
@@ -88,6 +92,7 @@ import {
   RoleAssignment,
   RoleTemplateKey,
   SignUpRequest,
+  TimeZone,
   TransferOrganizationOwner,
   Unit,
   UnitMember,
@@ -98,6 +103,12 @@ import {
   UpdateRole,
   UpdateUnit,
   VerifyOrganizationDomain,
+  WORK_SCHEDULE_FULL_TIME_MINUTES,
+  WORK_SCHEDULE_MAX_DAY_MINUTES,
+  WorkSchedule,
+  workScheduleEquals,
+  workScheduleFte,
+  workScheduleWeeklyMinutes,
 } from "../src/index.js";
 
 const UUID_1 = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a7b";
@@ -381,6 +392,7 @@ describe("kontrakty", () => {
       lastName: "Nowak",
       workEmail: null,
       jobTitle: null,
+      workSchedule: null,
       status: "ACTIVE",
     };
     expect(Employee.parse({ ...marek, accountStatus: null }).accountStatus).toBeNull();
@@ -417,6 +429,7 @@ describe("kontrakty", () => {
           lastName: "Nowak",
           workEmail: "anna@acme.test",
           jobTitle: null,
+          workSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
           status: "ACTIVE",
         },
       }).role,
@@ -433,9 +446,17 @@ describe("kontrakty", () => {
           lastName: "Nowak",
           workEmail: "anna@acme.test",
           jobTitle: null,
+          workSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
+          effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
           status: "ACTIVE",
         },
-        organization: { id: UUID_3, name: "Acme", status: "ACTIVE" },
+        organization: {
+          id: UUID_3,
+          name: "Acme",
+          status: "ACTIVE",
+          timeZone: "Europe/Warsaw",
+          defaultWorkSchedule: null,
+        },
       }).account.isOwner,
     ).toBe(true);
   });
@@ -729,10 +750,14 @@ describe("kontrakty", () => {
       id: UUID_2,
       name: "Acme",
       status: "ACTIVE",
+      timeZone: "Europe/Warsaw",
+      defaultWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
       domains: [parsedDomain],
       createdAt: "2026-11-26T10:00:00.000Z",
     });
     expect(parsedOrg.domains).toHaveLength(1);
+    expect(parsedOrg.timeZone).toBe("Europe/Warsaw");
+    expect(parsedOrg.defaultWorkSchedule).toEqual({ "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 });
   });
 
   it("waliduje schematy dostępu do produktów, aplikacji i migawki uprawnień", () => {
@@ -796,8 +821,14 @@ describe("kontrakty", () => {
         employeeId: UUID_2,
         accountId: UUID_3,
         role: "LEADER",
-      }).accountId,
-    ).toBe(UUID_3);
+        workSchedule: { "1": 480, "2": 480 },
+        effectiveWorkSchedule: { "1": 480, "2": 480 },
+      }),
+    ).toMatchObject({
+      accountId: UUID_3,
+      workSchedule: { "1": 480, "2": 480 },
+      effectiveWorkSchedule: { "1": 480, "2": 480 },
+    });
     expect(
       DirectoryEmployee.parse({
         id: UUID_1,
@@ -805,8 +836,29 @@ describe("kontrakty", () => {
         firstName: "Anna",
         lastName: "Nowak",
         status: "ACTIVE",
-      }).accountId,
-    ).toBeNull();
+        workSchedule: null,
+        effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
+      }),
+    ).toMatchObject({
+      accountId: null,
+      workSchedule: null,
+      effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
+    });
+    expect(
+      DirectoryOrganization.parse({
+        id: UUID_2,
+        name: "Acme",
+        status: "ACTIVE",
+        timeZone: "Europe/Warsaw",
+        defaultWorkSchedule: null,
+      }),
+    ).toEqual({
+      id: UUID_2,
+      name: "Acme",
+      status: "ACTIVE",
+      timeZone: "Europe/Warsaw",
+      defaultWorkSchedule: null,
+    });
   });
 
   it("waliduje schematy zaproszeń pracowników i aktywacji konta", () => {
@@ -1178,5 +1230,131 @@ describe("kontrakty", () => {
     expect(UnsubscribeNotificationResult.safeParse({ category: "timotime.reminders", enabled: true }).success).toBe(
       false,
     );
+  });
+
+  it("waliduje harmonogram pracy (WorkSchedule), wylicza minuty tygodniowe i FTE oraz strefę czasową firmy (TimeZone)", () => {
+    expect(DEFAULT_ORGANIZATION_TIME_ZONE).toBe("Europe/Warsaw");
+    expect(WORK_SCHEDULE_MAX_DAY_MINUTES).toBe(1440);
+    expect(WORK_SCHEDULE_FULL_TIME_MINUTES).toBe(2400);
+
+    const annaFullTime = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+    const janPartTime = { "1": 240, "2": 240, "3": 240 };
+
+    expect(WorkSchedule.parse(annaFullTime)).toEqual(annaFullTime);
+    expect(WorkSchedule.parse(janPartTime)).toEqual(janPartTime);
+    expect(WorkSchedule.parse({})).toEqual({});
+    expect(WorkSchedule.parse({ "1": 0, "7": 1440 })).toEqual({ "1": 0, "7": 1440 });
+
+    // Pomocniki FTE i sumy tygodniowej
+    expect(workScheduleWeeklyMinutes(annaFullTime)).toBe(2400);
+    expect(workScheduleFte(annaFullTime)).toBe(1);
+    expect(workScheduleWeeklyMinutes(janPartTime)).toBe(720);
+    expect(workScheduleFte(janPartTime)).toBe(0.3);
+    expect(workScheduleWeeklyMinutes({})).toBe(0);
+    expect(workScheduleFte({})).toBe(0);
+    expect(workScheduleWeeklyMinutes(null)).toBeNull();
+    expect(workScheduleFte(null)).toBeNull();
+    expect(workScheduleWeeklyMinutes(undefined)).toBeNull();
+    expect(workScheduleFte(undefined)).toBeNull();
+
+    // Porównywanie harmonogramów niezależnie od kolejności kluczy
+    expect(workScheduleEquals(null, null)).toBe(true);
+    expect(workScheduleEquals(null, {})).toBe(false);
+    expect(workScheduleEquals({ "1": 480, "2": 240 }, { "2": 240, "1": 480 })).toBe(true);
+    expect(workScheduleEquals({ "1": 480 }, { "1": 240 })).toBe(false);
+    expect(workScheduleEquals({ "1": 0 }, {})).toBe(false);
+
+    // Niepoprawne harmonogramy: klucz 0, klucz 8, obcy klucz, >1440, <0, ułamek, string, null w polu dnia, tablica, prymityw
+    for (const badSchedule of [
+      { "0": 480 },
+      { "8": 480 },
+      { monday: 480 },
+      { "1": -1 },
+      { "1": 1441 },
+      { "1": 480.5 },
+      { "1": "480" },
+      { "1": null },
+      { "1": true },
+      [480, 480],
+      480,
+      "480",
+      null,
+    ]) {
+      expect(
+        WorkSchedule.safeParse(badSchedule).success,
+        `Powinno odrzucić harmonogram ${JSON.stringify(badSchedule)}`,
+      ).toBe(false);
+    }
+
+    // UpdateEmployee akceptuje workSchedule (obiekt albo null)
+    expect(UpdateEmployee.parse({ workSchedule: annaFullTime })).toEqual({ workSchedule: annaFullTime });
+    expect(UpdateEmployee.parse({ workSchedule: null })).toEqual({ workSchedule: null });
+    expect(UpdateEmployee.safeParse({ workSchedule: { "0": 480 } }).success).toBe(false);
+    expect(UpdateEmployee.safeParse({ workSchedule: [480] }).success).toBe(false);
+
+    // Poprawne strefy IANA
+    for (const validTz of [
+      "Europe/Warsaw",
+      "  Europe/London  ",
+      "America/New_York",
+      "Asia/Tokyo",
+      "UTC",
+      "Etc/UTC",
+      "Europe/Kyiv",
+    ]) {
+      const parsed = TimeZone.safeParse(validTz);
+      expect(parsed.success, `Powinno przyjąć strefę "${validTz}"`).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toBe(validTz.trim());
+        expect(isValidIanaTimeZone(parsed.data)).toBe(true);
+      }
+    }
+
+    // Niepoprawne strefy czasowe
+    for (const badTz of [
+      "",
+      "   ",
+      "Mars/Olympus",
+      "Europe/Nowhere",
+      "+02:00",
+      "-05:00",
+      "GMT+2",
+      "EST",
+      "CET",
+      "europe/warsaw",
+      "Europe/warsaw",
+    ]) {
+      expect(TimeZone.safeParse(badTz).success, `Powinno odrzucić strefę "${badTz}"`).toBe(false);
+    }
+
+    // Efektywny harmonogram: własny pracownika -> domyślny firmy -> null
+    const companyDefault = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+    // Jan z własnym harmonogramem zachowuje swój mimo domyślnego harmonogramu firmy
+    expect(effectiveWorkSchedule(janPartTime, companyDefault)).toEqual(janPartTime);
+    // Anna bez indywidualnego harmonogramu dostaje domyślny harmonogram firmy
+    expect(effectiveWorkSchedule(null, companyDefault)).toEqual(companyDefault);
+    expect(effectiveWorkSchedule(undefined, companyDefault)).toEqual(companyDefault);
+    // Jawny pusty harmonogram pracownika {} nie spada do domyślnego firmy
+    expect(effectiveWorkSchedule({}, companyDefault)).toEqual({});
+    // Oba nieustawione -> null
+    expect(effectiveWorkSchedule(null, null)).toBeNull();
+    expect(effectiveWorkSchedule(undefined, undefined)).toBeNull();
+
+    // UpdateOrganization akceptuje samo name, samo timeZone, samo defaultWorkSchedule (obiekt albo null), dowolną kombinację; odrzuca {} i błędne wartości
+    expect(UpdateOrganization.parse({ timeZone: "  America/New_York " })).toEqual({ timeZone: "America/New_York" });
+    expect(UpdateOrganization.parse({ defaultWorkSchedule: companyDefault })).toEqual({
+      defaultWorkSchedule: companyDefault,
+    });
+    expect(UpdateOrganization.parse({ defaultWorkSchedule: null })).toEqual({ defaultWorkSchedule: null });
+    expect(UpdateOrganization.parse({ name: "Acme", timeZone: "UTC", defaultWorkSchedule: janPartTime })).toEqual({
+      name: "Acme",
+      timeZone: "UTC",
+      defaultWorkSchedule: janPartTime,
+    });
+    expect(UpdateOrganization.safeParse({}).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ timeZone: null }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ timeZone: "Mars/Olympus" }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ defaultWorkSchedule: { "0": 480 } }).success).toBe(false);
+    expect(UpdateOrganization.safeParse({ defaultWorkSchedule: [480] }).success).toBe(false);
   });
 });

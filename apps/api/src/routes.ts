@@ -17,6 +17,7 @@ import {
   DEFAULT_PAGE_LIMIT,
   DIRECTORY_READ_SCOPE,
   DirectoryEmployee,
+  DirectoryOrganization,
   EVENTS_READ_SCOPE,
   EventFeedPosition,
   MAX_EVENT_FEED_LIMIT,
@@ -118,7 +119,8 @@ export const TAGS: readonly TagDefinition[] = [
   },
   {
     name: "Directory",
-    description: "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy).",
+    description:
+      "Katalog danych firmy, pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy).",
   },
   {
     name: "Events",
@@ -396,7 +398,9 @@ export const ROUTES = {
     operationId: "getMe",
     tag: "People",
     summary: "Pobierz dane zalogowanego konta, pracownika i firmy",
-    description: "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
+    description:
+      "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika (z `workSchedule` oraz wyliczonym " +
+      "`effectiveWorkSchedule`) oraz skrócone dane firmy (`timeZone`, `defaultWorkSchedule`).",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -439,8 +443,9 @@ export const ROUTES = {
     tag: "Organization",
     summary: "Zmień dane firmy",
     description:
-      "Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` " +
-      "w zakresie całej firmy albo roli Ownera.",
+      "Aktualizuje edytowalne dane firmy (nazwę, strefę czasową IANA, np. `Europe/Warsaw`, i/lub domyślny harmonogram " +
+      'pracy `defaultWorkSchedule`: minuty w dni tygodnia ISO `"1"`..`"7"`, wartości całkowite `0–1440`, albo `null`). ' +
+      "Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -661,11 +666,12 @@ export const ROUTES = {
     tag: "People",
     summary: "Zmień dane pracownika",
     description:
-      "Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres " +
-      "e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska " +
-      "pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla " +
-      "pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga " +
-      "uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+      "Aktualizuje imię, nazwisko, stanowisko, harmonogram pracy (`workSchedule`: minuty pracy w dni tygodnia ISO " +
+      '`"1"`..`"7"`, wartości całkowite `0–1440`, albo `null` do wyczyszczenia) i — wyłącznie dla pracownika bez ' +
+      "konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). " +
+      "Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo " +
+      "wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają " +
+      "`409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -1470,8 +1476,10 @@ export const ROUTES = {
     summary: "Lista członkostw pracowników w jednostkach dla serwera produktu",
     description:
       "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
-      "`core:directory.read`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego " +
-      "dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
+      "`core:directory.read`). Zwraca członkostwa w jednostkach wraz z surowym harmonogramem pracy (`workSchedule`) " +
+      "oraz efektywnym harmonogramem (`effectiveWorkSchedule`, uwzględniającym domyślny harmonogram firmy). " +
+      "Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do " +
+      "wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
     auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
     successStatus: 200,
     envelope: true,
@@ -1514,8 +1522,9 @@ export const ROUTES = {
     summary: "Lista podstawowych danych pracowników dla serwera produktu",
     description:
       "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
-      "`core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne (bez służbowego e-maila " +
-      "i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+      "`core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne, surowy harmonogram pracy (`workSchedule`) " +
+      "oraz efektywny harmonogram (`effectiveWorkSchedule`, uwzględniający domyślny harmonogram firmy; bez służbowego " +
+      "e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
     auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
     successStatus: 200,
     envelope: true,
@@ -1542,6 +1551,41 @@ export const ROUTES = {
     dataSchema: DirectoryEmployeeList,
     responseSchemaName: "DirectoryEmployeeListResponse",
     responseDescription: "Strona listy podstawowych danych pracowników firmy.",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  getProductDirectoryOrganization: {
+    method: "GET",
+    path: `${API_PREFIX}/products/{productKey}/directory/organization`,
+    operationId: "getProductDirectoryOrganization",
+    tag: "Directory",
+    summary: "Podstawowe dane firmy (strefa czasowa i domyślny harmonogram) dla serwera produktu",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, `defaultWorkSchedule`, " +
+      "bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
+    auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
+    successStatus: 200,
+    envelope: true,
+    parameters: [
+      PRODUCT_KEY_PARAM,
+      {
+        name: "organizationId",
+        in: "query",
+        required: true,
+        description: "Identyfikator firmy (UUID v7), której profil jest pobierany.",
+        schema: UuidParam,
+      },
+    ],
+    dataSchemaName: "DirectoryOrganization",
+    dataSchema: DirectoryOrganization,
+    responseSchemaName: "DirectoryOrganizationResponse",
+    responseDescription: "Podstawowe dane firmy wraz ze strefą czasową IANA.",
     errors: {
       401: ["UNAUTHENTICATED"],
       403: ["PERMISSION_DENIED"],

@@ -565,4 +565,120 @@ describe("Edycja danych pracownika (PATCH /core/v1/employees/{employeeId}) i wal
     );
     expect(updated.workEmail).toBe(inviteEmail.toLowerCase());
   });
+
+  it("zarządza harmonogramem pracy (workSchedule): walidacja, null, no-op, uprawnienia, /me, /employees i wpis audytu", async () => {
+    const ownerToken = await token(acme);
+    const regularToken = await token(acmeRegular);
+    const unitHrToken = await token(acmeUnitHr);
+    const orgHrToken = await token(acmeOrgHr);
+
+    const jan = await createMember(acme, "Jan", "Harmonogram");
+    const janToken = await token(jan);
+
+    // Domyślnie workSchedule i effectiveWorkSchedule to null w /me
+    const initialMe = await request("GET", "/core/v1/me", janToken);
+    expect(initialMe.statusCode).toBe(200);
+    expect(initialMe.json().data.employee.workSchedule).toBeNull();
+    expect(initialMe.json().data.employee.effectiveWorkSchedule).toBeNull();
+    expect(initialMe.json().data.organization.timeZone).toBe("Europe/Warsaw");
+    expect(initialMe.json().data.organization.defaultWorkSchedule).toBeNull();
+
+    const annaFullTime = { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 };
+    const janPartTime = { "1": 240, "2": 240, "3": 240 };
+
+    // Gdy firma ma ustawiony domyślny harmonogram, pracownik bez własnego dostaje go jako effectiveWorkSchedule
+    expect(
+      (await request("PATCH", "/core/v1/organization", ownerToken, { defaultWorkSchedule: annaFullTime })).statusCode,
+    ).toBe(200);
+    const meWithCompanyDefault = await request("GET", "/core/v1/me", janToken);
+    expect(meWithCompanyDefault.statusCode).toBe(200);
+    expect(meWithCompanyDefault.json().data.employee.workSchedule).toBeNull();
+    expect(meWithCompanyDefault.json().data.employee.effectiveWorkSchedule).toEqual(annaFullTime);
+    expect(meWithCompanyDefault.json().data.organization.defaultWorkSchedule).toEqual(annaFullTime);
+
+    // Uprawnienia: zwykłe konto oraz zakres UNIT dostają 403 PERMISSION_DENIED
+    for (const deniedToken of [regularToken, unitHrToken]) {
+      const denied = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, deniedToken, {
+        workSchedule: janPartTime,
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().error.code).toBe("PERMISSION_DENIED");
+    }
+
+    // Nieprawidłowe harmonogramy -> 422 VALIDATION_FAILED (klucz 0, klucz 8, 1441, ułamek, tablica)
+    for (const badSchedule of [{ "0": 480 }, { "8": 480 }, { "1": 1441 }, { "1": 480.5 }, [480]]) {
+      const bad = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
+        workSchedule: badSchedule,
+      });
+      expect(bad.statusCode).toBe(422);
+      expect(bad.json().error.code).toBe("VALIDATION_FAILED");
+    }
+
+    // Ustawienie pełnego etatu przez konto z core.employees.manage w ORGANIZATION
+    const setFull = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, orgHrToken, {
+      workSchedule: annaFullTime,
+    });
+    expect(setFull.statusCode).toBe(200);
+    expect(setFull.json().data.workSchedule).toEqual(annaFullTime);
+
+    // Zmiana na 12 h/tydz. (Jan) przez Ownera
+    const setPart = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
+      workSchedule: janPartTime,
+    });
+    expect(setPart.statusCode).toBe(200);
+    expect(setPart.json().data.workSchedule).toEqual(janPartTime);
+
+    // Odzwierciedlone w GET /me (indywidualny harmonogram Jana wygrywa z domyślnym firmy) i GET /employees
+    const meAfter = await request("GET", "/core/v1/me", janToken);
+    expect(meAfter.statusCode).toBe(200);
+    expect(meAfter.json().data.employee.workSchedule).toEqual(janPartTime);
+    expect(meAfter.json().data.employee.effectiveWorkSchedule).toEqual(janPartTime);
+
+    const listRes = await request("GET", "/core/v1/employees?limit=100", ownerToken);
+    expect(listRes.statusCode).toBe(200);
+    expect(
+      (listRes.json().data as Array<{ id: string; workSchedule: Record<string, number> | null }>).find(
+        (e) => e.id === jan.employeeId,
+      )?.workSchedule,
+    ).toEqual(janPartTime);
+
+    // No-op z tą samą zawartością w innej kolejności kluczy nie tworzy nowego wpisu audytu
+    const noop = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
+      workSchedule: { "3": 240, "1": 240, "2": 240 },
+    });
+    expect(noop.statusCode).toBe(200);
+
+    // Wyczyszczenie harmonogramu: null -> 200; effectiveWorkSchedule wraca do domyślnego firmy, a po wyczyszczeniu domyślnego firmy -> null
+    const cleared = await request("PATCH", `/core/v1/employees/${jan.employeeId}`, ownerToken, {
+      workSchedule: null,
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().data.workSchedule).toBeNull();
+
+    const meAfterEmployeeClear = await request("GET", "/core/v1/me", janToken);
+    expect(meAfterEmployeeClear.statusCode).toBe(200);
+    expect(meAfterEmployeeClear.json().data.employee.workSchedule).toBeNull();
+    expect(meAfterEmployeeClear.json().data.employee.effectiveWorkSchedule).toEqual(annaFullTime);
+
+    expect(
+      (await request("PATCH", "/core/v1/organization", ownerToken, { defaultWorkSchedule: null })).statusCode,
+    ).toBe(200);
+    const meAfterOrgClear = await request("GET", "/core/v1/me", janToken);
+    expect(meAfterOrgClear.statusCode).toBe(200);
+    expect(meAfterOrgClear.json().data.employee.effectiveWorkSchedule).toBeNull();
+
+    // Wpisy audytu employee.updated (2 ustawienia + 1 czyszczenie, bez no-op)
+    const audits = await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.findMany({
+        where: { action: "employee.updated", resourceType: "employee", resourceId: jan.employeeId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+    expect(audits).toHaveLength(3);
+    expect(audits.map((row) => row.metadata)).toEqual([
+      { fields: ["workSchedule"] },
+      { fields: ["workSchedule"] },
+      { fields: ["workSchedule"] },
+    ]);
+  });
 });

@@ -301,6 +301,8 @@ model Organization {
   id                   String                 @id @db.Uuid
   name                 String
   status               OrganizationStatus     @default(PENDING_VERIFICATION)
+  timeZone             String                 @default("Europe/Warsaw")
+  defaultWorkSchedule  Json?
   createdVia           OrganizationCreatedVia
   ownerAccountId       String?                @unique @db.Uuid
   ownerAccount         Account?               @relation("OrganizationOwner", fields: [ownerAccountId], references: [id], onDelete: Restrict)
@@ -387,6 +389,7 @@ model Employee {
   lastName        String
   workEmail       String?          @db.Citext
   jobTitle        String?
+  workSchedule    Json?
   status          EmployeeStatus   @default(ACTIVE)
   anonymizedAt    DateTime?        @db.Timestamptz(3)
   createdAt       DateTime         @default(now()) @db.Timestamptz(3)
