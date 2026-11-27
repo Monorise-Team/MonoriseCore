@@ -3073,6 +3073,7 @@ export const OrganizationScalarFieldEnum = {
   name: 'name',
   status: 'status',
   timeZone: 'timeZone',
+  defaultWorkSchedule: 'defaultWorkSchedule',
   createdVia: 'createdVia',
   ownerAccountId: 'ownerAccountId',
   mfaRequiredForAll: 'mfaRequiredForAll',
@@ -3503,6 +3504,20 @@ export type ListEnumOrganizationStatusFieldRefInput<$PrismaModel> = FieldRefInpu
 
 
 /**
+ * Reference to a field of type 'Json'
+ */
+export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+/**
+ * Reference to a field of type 'QueryMode'
+ */
+export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
  * Reference to a field of type 'OrganizationCreatedVia'
  */
 export type EnumOrganizationCreatedViaFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrganizationCreatedVia'>
@@ -3541,20 +3556,6 @@ export type EnumDomainVerificationMethodFieldRefInput<$PrismaModel> = FieldRefIn
  * Reference to a field of type 'DomainVerificationMethod[]'
  */
 export type ListEnumDomainVerificationMethodFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DomainVerificationMethod[]'>
-    
-
-
-/**
- * Reference to a field of type 'Json'
- */
-export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
-    
-
-
-/**
- * Reference to a field of type 'QueryMode'
- */
-export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
     
 
 

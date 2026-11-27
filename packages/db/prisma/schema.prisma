@@ -302,6 +302,7 @@ model Organization {
   name                 String
   status               OrganizationStatus     @default(PENDING_VERIFICATION)
   timeZone             String                 @default("Europe/Warsaw")
+  defaultWorkSchedule  Json?
   createdVia           OrganizationCreatedVia
   ownerAccountId       String?                @unique @db.Uuid
   ownerAccount         Account?               @relation("OrganizationOwner", fields: [ownerAccountId], references: [id], onDelete: Restrict)

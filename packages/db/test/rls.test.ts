@@ -2733,11 +2733,15 @@ describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86
     }
   });
 
-  it("wymusza CHECK na Employee.workSchedule i Organization.timeZone oraz ustawia wartości domyślne pod RLS", async () => {
+  it("wymusza CHECK na Employee.workSchedule, Organization.defaultWorkSchedule i Organization.timeZone oraz ustawia wartości domyślne pod RLS", async () => {
     const org = await withOrganization(db, acme.id, (tx) =>
-      tx.organization.findUniqueOrThrow({ where: { id: acme.id }, select: { timeZone: true } }),
+      tx.organization.findUniqueOrThrow({
+        where: { id: acme.id },
+        select: { timeZone: true, defaultWorkSchedule: true },
+      }),
     );
     expect(org.timeZone).toBe("Europe/Warsaw");
+    expect(org.defaultWorkSchedule).toBeNull();
 
     const emp = await withOrganization(db, acme.id, (tx) =>
       tx.employee.findUniqueOrThrow({ where: { id: acme.employeeId }, select: { workSchedule: true } }),
@@ -2753,7 +2757,7 @@ describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86
       ),
     ).rejects.toThrow(/organizations_timeZone_non_empty|check constraint|violates/i);
 
-    // Poprawne harmonogramy JSONB przechodzą CHECK
+    // Poprawne harmonogramy JSONB przechodzą CHECK na Employee.workSchedule i Organization.defaultWorkSchedule
     const validSchedules = [
       '{"1":480,"2":480,"3":480,"4":480,"5":480}',
       '{"1":240,"2":240,"3":240}',
@@ -2767,14 +2771,26 @@ describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86
         (tx) =>
           tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = ${raw}::jsonb WHERE "id" = ${acme.employeeId}::uuid`,
       );
+      await withOrganization(
+        db,
+        acme.id,
+        (tx) =>
+          tx.$executeRaw`UPDATE "public"."organizations" SET "defaultWorkSchedule" = ${raw}::jsonb WHERE "id" = ${acme.id}::uuid`,
+      );
     }
 
-    // SQL NULL czyści harmonogram
+    // SQL NULL czyści harmonogram pracownika i domyślny harmonogram firmy
     await withOrganization(
       db,
       acme.id,
       (tx) =>
         tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = NULL WHERE "id" = ${acme.employeeId}::uuid`,
+    );
+    await withOrganization(
+      db,
+      acme.id,
+      (tx) =>
+        tx.$executeRaw`UPDATE "public"."organizations" SET "defaultWorkSchedule" = NULL WHERE "id" = ${acme.id}::uuid`,
     );
 
     // Niepoprawne wartości JSONB są odrzucane przez CHECK (zły klucz, >1440, <0, ułamek, typ nie-liczbowy, tablica, JSON null)
@@ -2800,8 +2816,17 @@ describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86
           (tx) =>
             tx.$executeRaw`UPDATE "public"."employees" SET "workSchedule" = ${raw}::jsonb WHERE "id" = ${acme.employeeId}::uuid`,
         ),
-        `CHECK powinien odrzucić ${raw}`,
+        `CHECK Employee.workSchedule powinien odrzucić ${raw}`,
       ).rejects.toThrow(/employees_workSchedule_valid|check constraint|violates/i);
+      await expect(
+        withOrganization(
+          db,
+          acme.id,
+          (tx) =>
+            tx.$executeRaw`UPDATE "public"."organizations" SET "defaultWorkSchedule" = ${raw}::jsonb WHERE "id" = ${acme.id}::uuid`,
+        ),
+        `CHECK Organization.defaultWorkSchedule powinien odrzucić ${raw}`,
+      ).rejects.toThrow(/organizations_defaultWorkSchedule_valid|check constraint|violates/i);
     }
   });
 });

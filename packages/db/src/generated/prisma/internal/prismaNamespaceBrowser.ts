@@ -319,6 +319,7 @@ export const OrganizationScalarFieldEnum = {
   name: 'name',
   status: 'status',
   timeZone: 'timeZone',
+  defaultWorkSchedule: 'defaultWorkSchedule',
   createdVia: 'createdVia',
   ownerAccountId: 'ownerAccountId',
   mfaRequiredForAll: 'mfaRequiredForAll',
