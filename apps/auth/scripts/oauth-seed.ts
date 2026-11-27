@@ -24,6 +24,8 @@ const TIME_API = env("CORE_TIMOTIME_API_URL", "http://time.localhost:3300");
 const TIME_WEB = env("CORE_TIMOTIME_WEB_URL", "http://timo-time.localhost:3300");
 const KIVO_API = env("CORE_KIVOTASKS_API_URL", "http://kivo.localhost:3500");
 const KIVO_WEB = env("CORE_KIVOTASKS_WEB_URL", "http://kivotasks.localhost:3500");
+const HIRA_API = env("CORE_HIRAHR_API_URL", "http://hira.localhost:3600");
+const HIRA_WEB = env("CORE_HIRAHR_WEB_URL", "http://hirahr.localhost:3600");
 const CORE_API = env("CORE_API_URL", "http://localhost:3200");
 const PORTAL_WEB = env("CORE_PORTAL_WEB_URL", "http://portal.localhost:3400");
 // Expo Go podczas pracy lokalnej wraca adresem exp:// serwera Metro (`expo start --localhost`)
@@ -34,6 +36,7 @@ const secrets = await ensureFirstPartyClients({
     { identifier: AVEN_API, name: "AvenMail API" },
     { identifier: TIME_API, name: "TimoTime API" },
     { identifier: KIVO_API, name: "KivoTasks API" },
+    { identifier: HIRA_API, name: "HiraHR API" },
     { identifier: CORE_API, name: "Core API", allowedScopes: [...PRODUCT_SCOPES, ...PRODUCT_MACHINE_SCOPES] },
   ],
   clients: [
@@ -88,6 +91,16 @@ const secrets = await ensureFirstPartyClients({
       clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES, NOTIFICATIONS_SEND_SCOPE],
     },
     {
+      // HiraHR (ADR-0104): tylko przeglądarka, BFF jak KivoTasks; powiadomienia dojdą z urlopami (etap 2)
+      clientId: "hirahr-web",
+      name: "HiraHR",
+      uri: `${HIRA_WEB}/`,
+      redirectUris: [`${HIRA_WEB}/api/auth/callback`],
+      confidential: true,
+      resources: [HIRA_API, CORE_API],
+      clientCredentialsScopes: [...BASE_PRODUCT_MACHINE_SCOPES],
+    },
+    {
       // Panel klienta (BFF bez własnej bazy): tylko Core API, bez tokenów serwerowych i bez wpisu w products
       clientId: "monorise-portal",
       name: "MonorisePortal",
@@ -101,6 +114,7 @@ const secrets = await ensureFirstPartyClients({
     { key: "avenmail", name: "AvenMail", registrationClientId: "avenmail-web" },
     { key: "timotime", name: "TimoTime", registrationClientId: "timotime-web" },
     { key: "kivotasks", name: "KivoTasks", registrationClientId: "kivotasks-web" },
+    { key: "hirahr", name: "HiraHR", registrationClientId: "hirahr-web" },
   ],
 });
 
