@@ -73,6 +73,7 @@ export interface SerializableOrganizationRow {
   id: string;
   name: string;
   status: OrganizationStatus;
+  timeZone: string;
   createdAt: Date;
   domains: readonly SerializableOrganizationDomainRow[];
 }
@@ -191,6 +192,7 @@ export function serializeOrganization(
     id: org.id,
     name: org.name,
     status: org.status,
+    timeZone: org.timeZone,
     createdAt: org.createdAt.toISOString(),
     domains: org.domains.map((domain) =>
       serializeOrganizationDomain(domain, {
@@ -232,7 +234,7 @@ export async function getOrganizationForCaller(
   });
 }
 
-/** Zmienia edytowalne dane firmy (`name`). Zapisuje audyt `organization.updated` tylko przy realnej zmianie. */
+/** Zmienia edytowalne dane firmy (`name`, `timeZone`). Zapisuje audyt `organization.updated` tylko przy realnej zmianie. */
 export async function updateOrganization(
   tx: Tx,
   request: FastifyRequest,
@@ -248,7 +250,16 @@ export async function updateOrganization(
     include: { domains: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
   });
 
-  if (input.name === organization.name) {
+  const nextName = input.name ?? organization.name;
+  const nextTimeZone = input.timeZone ?? organization.timeZone;
+  const nameChanged = nextName !== organization.name;
+  const timeZoneChanged = nextTimeZone !== organization.timeZone;
+
+  const changedFields: ("name" | "timeZone")[] = [];
+  if (nameChanged) changedFields.push("name");
+  if (timeZoneChanged) changedFields.push("timeZone");
+
+  if (changedFields.length === 0) {
     return serializeOrganization(organization, {
       includeVerificationTxt: true,
       domainVerificationSecret: options.domainVerificationSecret,
@@ -257,7 +268,10 @@ export async function updateOrganization(
 
   const updated = await tx.organization.update({
     where: { id: organization.id },
-    data: { name: input.name },
+    data: {
+      ...(nameChanged ? { name: nextName } : {}),
+      ...(timeZoneChanged ? { timeZone: nextTimeZone } : {}),
+    },
     include: { domains: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
   });
 
@@ -266,9 +280,9 @@ export async function updateOrganization(
     resourceType: "organization",
     resourceId: updated.id,
     metadata: {
-      fields: ["name"],
-      previousName: organization.name,
-      name: updated.name,
+      fields: changedFields,
+      ...(nameChanged ? { previousName: organization.name, name: updated.name } : {}),
+      ...(timeZoneChanged ? { previousTimeZone: organization.timeZone, timeZone: updated.timeZone } : {}),
     },
   });
 
