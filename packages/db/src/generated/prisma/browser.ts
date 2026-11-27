@@ -179,6 +179,17 @@ export type IdempotencyKey = Prisma.IdempotencyKeyModel
  * Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
  * (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
  * Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
- * jest zdefiniowany w migracji.
+ * oraz ograniczenie CHECK dopasowania `kind` do `invitationId`/`notificationId` są zdefiniowane w migracjach.
  */
 export type MailOutbox = Prisma.MailOutboxModel
+/**
+ * Model Notification
+ * Powiadomienie e-mail zlecone przez produkt platformy Monorise (ADR-0048).
+ */
+export type Notification = Prisma.NotificationModel
+/**
+ * Model NotificationPreference
+ * Ustawienie powiadomień konta w firmie dla kategorii i kanału (ADR-0048).
+ * Brak wiersza oznacza powiadomienia włączone (`enabled = true`).
+ */
+export type NotificationPreference = Prisma.NotificationPreferenceModel

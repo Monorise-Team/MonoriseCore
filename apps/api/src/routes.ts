@@ -9,6 +9,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -34,6 +35,10 @@ import {
   MAX_DIRECTORY_FILTER_IDS,
   MAX_PAGE_LIMIT,
   Me,
+  NotificationCategoryKey,
+  NotificationPreference,
+  NotificationResult,
+  NOTIFICATIONS_SEND_SCOPE,
   Organization,
   OrganizationDomain,
   OrganizationOwner,
@@ -55,7 +60,9 @@ import {
   Unit,
   UnitMember,
   UnitStatus,
+  UnsubscribeNotificationResult,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -77,7 +84,8 @@ export type RouteTag =
   | "AppAccess"
   | "Audit"
   | "Directory"
-  | "Events";
+  | "Events"
+  | "Notifications";
 
 export type RouteAuth = false | "bearer" | { scheme: "productOAuth"; scopes: readonly string[] };
 
@@ -116,9 +124,13 @@ export const TAGS: readonly TagDefinition[] = [
     name: "Events",
     description: "Kanał zdarzeń Core dla serwerów produktów (token maszynowy), do czasu EventBridge i SQS.",
   },
+  {
+    name: "Notifications",
+    description: "Wspólny moduł powiadomień e-mail produktów, preferencje odbiorców i wypisywanie RFC 8058 (ADR-0048).",
+  },
 ];
 
-export type SuccessStatus = 200 | 201 | 204;
+export type SuccessStatus = 200 | 201 | 202 | 204;
 export type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
 export type RouteErrors = Partial<Record<ErrorStatus, readonly ErrorCode[]>>;
 
@@ -143,6 +155,10 @@ export interface RouteDefinition {
   successStatus: SuccessStatus;
   /** Czy odpowiedź sukcesu jest owinięta w kopertę `{ data, meta, error }` (nie dotyczy 204). */
   envelope: boolean;
+  /** Typ treści odpowiedzi, gdy operacja zwraca wyłącznie dokument HTML (np. strona potwierdzenia wypisania). */
+  responseContentType?: "application/json" | "text/html";
+  /** Czy operacja oprócz JSON może zwrócić stronę HTML przy nagłówku `Accept: text/html`. */
+  htmlResponse?: boolean;
   /** Czy odpowiedź listy używa stronicowania kursorowego (`meta.nextCursor`). */
   paginated?: boolean;
   /** Parametry ścieżki (`path`) i zapytania (`query`). */
@@ -185,6 +201,7 @@ export const DirectoryUnitMemberList = z.array(DirectoryUnitMember);
 export const DirectoryEmployeeList = z.array(DirectoryEmployee);
 export const ProductEventList = z.array(ProductEvent);
 export const AuditLogEntryList = z.array(AuditLogEntry);
+export const NotificationPreferenceList = z.array(NotificationPreference);
 
 const UuidParam = z.uuid();
 const RepeatableUuidParam = z.array(z.uuid()).max(MAX_DIRECTORY_FILTER_IDS);
@@ -257,6 +274,30 @@ const DOMAIN_ID_PARAM: ParameterDefinition = {
   schema: UuidParam,
 };
 
+const ORGANIZATION_ID_PARAM: ParameterDefinition = {
+  name: "organizationId",
+  in: "path",
+  required: true,
+  description: "Identyfikator firmy (UUID v7).",
+  schema: UuidParam,
+};
+
+const NOTIFICATION_CATEGORY_PARAM: ParameterDefinition = {
+  name: "category",
+  in: "path",
+  required: true,
+  description: "Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`).",
+  schema: NotificationCategoryKey,
+};
+
+const UNSUBSCRIBE_TOKEN_PARAM: ParameterDefinition = {
+  name: "token",
+  in: "path",
+  required: true,
+  description: "Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058).",
+  schema: z.string().min(1).max(1024),
+};
+
 const PAGE_PARAMETERS: readonly ParameterDefinition[] = [
   {
     name: "limit",
@@ -297,11 +338,12 @@ export function toOpenApiPath(fastifyPath: string): string {
 }
 
 /**
- * Czy ścieżka obsługuje nagłówek `Idempotency-Key` (obecnie wszystkie operacje `POST` z tokenem użytkownika).
+ * Czy ścieżka obsługuje nagłówek `Idempotency-Key` (wszystkie uwierzytelnione operacje `POST`:
+ * z tokenem użytkownika `bearer` oraz maszynowym `productOAuth`; nie dotyczy publicznego wypisania RFC 8058).
  * Jedno źródło prawdy dla rejestracji tras w `server.ts`, opisu OpenAPI w `openapi.ts` i testów w `openapi.test.ts`.
  */
 export function supportsIdempotencyKey(route: RouteDefinition): boolean {
-  return route.method === "POST" && route.auth === "bearer";
+  return route.method === "POST" && route.auth !== false;
 }
 
 /**
@@ -1715,6 +1757,138 @@ export const ROUTES = {
       401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
       403: ["PERMISSION_DENIED"],
       422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  sendNotification: {
+    method: "POST",
+    path: `${API_PREFIX}/organizations/{organizationId}/notifications`,
+    operationId: "sendNotification",
+    tag: "Notifications",
+    summary: "Zleć wysyłkę powiadomienia e-mail przez produkt",
+    description:
+      "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
+      "`core:notifications.send`, obsługuje nagłówek `Idempotency-Key`). Weryfikuje własność kategorii przez produkt " +
+      "wywołującego klienta (`403`), aktywny `Entitlement` firmy (`403`) oraz origin `actionUrl` zgodny z `uri` " +
+      "klienta OAuth (`422`). Gdy odbiorca nie jest aktywnym pracownikiem firmy z aktywnym kontem i dostępem do " +
+      "produktu, zwraca `202` ze statusem `SKIPPED` i powodem `NO_ACCESS` (bez zdradzania szczegółów); wyłączona " +
+      "kategoria daje `202` `SKIPPED` / `PREFERENCE_OFF`. W pozostałych przypadkach zapisuje powiadomienie `QUEUED` " +
+      "wraz z zadaniem w `mail_outbox` w jednej transakcji i zwraca `202`.",
+    auth: { scheme: "productOAuth", scopes: [NOTIFICATIONS_SEND_SCOPE] },
+    successStatus: 202,
+    envelope: true,
+    parameters: [ORGANIZATION_ID_PARAM],
+    requestBodySchemaName: "CreateNotification",
+    requestBodySchema: CreateNotification,
+    requestBodyDescription: "Dane powiadomienia zlecanego przez produkt.",
+    dataSchemaName: "NotificationResult",
+    dataSchema: NotificationResult,
+    responseSchemaName: "NotificationResultResponse",
+    responseDescription: "Wynik przyjęcia powiadomienia (`QUEUED` albo `SKIPPED`).",
+    errors: {
+      401: ["UNAUTHENTICATED"],
+      403: ["PERMISSION_DENIED"],
+      404: ["NOT_FOUND"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  listMyNotificationPreferences: {
+    method: "GET",
+    path: `${API_PREFIX}/me/notification-preferences`,
+    operationId: "listMyNotificationPreferences",
+    tag: "Notifications",
+    summary: "Lista ustawień powiadomień zalogowanego użytkownika",
+    description:
+      "Zwraca kategorie powiadomień kanału logowania (zawsze włączone, bez możliwości wyłączenia) oraz kategorie " +
+      "produktów, do których bieżąca firma ma aktywny `Entitlement`, wraz z bieżącym stanem `enabled` dla konta " +
+      "(brak zapisu oznacza `enabled = true`).",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    dataSchemaName: "NotificationPreferenceList",
+    dataSchema: NotificationPreferenceList,
+    responseSchemaName: "NotificationPreferenceListResponse",
+    responseDescription: "Lista kategorii powiadomień wraz z ustawieniami konta.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  updateMyNotificationPreference: {
+    method: "PUT",
+    path: `${API_PREFIX}/me/notification-preferences/{category}`,
+    operationId: "updateMyNotificationPreference",
+    tag: "Notifications",
+    summary: "Zmień ustawienie kategorii powiadomień e-mail",
+    description:
+      "Włącza albo wyłącza opcjonalną kategorię powiadomień e-mail dla zalogowanego konta w bieżącej firmie " +
+      "i zapisuje wpis `notification.preference_changed` w dzienniku zdarzeń. Zwraca `422 VALIDATION_FAILED` " +
+      "dla nieznanych kategorii oraz kategorii obowiązkowych (np. `security`, `account`).",
+    auth: "bearer",
+    successStatus: 200,
+    envelope: true,
+    parameters: [NOTIFICATION_CATEGORY_PARAM],
+    requestBodySchemaName: "UpdateNotificationPreference",
+    requestBodySchema: UpdateNotificationPreference,
+    requestBodyDescription: "Nowy stan włączenia powiadomień w tej kategorii.",
+    dataSchemaName: "NotificationPreference",
+    dataSchema: NotificationPreference,
+    responseSchemaName: "NotificationPreferenceResponse",
+    responseDescription: "Zaktualizowane ustawienie kategorii powiadomień.",
+    errors: {
+      401: ["UNAUTHENTICATED", "ACCOUNT_DEACTIVATED"],
+      422: ["VALIDATION_FAILED"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  getUnsubscribeNotificationPage: {
+    method: "GET",
+    path: `${API_PREFIX}/notifications/unsubscribe/{token}`,
+    operationId: "getUnsubscribeNotificationPage",
+    tag: "Notifications",
+    summary: "Strona potwierdzenia wypisania z kategorii powiadomień",
+    description:
+      "Publiczna strona HTML otwierana po kliknięciu linku wypisania w stopce wiadomości e-mail. " +
+      "Żądanie `GET` nigdy nie zmienia ustawień (chroni przed automatycznym otwieraniem linków przez skanery poczty): " +
+      "wyświetla nazwę kategorii i firmy oraz formularz z przyciskiem wysyłającym `POST` na ten sam adres. " +
+      "Nieprawidłowy, zmanipulowany albo nieaktywny link zwraca neutralną stronę HTML ze statusem `404`.",
+    auth: false,
+    successStatus: 200,
+    envelope: false,
+    responseContentType: "text/html",
+    parameters: [UNSUBSCRIBE_TOKEN_PARAM],
+    responseDescription: "Strona HTML z formularzem potwierdzenia wyłączenia powiadomień.",
+    errors: {
+      404: ["NOT_FOUND"],
+      500: ["INTERNAL_ERROR"],
+    },
+  },
+  unsubscribeNotification: {
+    method: "POST",
+    path: `${API_PREFIX}/notifications/unsubscribe/{token}`,
+    operationId: "unsubscribeNotification",
+    tag: "Notifications",
+    summary: "Jednoklikowe wypisanie z kategorii powiadomień (RFC 8058)",
+    description:
+      "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; " +
+      "przyjmuje `application/x-www-form-urlencoded`, `multipart/form-data` lub puste żądanie). " +
+      "Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia " +
+      "`enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed` (tylko przy " +
+      "faktycznej zmianie wartości). Gdy żądanie akceptuje `text/html` (formularz ze strony potwierdzenia), " +
+      "zwraca stronę HTML z potwierdzeniem albo neutralny komunikat `404`; klienci jednoklikowi dostają JSON. " +
+      "Nieprawidłowy, zmanipulowany albo nieaktywny token zwraca `404 NOT_FOUND`.",
+    auth: false,
+    successStatus: 200,
+    envelope: true,
+    htmlResponse: true,
+    parameters: [UNSUBSCRIBE_TOKEN_PARAM],
+    dataSchemaName: "UnsubscribeNotificationResult",
+    dataSchema: UnsubscribeNotificationResult,
+    responseSchemaName: "UnsubscribeNotificationResponse",
+    responseDescription: "Powiadomienia e-mail dla wskazanej kategorii zostały wyłączone.",
+    errors: {
+      404: ["NOT_FOUND"],
       500: ["INTERNAL_ERROR"],
     },
   },

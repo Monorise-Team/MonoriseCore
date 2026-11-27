@@ -17,6 +17,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -43,6 +44,13 @@ import {
   InvitationStatus,
   MailDeliveryStatus,
   Me,
+  NotificationCategoryKey,
+  NotificationMailChannel,
+  NotificationPreference,
+  NotificationResult,
+  NotificationSkipReason,
+  NotificationStatus,
+  NOTIFICATIONS_SEND_SCOPE,
   Organization,
   OrganizationDomain,
   OrganizationOwner,
@@ -69,7 +77,9 @@ import {
   UnitMembershipRole,
   UnitStatus,
   UnitType,
+  UnsubscribeNotificationResult,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -169,8 +179,11 @@ export interface OpenApiResponseObject {
   description: string;
   headers?: Record<string, OpenApiHeaderObject>;
   content?: {
-    "application/json": {
+    "application/json"?: {
       schema: { $ref: string };
+    };
+    "text/html"?: {
+      schema: { type: "string" };
     };
   };
 }
@@ -281,6 +294,15 @@ function buildSchemaRegistry(routes: readonly RouteDefinition[]) {
   register("PermissionSnapshot", PermissionSnapshot);
   register("DirectoryUnitMember", DirectoryUnitMember);
   register("DirectoryEmployee", DirectoryEmployee);
+  register("NotificationCategoryKey", NotificationCategoryKey);
+  register("NotificationMailChannel", NotificationMailChannel);
+  register("NotificationStatus", NotificationStatus);
+  register("NotificationSkipReason", NotificationSkipReason);
+  register("CreateNotification", CreateNotification);
+  register("NotificationResult", NotificationResult);
+  register("NotificationPreference", NotificationPreference);
+  register("UpdateNotificationPreference", UpdateNotificationPreference);
+  register("UnsubscribeNotificationResult", UnsubscribeNotificationResult);
 
   for (const route of routes) {
     if (route.requestBodySchemaName && route.requestBodySchema) {
@@ -364,6 +386,16 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
       description: route.responseDescription,
       ...(replayHeaders ? { headers: replayHeaders } : {}),
     };
+  } else if (route.responseContentType === "text/html") {
+    responses[String(route.successStatus)] = {
+      description: route.responseDescription,
+      ...(replayHeaders ? { headers: replayHeaders } : {}),
+      content: {
+        "text/html": {
+          schema: { type: "string" },
+        },
+      },
+    };
   } else {
     const successSchemaName =
       route.envelope && route.responseSchemaName ? route.responseSchemaName : route.dataSchemaName;
@@ -377,6 +409,7 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
         "application/json": {
           schema: { $ref: `#/components/schemas/${successSchemaName}` },
         },
+        ...(route.htmlResponse ? { "text/html": { schema: { type: "string" as const } } } : {}),
       },
     };
   }
@@ -394,12 +427,24 @@ function buildOperation(route: RouteDefinition, idBySchema: ReadonlyMap<z.ZodTyp
   for (const status of errorStatuses) {
     const codes = effectiveErrors[status];
     if (!codes) continue;
+    if (route.responseContentType === "text/html" && status === 404) {
+      responses[String(status)] = {
+        description: describeError(status, codes),
+        content: {
+          "text/html": {
+            schema: { type: "string" },
+          },
+        },
+      };
+      continue;
+    }
     responses[String(status)] = {
       description: describeError(status, codes),
       content: {
         "application/json": {
           schema: { $ref: "#/components/schemas/ApiErrorResponse" },
         },
+        ...(route.htmlResponse && status === 404 ? { "text/html": { schema: { type: "string" as const } } } : {}),
       },
     };
   }
@@ -528,6 +573,8 @@ export function buildOpenApiDocument(): OpenApiSpec {
                 [PERMISSIONS_READ_SCOPE]: "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
                 [DIRECTORY_READ_SCOPE]: "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu.",
                 [EVENTS_READ_SCOPE]: "Odczyt kanału zdarzeń Core dla firm z dostępem do produktu.",
+                [NOTIFICATIONS_SEND_SCOPE]:
+                  "Zlecanie wysyłki powiadomień e-mail produktu przez moduł powiadomień Core.",
               },
             },
           },

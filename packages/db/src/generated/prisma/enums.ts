@@ -155,7 +155,8 @@ export type AppAccessStatus = (typeof AppAccessStatus)[keyof typeof AppAccessSta
 
 
 export const MailKind = {
-  INVITATION: 'INVITATION'
+  INVITATION: 'INVITATION',
+  NOTIFICATION: 'NOTIFICATION'
 } as const
 
 export type MailKind = (typeof MailKind)[keyof typeof MailKind]
@@ -169,3 +170,29 @@ export const MailStatus = {
 } as const
 
 export type MailStatus = (typeof MailStatus)[keyof typeof MailStatus]
+
+
+export const NotificationStatus = {
+  QUEUED: 'QUEUED',
+  SENT: 'SENT',
+  SKIPPED: 'SKIPPED',
+  FAILED: 'FAILED'
+} as const
+
+export type NotificationStatus = (typeof NotificationStatus)[keyof typeof NotificationStatus]
+
+
+export const NotificationSkipReason = {
+  PREFERENCE_OFF: 'PREFERENCE_OFF',
+  NO_ACCESS: 'NO_ACCESS'
+} as const
+
+export type NotificationSkipReason = (typeof NotificationSkipReason)[keyof typeof NotificationSkipReason]
+
+
+export const NotificationChannel = {
+  EMAIL: 'EMAIL',
+  PUSH: 'PUSH'
+} as const
+
+export type NotificationChannel = (typeof NotificationChannel)[keyof typeof NotificationChannel]

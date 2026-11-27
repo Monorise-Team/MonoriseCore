@@ -17,7 +17,7 @@ import type * as Prisma from "../internal/prismaNamespace.js"
  * Transakcyjna kolejka wiadomości e-mail (outbox poczty). Przechowuje wyłącznie referencję do zasobu
  * (nigdy treści wiadomości ani jawnego tokenu aktywacyjnego) i jest zapisywana w transakcji zmiany.
  * Częściowy indeks pobierania gotowych zadań `mail_outbox_pending_claim_idx` na `(nextAttemptAt, id) WHERE status = 'PENDING'`
- * jest zdefiniowany w migracji.
+ * oraz ograniczenie CHECK dopasowania `kind` do `invitationId`/`notificationId` są zdefiniowane w migracjach.
  */
 export type MailOutboxModel = runtime.Types.Result.DefaultSelection<Prisma.$MailOutboxPayload>
 
@@ -42,6 +42,7 @@ export type MailOutboxMinAggregateOutputType = {
   organizationId: string | null
   kind: $Enums.MailKind | null
   invitationId: string | null
+  notificationId: string | null
   status: $Enums.MailStatus | null
   attempts: number | null
   nextAttemptAt: Date | null
@@ -59,6 +60,7 @@ export type MailOutboxMaxAggregateOutputType = {
   organizationId: string | null
   kind: $Enums.MailKind | null
   invitationId: string | null
+  notificationId: string | null
   status: $Enums.MailStatus | null
   attempts: number | null
   nextAttemptAt: Date | null
@@ -76,6 +78,7 @@ export type MailOutboxCountAggregateOutputType = {
   organizationId: number
   kind: number
   invitationId: number
+  notificationId: number
   status: number
   attempts: number
   nextAttemptAt: number
@@ -103,6 +106,7 @@ export type MailOutboxMinAggregateInputType = {
   organizationId?: true
   kind?: true
   invitationId?: true
+  notificationId?: true
   status?: true
   attempts?: true
   nextAttemptAt?: true
@@ -120,6 +124,7 @@ export type MailOutboxMaxAggregateInputType = {
   organizationId?: true
   kind?: true
   invitationId?: true
+  notificationId?: true
   status?: true
   attempts?: true
   nextAttemptAt?: true
@@ -137,6 +142,7 @@ export type MailOutboxCountAggregateInputType = {
   organizationId?: true
   kind?: true
   invitationId?: true
+  notificationId?: true
   status?: true
   attempts?: true
   nextAttemptAt?: true
@@ -240,7 +246,8 @@ export type MailOutboxGroupByOutputType = {
   id: string
   organizationId: string
   kind: $Enums.MailKind
-  invitationId: string
+  invitationId: string | null
+  notificationId: string | null
   status: $Enums.MailStatus
   attempts: number
   nextAttemptAt: Date
@@ -280,7 +287,8 @@ export type MailOutboxWhereInput = {
   id?: Prisma.UuidFilter<"MailOutbox"> | string
   organizationId?: Prisma.UuidFilter<"MailOutbox"> | string
   kind?: Prisma.EnumMailKindFilter<"MailOutbox"> | $Enums.MailKind
-  invitationId?: Prisma.UuidFilter<"MailOutbox"> | string
+  invitationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
+  notificationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
   status?: Prisma.EnumMailStatusFilter<"MailOutbox"> | $Enums.MailStatus
   attempts?: Prisma.IntFilter<"MailOutbox"> | number
   nextAttemptAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
@@ -292,14 +300,16 @@ export type MailOutboxWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
-  invitation?: Prisma.XOR<Prisma.InvitationScalarRelationFilter, Prisma.InvitationWhereInput>
+  invitation?: Prisma.XOR<Prisma.InvitationNullableScalarRelationFilter, Prisma.InvitationWhereInput> | null
+  notification?: Prisma.XOR<Prisma.NotificationNullableScalarRelationFilter, Prisma.NotificationWhereInput> | null
 }
 
 export type MailOutboxOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   organizationId?: Prisma.SortOrder
   kind?: Prisma.SortOrder
-  invitationId?: Prisma.SortOrder
+  invitationId?: Prisma.SortOrderInput | Prisma.SortOrder
+  notificationId?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
   nextAttemptAt?: Prisma.SortOrder
@@ -312,6 +322,7 @@ export type MailOutboxOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   organization?: Prisma.OrganizationOrderByWithRelationInput
   invitation?: Prisma.InvitationOrderByWithRelationInput
+  notification?: Prisma.NotificationOrderByWithRelationInput
 }
 
 export type MailOutboxWhereUniqueInput = Prisma.AtLeast<{
@@ -321,7 +332,8 @@ export type MailOutboxWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.MailOutboxWhereInput | Prisma.MailOutboxWhereInput[]
   organizationId?: Prisma.UuidFilter<"MailOutbox"> | string
   kind?: Prisma.EnumMailKindFilter<"MailOutbox"> | $Enums.MailKind
-  invitationId?: Prisma.UuidFilter<"MailOutbox"> | string
+  invitationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
+  notificationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
   status?: Prisma.EnumMailStatusFilter<"MailOutbox"> | $Enums.MailStatus
   attempts?: Prisma.IntFilter<"MailOutbox"> | number
   nextAttemptAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
@@ -333,14 +345,16 @@ export type MailOutboxWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
   organization?: Prisma.XOR<Prisma.OrganizationScalarRelationFilter, Prisma.OrganizationWhereInput>
-  invitation?: Prisma.XOR<Prisma.InvitationScalarRelationFilter, Prisma.InvitationWhereInput>
+  invitation?: Prisma.XOR<Prisma.InvitationNullableScalarRelationFilter, Prisma.InvitationWhereInput> | null
+  notification?: Prisma.XOR<Prisma.NotificationNullableScalarRelationFilter, Prisma.NotificationWhereInput> | null
 }, "id">
 
 export type MailOutboxOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   organizationId?: Prisma.SortOrder
   kind?: Prisma.SortOrder
-  invitationId?: Prisma.SortOrder
+  invitationId?: Prisma.SortOrderInput | Prisma.SortOrder
+  notificationId?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
   nextAttemptAt?: Prisma.SortOrder
@@ -365,7 +379,8 @@ export type MailOutboxScalarWhereWithAggregatesInput = {
   id?: Prisma.UuidWithAggregatesFilter<"MailOutbox"> | string
   organizationId?: Prisma.UuidWithAggregatesFilter<"MailOutbox"> | string
   kind?: Prisma.EnumMailKindWithAggregatesFilter<"MailOutbox"> | $Enums.MailKind
-  invitationId?: Prisma.UuidWithAggregatesFilter<"MailOutbox"> | string
+  invitationId?: Prisma.UuidNullableWithAggregatesFilter<"MailOutbox"> | string | null
+  notificationId?: Prisma.UuidNullableWithAggregatesFilter<"MailOutbox"> | string | null
   status?: Prisma.EnumMailStatusWithAggregatesFilter<"MailOutbox"> | $Enums.MailStatus
   attempts?: Prisma.IntWithAggregatesFilter<"MailOutbox"> | number
   nextAttemptAt?: Prisma.DateTimeWithAggregatesFilter<"MailOutbox"> | Date | string
@@ -392,14 +407,16 @@ export type MailOutboxCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutMailOutboxInput
-  invitation: Prisma.InvitationCreateNestedOneWithoutMailOutboxInput
+  invitation?: Prisma.InvitationCreateNestedOneWithoutMailOutboxInput
+  notification?: Prisma.NotificationCreateNestedOneWithoutMailOutboxInput
 }
 
 export type MailOutboxUncheckedCreateInput = {
   id: string
   organizationId: string
   kind: $Enums.MailKind
-  invitationId: string
+  invitationId?: string | null
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -426,14 +443,16 @@ export type MailOutboxUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutMailOutboxNestedInput
-  invitation?: Prisma.InvitationUpdateOneRequiredWithoutMailOutboxNestedInput
+  invitation?: Prisma.InvitationUpdateOneWithoutMailOutboxNestedInput
+  notification?: Prisma.NotificationUpdateOneWithoutMailOutboxNestedInput
 }
 
 export type MailOutboxUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   organizationId?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
-  invitationId?: Prisma.StringFieldUpdateOperationsInput | string
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -450,7 +469,8 @@ export type MailOutboxCreateManyInput = {
   id: string
   organizationId: string
   kind: $Enums.MailKind
-  invitationId: string
+  invitationId?: string | null
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -482,7 +502,8 @@ export type MailOutboxUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   organizationId?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
-  invitationId?: Prisma.StringFieldUpdateOperationsInput | string
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -510,6 +531,7 @@ export type MailOutboxCountOrderByAggregateInput = {
   organizationId?: Prisma.SortOrder
   kind?: Prisma.SortOrder
   invitationId?: Prisma.SortOrder
+  notificationId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
   nextAttemptAt?: Prisma.SortOrder
@@ -531,6 +553,7 @@ export type MailOutboxMaxOrderByAggregateInput = {
   organizationId?: Prisma.SortOrder
   kind?: Prisma.SortOrder
   invitationId?: Prisma.SortOrder
+  notificationId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
   nextAttemptAt?: Prisma.SortOrder
@@ -548,6 +571,7 @@ export type MailOutboxMinOrderByAggregateInput = {
   organizationId?: Prisma.SortOrder
   kind?: Prisma.SortOrder
   invitationId?: Prisma.SortOrder
+  notificationId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   attempts?: Prisma.SortOrder
   nextAttemptAt?: Prisma.SortOrder
@@ -656,6 +680,48 @@ export type EnumMailStatusFieldUpdateOperationsInput = {
   set?: $Enums.MailStatus
 }
 
+export type MailOutboxCreateNestedManyWithoutNotificationInput = {
+  create?: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput> | Prisma.MailOutboxCreateWithoutNotificationInput[] | Prisma.MailOutboxUncheckedCreateWithoutNotificationInput[]
+  connectOrCreate?: Prisma.MailOutboxCreateOrConnectWithoutNotificationInput | Prisma.MailOutboxCreateOrConnectWithoutNotificationInput[]
+  createMany?: Prisma.MailOutboxCreateManyNotificationInputEnvelope
+  connect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+}
+
+export type MailOutboxUncheckedCreateNestedManyWithoutNotificationInput = {
+  create?: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput> | Prisma.MailOutboxCreateWithoutNotificationInput[] | Prisma.MailOutboxUncheckedCreateWithoutNotificationInput[]
+  connectOrCreate?: Prisma.MailOutboxCreateOrConnectWithoutNotificationInput | Prisma.MailOutboxCreateOrConnectWithoutNotificationInput[]
+  createMany?: Prisma.MailOutboxCreateManyNotificationInputEnvelope
+  connect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+}
+
+export type MailOutboxUpdateManyWithoutNotificationNestedInput = {
+  create?: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput> | Prisma.MailOutboxCreateWithoutNotificationInput[] | Prisma.MailOutboxUncheckedCreateWithoutNotificationInput[]
+  connectOrCreate?: Prisma.MailOutboxCreateOrConnectWithoutNotificationInput | Prisma.MailOutboxCreateOrConnectWithoutNotificationInput[]
+  upsert?: Prisma.MailOutboxUpsertWithWhereUniqueWithoutNotificationInput | Prisma.MailOutboxUpsertWithWhereUniqueWithoutNotificationInput[]
+  createMany?: Prisma.MailOutboxCreateManyNotificationInputEnvelope
+  set?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  disconnect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  delete?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  connect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  update?: Prisma.MailOutboxUpdateWithWhereUniqueWithoutNotificationInput | Prisma.MailOutboxUpdateWithWhereUniqueWithoutNotificationInput[]
+  updateMany?: Prisma.MailOutboxUpdateManyWithWhereWithoutNotificationInput | Prisma.MailOutboxUpdateManyWithWhereWithoutNotificationInput[]
+  deleteMany?: Prisma.MailOutboxScalarWhereInput | Prisma.MailOutboxScalarWhereInput[]
+}
+
+export type MailOutboxUncheckedUpdateManyWithoutNotificationNestedInput = {
+  create?: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput> | Prisma.MailOutboxCreateWithoutNotificationInput[] | Prisma.MailOutboxUncheckedCreateWithoutNotificationInput[]
+  connectOrCreate?: Prisma.MailOutboxCreateOrConnectWithoutNotificationInput | Prisma.MailOutboxCreateOrConnectWithoutNotificationInput[]
+  upsert?: Prisma.MailOutboxUpsertWithWhereUniqueWithoutNotificationInput | Prisma.MailOutboxUpsertWithWhereUniqueWithoutNotificationInput[]
+  createMany?: Prisma.MailOutboxCreateManyNotificationInputEnvelope
+  set?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  disconnect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  delete?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  connect?: Prisma.MailOutboxWhereUniqueInput | Prisma.MailOutboxWhereUniqueInput[]
+  update?: Prisma.MailOutboxUpdateWithWhereUniqueWithoutNotificationInput | Prisma.MailOutboxUpdateWithWhereUniqueWithoutNotificationInput[]
+  updateMany?: Prisma.MailOutboxUpdateManyWithWhereWithoutNotificationInput | Prisma.MailOutboxUpdateManyWithWhereWithoutNotificationInput[]
+  deleteMany?: Prisma.MailOutboxScalarWhereInput | Prisma.MailOutboxScalarWhereInput[]
+}
+
 export type MailOutboxCreateWithoutOrganizationInput = {
   id: string
   kind: $Enums.MailKind
@@ -669,13 +735,15 @@ export type MailOutboxCreateWithoutOrganizationInput = {
   lastError?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
-  invitation: Prisma.InvitationCreateNestedOneWithoutMailOutboxInput
+  invitation?: Prisma.InvitationCreateNestedOneWithoutMailOutboxInput
+  notification?: Prisma.NotificationCreateNestedOneWithoutMailOutboxInput
 }
 
 export type MailOutboxUncheckedCreateWithoutOrganizationInput = {
   id: string
   kind: $Enums.MailKind
-  invitationId: string
+  invitationId?: string | null
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -721,7 +789,8 @@ export type MailOutboxScalarWhereInput = {
   id?: Prisma.UuidFilter<"MailOutbox"> | string
   organizationId?: Prisma.UuidFilter<"MailOutbox"> | string
   kind?: Prisma.EnumMailKindFilter<"MailOutbox"> | $Enums.MailKind
-  invitationId?: Prisma.UuidFilter<"MailOutbox"> | string
+  invitationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
+  notificationId?: Prisma.UuidNullableFilter<"MailOutbox"> | string | null
   status?: Prisma.EnumMailStatusFilter<"MailOutbox"> | $Enums.MailStatus
   attempts?: Prisma.IntFilter<"MailOutbox"> | number
   nextAttemptAt?: Prisma.DateTimeFilter<"MailOutbox"> | Date | string
@@ -748,11 +817,13 @@ export type MailOutboxCreateWithoutInvitationInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   organization: Prisma.OrganizationCreateNestedOneWithoutMailOutboxInput
+  notification?: Prisma.NotificationCreateNestedOneWithoutMailOutboxInput
 }
 
 export type MailOutboxUncheckedCreateWithoutInvitationInput = {
   id: string
   kind: $Enums.MailKind
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -791,10 +862,70 @@ export type MailOutboxUpdateManyWithWhereWithoutInvitationInput = {
   data: Prisma.XOR<Prisma.MailOutboxUpdateManyMutationInput, Prisma.MailOutboxUncheckedUpdateManyWithoutInvitationInput>
 }
 
+export type MailOutboxCreateWithoutNotificationInput = {
+  id: string
+  kind: $Enums.MailKind
+  status?: $Enums.MailStatus
+  attempts?: number
+  nextAttemptAt?: Date | string
+  lockedUntil?: Date | string | null
+  lastAttemptAt?: Date | string | null
+  sentAt?: Date | string | null
+  failedAt?: Date | string | null
+  lastError?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  organization: Prisma.OrganizationCreateNestedOneWithoutMailOutboxInput
+  invitation?: Prisma.InvitationCreateNestedOneWithoutMailOutboxInput
+}
+
+export type MailOutboxUncheckedCreateWithoutNotificationInput = {
+  id: string
+  kind: $Enums.MailKind
+  invitationId?: string | null
+  status?: $Enums.MailStatus
+  attempts?: number
+  nextAttemptAt?: Date | string
+  lockedUntil?: Date | string | null
+  lastAttemptAt?: Date | string | null
+  sentAt?: Date | string | null
+  failedAt?: Date | string | null
+  lastError?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type MailOutboxCreateOrConnectWithoutNotificationInput = {
+  where: Prisma.MailOutboxWhereUniqueInput
+  create: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput>
+}
+
+export type MailOutboxCreateManyNotificationInputEnvelope = {
+  data: Prisma.MailOutboxCreateManyNotificationInput | Prisma.MailOutboxCreateManyNotificationInput[]
+  skipDuplicates?: boolean
+}
+
+export type MailOutboxUpsertWithWhereUniqueWithoutNotificationInput = {
+  where: Prisma.MailOutboxWhereUniqueInput
+  update: Prisma.XOR<Prisma.MailOutboxUpdateWithoutNotificationInput, Prisma.MailOutboxUncheckedUpdateWithoutNotificationInput>
+  create: Prisma.XOR<Prisma.MailOutboxCreateWithoutNotificationInput, Prisma.MailOutboxUncheckedCreateWithoutNotificationInput>
+}
+
+export type MailOutboxUpdateWithWhereUniqueWithoutNotificationInput = {
+  where: Prisma.MailOutboxWhereUniqueInput
+  data: Prisma.XOR<Prisma.MailOutboxUpdateWithoutNotificationInput, Prisma.MailOutboxUncheckedUpdateWithoutNotificationInput>
+}
+
+export type MailOutboxUpdateManyWithWhereWithoutNotificationInput = {
+  where: Prisma.MailOutboxScalarWhereInput
+  data: Prisma.XOR<Prisma.MailOutboxUpdateManyMutationInput, Prisma.MailOutboxUncheckedUpdateManyWithoutNotificationInput>
+}
+
 export type MailOutboxCreateManyOrganizationInput = {
   id: string
   kind: $Enums.MailKind
-  invitationId: string
+  invitationId?: string | null
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -820,13 +951,15 @@ export type MailOutboxUpdateWithoutOrganizationInput = {
   lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
-  invitation?: Prisma.InvitationUpdateOneRequiredWithoutMailOutboxNestedInput
+  invitation?: Prisma.InvitationUpdateOneWithoutMailOutboxNestedInput
+  notification?: Prisma.NotificationUpdateOneWithoutMailOutboxNestedInput
 }
 
 export type MailOutboxUncheckedUpdateWithoutOrganizationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
-  invitationId?: Prisma.StringFieldUpdateOperationsInput | string
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -842,7 +975,8 @@ export type MailOutboxUncheckedUpdateWithoutOrganizationInput = {
 export type MailOutboxUncheckedUpdateManyWithoutOrganizationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
-  invitationId?: Prisma.StringFieldUpdateOperationsInput | string
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -858,6 +992,7 @@ export type MailOutboxUncheckedUpdateManyWithoutOrganizationInput = {
 export type MailOutboxCreateManyInvitationInput = {
   id: string
   kind: $Enums.MailKind
+  notificationId?: string | null
   status?: $Enums.MailStatus
   attempts?: number
   nextAttemptAt?: Date | string
@@ -884,11 +1019,13 @@ export type MailOutboxUpdateWithoutInvitationInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   organization?: Prisma.OrganizationUpdateOneRequiredWithoutMailOutboxNestedInput
+  notification?: Prisma.NotificationUpdateOneWithoutMailOutboxNestedInput
 }
 
 export type MailOutboxUncheckedUpdateWithoutInvitationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -904,6 +1041,72 @@ export type MailOutboxUncheckedUpdateWithoutInvitationInput = {
 export type MailOutboxUncheckedUpdateManyWithoutInvitationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
+  notificationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sentAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type MailOutboxCreateManyNotificationInput = {
+  id: string
+  kind: $Enums.MailKind
+  invitationId?: string | null
+  status?: $Enums.MailStatus
+  attempts?: number
+  nextAttemptAt?: Date | string
+  lockedUntil?: Date | string | null
+  lastAttemptAt?: Date | string | null
+  sentAt?: Date | string | null
+  failedAt?: Date | string | null
+  lastError?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type MailOutboxUpdateWithoutNotificationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
+  status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sentAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutMailOutboxNestedInput
+  invitation?: Prisma.InvitationUpdateOneWithoutMailOutboxNestedInput
+}
+
+export type MailOutboxUncheckedUpdateWithoutNotificationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
+  attempts?: Prisma.IntFieldUpdateOperationsInput | number
+  nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  lockedUntil?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastAttemptAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  sentAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  failedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type MailOutboxUncheckedUpdateManyWithoutNotificationInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  kind?: Prisma.EnumMailKindFieldUpdateOperationsInput | $Enums.MailKind
+  invitationId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumMailStatusFieldUpdateOperationsInput | $Enums.MailStatus
   attempts?: Prisma.IntFieldUpdateOperationsInput | number
   nextAttemptAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -923,6 +1126,7 @@ export type MailOutboxSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   organizationId?: boolean
   kind?: boolean
   invitationId?: boolean
+  notificationId?: boolean
   status?: boolean
   attempts?: boolean
   nextAttemptAt?: boolean
@@ -934,7 +1138,8 @@ export type MailOutboxSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }, ExtArgs["result"]["mailOutbox"]>
 
 export type MailOutboxSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -942,6 +1147,7 @@ export type MailOutboxSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
   organizationId?: boolean
   kind?: boolean
   invitationId?: boolean
+  notificationId?: boolean
   status?: boolean
   attempts?: boolean
   nextAttemptAt?: boolean
@@ -953,7 +1159,8 @@ export type MailOutboxSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }, ExtArgs["result"]["mailOutbox"]>
 
 export type MailOutboxSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -961,6 +1168,7 @@ export type MailOutboxSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
   organizationId?: boolean
   kind?: boolean
   invitationId?: boolean
+  notificationId?: boolean
   status?: boolean
   attempts?: boolean
   nextAttemptAt?: boolean
@@ -972,7 +1180,8 @@ export type MailOutboxSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
   createdAt?: boolean
   updatedAt?: boolean
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }, ExtArgs["result"]["mailOutbox"]>
 
 export type MailOutboxSelectScalar = {
@@ -980,6 +1189,7 @@ export type MailOutboxSelectScalar = {
   organizationId?: boolean
   kind?: boolean
   invitationId?: boolean
+  notificationId?: boolean
   status?: boolean
   attempts?: boolean
   nextAttemptAt?: boolean
@@ -992,31 +1202,36 @@ export type MailOutboxSelectScalar = {
   updatedAt?: boolean
 }
 
-export type MailOutboxOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "kind" | "invitationId" | "status" | "attempts" | "nextAttemptAt" | "lockedUntil" | "lastAttemptAt" | "sentAt" | "failedAt" | "lastError" | "createdAt" | "updatedAt", ExtArgs["result"]["mailOutbox"]>
+export type MailOutboxOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "organizationId" | "kind" | "invitationId" | "notificationId" | "status" | "attempts" | "nextAttemptAt" | "lockedUntil" | "lastAttemptAt" | "sentAt" | "failedAt" | "lastError" | "createdAt" | "updatedAt", ExtArgs["result"]["mailOutbox"]>
 export type MailOutboxInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }
 export type MailOutboxIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }
 export type MailOutboxIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   organization?: boolean | Prisma.OrganizationDefaultArgs<ExtArgs>
-  invitation?: boolean | Prisma.InvitationDefaultArgs<ExtArgs>
+  invitation?: boolean | Prisma.MailOutbox$invitationArgs<ExtArgs>
+  notification?: boolean | Prisma.MailOutbox$notificationArgs<ExtArgs>
 }
 
 export type $MailOutboxPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "MailOutbox"
   objects: {
     organization: Prisma.$OrganizationPayload<ExtArgs>
-    invitation: Prisma.$InvitationPayload<ExtArgs>
+    invitation: Prisma.$InvitationPayload<ExtArgs> | null
+    notification: Prisma.$NotificationPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
     organizationId: string
     kind: $Enums.MailKind
-    invitationId: string
+    invitationId: string | null
+    notificationId: string | null
     status: $Enums.MailStatus
     attempts: number
     nextAttemptAt: Date
@@ -1422,7 +1637,8 @@ readonly fields: MailOutboxFieldRefs;
 export interface Prisma__MailOutboxClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   organization<T extends Prisma.OrganizationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.OrganizationDefaultArgs<ExtArgs>>): Prisma.Prisma__OrganizationClient<runtime.Types.Result.GetResult<Prisma.$OrganizationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
-  invitation<T extends Prisma.InvitationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.InvitationDefaultArgs<ExtArgs>>): Prisma.Prisma__InvitationClient<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  invitation<T extends Prisma.MailOutbox$invitationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.MailOutbox$invitationArgs<ExtArgs>>): Prisma.Prisma__InvitationClient<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  notification<T extends Prisma.MailOutbox$notificationArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.MailOutbox$notificationArgs<ExtArgs>>): Prisma.Prisma__NotificationClient<runtime.Types.Result.GetResult<Prisma.$NotificationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1456,6 +1672,7 @@ export interface MailOutboxFieldRefs {
   readonly organizationId: Prisma.FieldRef<"MailOutbox", 'String'>
   readonly kind: Prisma.FieldRef<"MailOutbox", 'MailKind'>
   readonly invitationId: Prisma.FieldRef<"MailOutbox", 'String'>
+  readonly notificationId: Prisma.FieldRef<"MailOutbox", 'String'>
   readonly status: Prisma.FieldRef<"MailOutbox", 'MailStatus'>
   readonly attempts: Prisma.FieldRef<"MailOutbox", 'Int'>
   readonly nextAttemptAt: Prisma.FieldRef<"MailOutbox", 'DateTime'>
@@ -1864,6 +2081,44 @@ export type MailOutboxDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.In
    * Limit how many MailOutboxes to delete.
    */
   limit?: number
+}
+
+/**
+ * MailOutbox.invitation
+ */
+export type MailOutbox$invitationArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Invitation
+   */
+  select?: Prisma.InvitationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Invitation
+   */
+  omit?: Prisma.InvitationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.InvitationInclude<ExtArgs> | null
+  where?: Prisma.InvitationWhereInput
+}
+
+/**
+ * MailOutbox.notification
+ */
+export type MailOutbox$notificationArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Notification
+   */
+  select?: Prisma.NotificationSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Notification
+   */
+  omit?: Prisma.NotificationOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.NotificationInclude<ExtArgs> | null
+  where?: Prisma.NotificationWhereInput
 }
 
 /**

@@ -2396,7 +2396,12 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
       // Funkcja SECURITY DEFINER mail_outbox_claim rezerwuje gotowe zadania ponad granicą firm według now() bazy
       const claimed = await claimMailOutboxJobs(db, { limit: 10, leaseMs: 90_000 });
       expect(claimed.map((row) => row.id).sort()).toEqual([acmeJobId, globexJobId].sort());
-      expect(claimed.every((row) => row.attempts === 1 && row.kind === "INVITATION")).toBe(true);
+      expect(
+        claimed.every(
+          (row) =>
+            row.attempts === 1 && row.kind === "INVITATION" && row.invitationId !== null && row.notificationId === null,
+        ),
+      ).toBe(true);
 
       // Oznaczamy jedno zadanie jako SENT sprzed 31 dni (przez zegar bazy) i sprzątamy przez mail_outbox_cleanup
       await withOrganization(
@@ -2429,6 +2434,302 @@ describe("kolejka poczty mail_outbox (RLS, klucze złożone, CHECKi i funkcje SE
         await tx.employee.deleteMany({ where: { id: globexEmpId } });
       });
       await db.authUser.deleteMany({ where: { id: { in: [acmeAccId, globexAccId] } } });
+    }
+  });
+});
+
+describe("powiadomienia, preferencje i mail_outbox NOTIFICATION (MonoriseCore#86, RLS, FK złożony, CHECKi)", () => {
+  it("izoluje notifications i notification_preferences przez RLS, wymusza klucze złożone i CHECKi spójności", async () => {
+    const acmeNotifId = uuidv7();
+    const globexNotifId = uuidv7();
+    const acmeOutboxId = uuidv7();
+    const acmePrefId = uuidv7();
+    const globexPrefId = uuidv7();
+
+    try {
+      await withOrganization(db, acme.id, async (tx) => {
+        await tx.notification.create({
+          data: {
+            id: acmeNotifId,
+            organizationId: acme.id,
+            product: "timotime",
+            category: "timotime.reminders",
+            recipientAccountId: acme.accountId,
+            title: "Przypomnienie Acme",
+            body: "Uzupełnij czas pracy za piątek.",
+            actionUrl: "http://timo-time.localhost:3300/app",
+            status: "QUEUED",
+          },
+        });
+        await tx.mailOutbox.create({
+          data: {
+            id: acmeOutboxId,
+            organizationId: acme.id,
+            kind: "NOTIFICATION",
+            notificationId: acmeNotifId,
+            status: "PENDING",
+          },
+        });
+        await tx.notificationPreference.create({
+          data: {
+            id: acmePrefId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            category: "timotime.reminders",
+            channel: "EMAIL",
+            enabled: false,
+          },
+        });
+      });
+
+      await withOrganization(db, globex.id, async (tx) => {
+        await tx.notification.create({
+          data: {
+            id: globexNotifId,
+            organizationId: globex.id,
+            product: "kivotasks",
+            category: "kivotasks.assignments",
+            recipientAccountId: globex.accountId,
+            title: "Zadanie Globex",
+            body: "Przypisano Ci zadanie KT-1.",
+            status: "QUEUED",
+          },
+        });
+        await tx.notificationPreference.create({
+          data: {
+            id: globexPrefId,
+            organizationId: globex.id,
+            accountId: globex.accountId,
+            category: "kivotasks.assignments",
+            channel: "EMAIL",
+            enabled: false,
+          },
+        });
+      });
+
+      // 1. RLS na notifications: firma widzi wyłącznie własne wiersze, bez kontekstu pusto, brak zapisu/zmiany dla innej firmy
+      const acmeNotifications = await withOrganization(db, acme.id, (tx) => tx.notification.findMany());
+      expect(acmeNotifications.map((n) => n.id)).toEqual([acmeNotifId]);
+      expect(await db.notification.findMany()).toEqual([]);
+
+      const crossNotifUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.notification.updateMany({ where: { id: globexNotifId }, data: { status: "FAILED" } }),
+      );
+      expect(crossNotifUpdate.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notification.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              product: "timotime",
+              category: "timotime.reminders",
+              recipientAccountId: globex.accountId,
+              title: "Intruz",
+              body: "Treść",
+              status: "QUEUED",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // core_app nie może usuwać wierszy notifications
+      await expect(
+        withOrganization(db, acme.id, (tx) => tx.notification.delete({ where: { id: acmeNotifId } })),
+      ).rejects.toThrow(/permission denied/i);
+
+      // CHECKi spójności i długości na notifications
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notification.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              product: "timotime",
+              category: "timotime.reminders",
+              recipientAccountId: acme.accountId,
+              title: "x".repeat(201),
+              body: "Treść",
+              status: "QUEUED",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/notifications_title_length|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notification.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              product: "timotime",
+              category: "timotime.reminders",
+              recipientAccountId: acme.accountId,
+              title: "Tytuł",
+              body: "y".repeat(4001),
+              status: "QUEUED",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/notifications_body_length|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notification.update({ where: { id: acmeNotifId }, data: { status: "SENT", sentAt: null } }),
+        ),
+      ).rejects.toThrow(/notifications_status_sent_consistency|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notification.update({ where: { id: acmeNotifId }, data: { status: "SKIPPED", skipReason: null } }),
+        ),
+      ).rejects.toThrow(/notifications_status_skip_reason_consistency|check constraint|violates/i);
+
+      // 2. RLS i ograniczenia na notification_preferences
+      const acmePrefs = await withOrganization(db, acme.id, (tx) => tx.notificationPreference.findMany());
+      expect(acmePrefs.map((p) => p.id)).toEqual([acmePrefId]);
+      expect(await db.notificationPreference.findMany()).toEqual([]);
+
+      const crossPrefUpdate = await withOrganization(db, acme.id, (tx) =>
+        tx.notificationPreference.updateMany({ where: { id: globexPrefId }, data: { enabled: true } }),
+      );
+      expect(crossPrefUpdate.count).toBe(0);
+
+      const crossPrefDelete = await withOrganization(db, acme.id, (tx) =>
+        tx.notificationPreference.deleteMany({ where: { id: globexPrefId } }),
+      );
+      expect(crossPrefDelete.count).toBe(0);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notificationPreference.create({
+            data: {
+              id: uuidv7(),
+              organizationId: globex.id,
+              accountId: globex.accountId,
+              category: "timotime.reminders",
+              channel: "EMAIL",
+              enabled: false,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/row-level security|violates/i);
+
+      // Złożony klucz obcy odrzuca konto z innej firmy
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notificationPreference.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: globex.accountId,
+              category: "timotime.reminders",
+              channel: "EMAIL",
+              enabled: false,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/notification_preferences_organizationId_accountId_fkey|foreign key|violates/i);
+
+      // Unikalność (organizationId, accountId, category, channel), ale inny kanał (PUSH) jest dopuszczalny
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.notificationPreference.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              accountId: acme.accountId,
+              category: "timotime.reminders",
+              channel: "EMAIL",
+              enabled: true,
+            },
+          }),
+        ),
+      ).rejects.toThrow(/notification_preferences_org_account_category_channel_key|unique|duplicate/i);
+
+      const pushPrefId = uuidv7();
+      await withOrganization(db, acme.id, (tx) =>
+        tx.notificationPreference.create({
+          data: {
+            id: pushPrefId,
+            organizationId: acme.id,
+            accountId: acme.accountId,
+            category: "timotime.reminders",
+            channel: "PUSH",
+            enabled: false,
+          },
+        }),
+      );
+      await withOrganization(db, acme.id, (tx) => tx.notificationPreference.delete({ where: { id: pushPrefId } }));
+
+      // 3. Złożony FK mail_outbox(organizationId, notificationId) -> notifications(organizationId, id) odrzuca inną firmę
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              kind: "NOTIFICATION",
+              notificationId: globexNotifId,
+              status: "PENDING",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/mail_outbox_organizationId_notificationId_fkey|foreign key|violates/i);
+
+      // 4. CHECK mail_outbox_kind_reference_consistency pilnuje dokładnie jednej referencji zgodnej z kind
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              kind: "NOTIFICATION",
+              invitationId: null,
+              notificationId: null,
+              status: "PENDING",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/mail_outbox_kind_reference_consistency|check constraint|violates/i);
+
+      await expect(
+        withOrganization(db, acme.id, (tx) =>
+          tx.mailOutbox.create({
+            data: {
+              id: uuidv7(),
+              organizationId: acme.id,
+              kind: "INVITATION",
+              invitationId: null,
+              notificationId: acmeNotifId,
+              status: "PENDING",
+            },
+          }),
+        ),
+      ).rejects.toThrow(/mail_outbox_kind_reference_consistency|check constraint|violates/i);
+
+      // 5. Funkcja mail_outbox_claim zwraca notificationId dla zadań NOTIFICATION i zachowuje uprawnienia core_app
+      const claimed = await claimMailOutboxJobs(db, { limit: 10, leaseMs: 90_000 });
+      const claimedNotif = claimed.find((row) => row.id === acmeOutboxId);
+      expect(claimedNotif).toEqual({
+        id: acmeOutboxId,
+        organizationId: acme.id,
+        kind: "NOTIFICATION",
+        invitationId: null,
+        notificationId: acmeNotifId,
+        attempts: 1,
+      });
+    } finally {
+      await withOrganization(ownerDb, acme.id, async (tx) => {
+        await tx.mailOutbox.deleteMany({ where: { id: acmeOutboxId } });
+        await tx.notification.deleteMany({ where: { id: acmeNotifId } });
+        await tx.notificationPreference.deleteMany({ where: { id: acmePrefId } });
+      });
+      await withOrganization(ownerDb, globex.id, async (tx) => {
+        await tx.notification.deleteMany({ where: { id: globexNotifId } });
+        await tx.notificationPreference.deleteMany({ where: { id: globexPrefId } });
+      });
     }
   });
 });

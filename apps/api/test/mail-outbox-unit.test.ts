@@ -77,20 +77,24 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
     expect(formatMailError(new Error(""))).toBe("Error");
     expect(formatMailError("   ")).toBe("Nieznany błąd wysyłki poczty");
 
-    // Redakcja userinfo (://user:pass@) oraz token= bez ruszania zwykłego adresu e-mail
+    // Redakcja userinfo (://user:pass@), token= oraz ścieżki wypisania z powiadomień bez ruszania zwykłego adresu e-mail
     const withSecrets = formatMailError(
       new Error(
         "Nie udało się wysłać do anna@acme.com przez smtps://mailer:s3cr3t!@smtp.acme.com:465 " +
-          "(link https://auth.monorise.studio/invite?token=raw_secret_123&lang=pl, TOKEN=InnySekret)",
+          "(link https://auth.monorise.studio/invite?token=raw_secret_123&lang=pl, TOKEN=InnySekret, " +
+          "unsub <https://api.monorise.studio/core/v1/notifications/unsubscribe/eyJwb3IifQ.sig_secret_987>)",
       ),
     );
     expect(withSecrets).toContain("anna@acme.com");
     expect(withSecrets).toContain("smtps://[redacted]@smtp.acme.com:465");
     expect(withSecrets).toContain("https://auth.monorise.studio/invite?token=[redacted]&lang=pl");
     expect(withSecrets).toContain("TOKEN=[redacted]");
+    expect(withSecrets).toContain("https://api.monorise.studio/core/v1/notifications/unsubscribe/[redacted]");
     expect(withSecrets).not.toContain("s3cr3t");
     expect(withSecrets).not.toContain("raw_secret_123");
     expect(withSecrets).not.toContain("InnySekret");
+    expect(withSecrets).not.toContain("eyJwb3IifQ");
+    expect(withSecrets).not.toContain("sig_secret_987");
 
     // Redakcja działa PRZED przycięciem, więc sekret na granicy 500 znaków nie może przeciec
     const secretAtBoundary = `${"e".repeat(485)}://u:tajnehaslo@h?token=sekretnytoken123456`;
@@ -98,6 +102,12 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
     expect(formattedBoundary.length).toBeLessThanOrEqual(MAIL_LAST_ERROR_MAX_LENGTH);
     expect(formattedBoundary).not.toContain("tajnehaslo");
     expect(formattedBoundary).not.toContain("sekretnytoken");
+
+    const unsubAtBoundary = `${"e".repeat(460)}/core/v1/notifications/unsubscribe/tajny_token_wypisania.podpis123`;
+    const formattedUnsubBoundary = formatMailError(unsubAtBoundary);
+    expect(formattedUnsubBoundary.length).toBeLessThanOrEqual(MAIL_LAST_ERROR_MAX_LENGTH);
+    expect(formattedUnsubBoundary).not.toContain("tajny_token_wypisania");
+    expect(formattedUnsubBoundary).not.toContain("podpis123");
 
     const longAscii = "E".repeat(MAIL_LAST_ERROR_MAX_LENGTH + 250);
     const truncatedAscii = formatMailError(new Error(longAscii));
@@ -116,6 +126,7 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
       organizationId: ORG_ID,
       kind: "INVITATION" as const,
       invitationId: INV_ID,
+      notificationId: null,
       attempts: 1,
     };
     const job2 = {
@@ -123,6 +134,7 @@ describe("Kolejka poczty mail_outbox — testy jednostkowe bez bazy", () => {
       organizationId: ORG_ID,
       kind: "INVITATION" as const,
       invitationId: INV_ID,
+      notificationId: null,
       attempts: 1,
     };
     const observedNowMs: number[] = [];

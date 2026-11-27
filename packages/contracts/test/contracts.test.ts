@@ -22,6 +22,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -35,6 +36,7 @@ import {
   DirectoryUnitMember,
   emailDomain,
   Entitlement,
+  getNotificationCategory,
   Health,
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENCY_KEY_MAX_LENGTH,
@@ -55,6 +57,18 @@ import {
   MAX_PAGE_LIMIT,
   MAX_PERMISSION_MANIFEST_ENTRIES,
   Me,
+  NOTIFICATION_BODY_MAX_LENGTH,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CATEGORY_KEYS,
+  NOTIFICATION_TITLE_MAX_LENGTH,
+  NotificationCategoryKey,
+  NotificationChannel,
+  NotificationMailChannel,
+  NotificationPreference,
+  NotificationResult,
+  NotificationSkipReason,
+  NotificationStatus,
+  NOTIFICATIONS_SEND_SCOPE,
   normalizeEmail,
   Organization,
   OrganizationDomain,
@@ -77,7 +91,9 @@ import {
   TransferOrganizationOwner,
   Unit,
   UnitMember,
+  UnsubscribeNotificationResult,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -972,5 +988,184 @@ describe("kontrakty", () => {
     });
     expect(entry.actorDisplayName).toBe("Anna Kowalska");
     expect(entry.product).toBe("timotime");
+  });
+
+  it("definiuje stały katalog kategorii powiadomień, zakres i schematy API (ADR-0048)", () => {
+    expect(NOTIFICATIONS_SEND_SCOPE).toBe("core:notifications.send");
+    expect(NOTIFICATION_TITLE_MAX_LENGTH).toBe(200);
+    expect(NOTIFICATION_BODY_MAX_LENGTH).toBe(4000);
+
+    expect(NOTIFICATION_CATEGORY_KEYS).toEqual(["security", "account", "timotime.reminders", "kivotasks.assignments"]);
+    expect(NOTIFICATION_CATEGORIES).toHaveLength(4);
+
+    expect(getNotificationCategory("security")).toMatchObject({
+      key: "security",
+      product: null,
+      channel: "login",
+      optional: false,
+    });
+    expect(getNotificationCategory("account")).toMatchObject({
+      key: "account",
+      product: null,
+      channel: "login",
+      optional: false,
+    });
+    expect(getNotificationCategory("timotime.reminders")).toMatchObject({
+      key: "timotime.reminders",
+      product: "timotime",
+      channel: "notifications",
+      optional: true,
+    });
+    expect(getNotificationCategory("kivotasks.assignments")).toMatchObject({
+      key: "kivotasks.assignments",
+      product: "kivotasks",
+      channel: "notifications",
+      optional: true,
+    });
+    expect(getNotificationCategory("unknown.category")).toBeUndefined();
+
+    expect(NotificationCategoryKey.safeParse("timotime.reminders").success).toBe(true);
+    expect(NotificationCategoryKey.safeParse("other.category").success).toBe(false);
+    expect(NotificationMailChannel.parse("login")).toBe("login");
+    expect(NotificationMailChannel.parse("notifications")).toBe("notifications");
+    expect(NotificationChannel.parse("EMAIL")).toBe("EMAIL");
+    expect(NotificationChannel.parse("PUSH")).toBe("PUSH");
+    expect(NotificationStatus.parse("QUEUED")).toBe("QUEUED");
+    expect(NotificationSkipReason.parse("PREFERENCE_OFF")).toBe("PREFERENCE_OFF");
+    expect(NotificationSkipReason.parse("NO_ACCESS")).toBe("NO_ACCESS");
+
+    expect(
+      CreateNotification.parse({
+        recipientAccountId: UUID_1,
+        category: "kivotasks.assignments",
+        title: "  Przypisano zadanie KT-12  ",
+        body: "  Anna przypisała Ci zadanie.\nSprawdź szczegóły.  ",
+        actionUrl: "https://kivotasks.monorise.studio/issues/KT-12",
+      }),
+    ).toEqual({
+      recipientAccountId: UUID_1,
+      category: "kivotasks.assignments",
+      title: "Przypisano zadanie KT-12",
+      body: "Anna przypisała Ci zadanie.\nSprawdź szczegóły.",
+      actionUrl: "https://kivotasks.monorise.studio/issues/KT-12",
+    });
+
+    expect(
+      CreateNotification.parse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "Uzupełnij czas pracy",
+        body: "Brakuje wpisu za piątek.",
+      }),
+    ).toEqual({
+      recipientAccountId: UUID_1,
+      category: "timotime.reminders",
+      title: "Uzupełnij czas pracy",
+      body: "Brakuje wpisu za piątek.",
+    });
+
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "   ",
+        body: "Treść",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "Linia 1\nLinia 2",
+        body: "Treść",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "a".repeat(201),
+        body: "Treść",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "Tytuł",
+        body: "b".repeat(4001),
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "Tytuł",
+        body: "Treść",
+        actionUrl: "not-a-url",
+      }).success,
+    ).toBe(false);
+    for (const unsafeUrl of [
+      "https://kivotasks.monorise.studio\\@evil.example/x",
+      "https://kivotasks.monorise.studio/issues/KT 1",
+      " https://kivotasks.monorise.studio/issues/KT-1",
+      "https://kivotasks.monorise.studio/issues/KT-1\u0000",
+      "https://kivotasks.monorise.studio/issues/KT-1\t",
+    ]) {
+      expect(
+        CreateNotification.safeParse({
+          recipientAccountId: UUID_1,
+          category: "timotime.reminders",
+          title: "Tytuł",
+          body: "Treść",
+          actionUrl: unsafeUrl,
+        }).success,
+        `Powinno odrzucić ${JSON.stringify(unsafeUrl)}`,
+      ).toBe(false);
+    }
+    expect(
+      CreateNotification.safeParse({
+        recipientAccountId: UUID_1,
+        category: "timotime.reminders",
+        title: "Tytuł",
+        body: "Treść",
+        extra: true,
+      }).success,
+    ).toBe(false);
+
+    expect(NotificationResult.parse({ id: UUID_1, status: "QUEUED", skipReason: null })).toEqual({
+      id: UUID_1,
+      status: "QUEUED",
+      skipReason: null,
+    });
+    expect(NotificationResult.parse({ id: UUID_1, status: "SKIPPED", skipReason: "PREFERENCE_OFF" })).toEqual({
+      id: UUID_1,
+      status: "SKIPPED",
+      skipReason: "PREFERENCE_OFF",
+    });
+
+    expect(
+      NotificationPreference.parse({
+        category: "security",
+        product: null,
+        channel: "login",
+        optional: false,
+        name: "Bezpieczeństwo",
+        description: "Wiadomości dotyczące bezpieczeństwa konta.",
+        enabled: true,
+      }).optional,
+    ).toBe(false);
+
+    expect(UpdateNotificationPreference.parse({ enabled: false })).toEqual({ enabled: false });
+    expect(UpdateNotificationPreference.safeParse({ enabled: "false" }).success).toBe(false);
+    expect(UpdateNotificationPreference.safeParse({ enabled: false, extra: 1 }).success).toBe(false);
+
+    expect(UnsubscribeNotificationResult.parse({ category: "timotime.reminders", enabled: false })).toEqual({
+      category: "timotime.reminders",
+      enabled: false,
+    });
+    expect(UnsubscribeNotificationResult.safeParse({ category: "timotime.reminders", enabled: true }).success).toBe(
+      false,
+    );
   });
 });

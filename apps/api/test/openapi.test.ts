@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "@core/contracts";
+import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER, NOTIFICATIONS_SEND_SCOPE } from "@core/contracts";
 import type { PrismaClient } from "@core/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildOpenApiDocument, serializeOpenApiDocument, type OpenApiSpec } from "../src/openapi.js";
@@ -149,7 +149,7 @@ describe("OpenAPI Core API", () => {
     expect(response.json()).not.toHaveProperty("error");
   });
 
-  it("rejestruje każdą trasę POST z tokenem użytkownika przez registerPostRoute i dokumentuje Idempotency-Key dokładnie dla nich", () => {
+  it("rejestruje każdą uwierzytelnioną trasę POST z idempotent=true i dokumentuje Idempotency-Key dokładnie dla nich", () => {
     const idempotentRoutes = ROUTE_LIST.filter(supportsIdempotencyKey);
     expect(idempotentRoutes.length).toBeGreaterThan(0);
 
@@ -301,5 +301,57 @@ describe("OpenAPI Core API", () => {
       type: "string",
       enum: ["PENDING", "SENT", "FAILED", "CANCELLED"],
     });
+  });
+
+  it("dokumentuje moduł powiadomień w tagu Notifications z zakresem core:notifications.send, 202, Idempotency-Key i publicznym wypisaniem", () => {
+    expect(document.tags.some((tag) => tag.name === "Notifications")).toBe(true);
+
+    const productOAuth = document.components.securitySchemes.productOAuth;
+    expect(productOAuth?.type).toBe("oauth2");
+    if (productOAuth?.type === "oauth2") {
+      expect(productOAuth.flows.clientCredentials.scopes[NOTIFICATIONS_SEND_SCOPE]).toBeTruthy();
+    }
+
+    const sendOp = document.paths["/core/v1/organizations/{organizationId}/notifications"]?.post;
+    expect(sendOp?.operationId).toBe("sendNotification");
+    expect(sendOp?.tags).toEqual(["Notifications"]);
+    expect(sendOp?.security).toEqual([{ productOAuth: [NOTIFICATIONS_SEND_SCOPE] }]);
+    expect(sendOp?.responses["202"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/NotificationResultResponse",
+    });
+    expect(sendOp?.responses["202"]?.headers?.[IDEMPOTENCY_REPLAYED_HEADER]).toBeDefined();
+    expect(sendOp?.parameters?.some((p) => p.in === "header" && p.name === IDEMPOTENCY_KEY_HEADER)).toBe(true);
+    expect(sendOp?.parameters?.some((p) => p.in === "path" && p.name === "organizationId" && p.required)).toBe(true);
+
+    const listPrefsOp = document.paths["/core/v1/me/notification-preferences"]?.get;
+    expect(listPrefsOp?.operationId).toBe("listMyNotificationPreferences");
+    expect(listPrefsOp?.security).toEqual([{ bearerAuth: [] }]);
+    expect(listPrefsOp?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/NotificationPreferenceListResponse",
+    });
+
+    const putPrefOp = document.paths["/core/v1/me/notification-preferences/{category}"]?.put;
+    expect(putPrefOp?.operationId).toBe("updateMyNotificationPreference");
+    expect(putPrefOp?.security).toEqual([{ bearerAuth: [] }]);
+    expect(putPrefOp?.responses["422"]).toBeDefined();
+
+    const unsubGetOp = document.paths["/core/v1/notifications/unsubscribe/{token}"]?.get;
+    expect(unsubGetOp?.operationId).toBe("getUnsubscribeNotificationPage");
+    expect(unsubGetOp?.security).toBeUndefined();
+    expect(unsubGetOp?.responses["200"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+    expect(unsubGetOp?.responses["404"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+
+    const unsubOp = document.paths["/core/v1/notifications/unsubscribe/{token}"]?.post;
+    expect(unsubOp?.operationId).toBe("unsubscribeNotification");
+    expect(unsubOp?.security).toBeUndefined();
+    expect(unsubOp?.parameters?.some((p) => p.in === "header" && p.name === IDEMPOTENCY_KEY_HEADER)).toBe(false);
+    expect(unsubOp?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/UnsubscribeNotificationResponse",
+    });
+    expect(unsubOp?.responses["200"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+    expect(unsubOp?.responses["404"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/ApiErrorResponse",
+    });
+    expect(unsubOp?.responses["404"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
   });
 });

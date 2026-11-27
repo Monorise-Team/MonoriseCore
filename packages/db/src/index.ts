@@ -222,7 +222,8 @@ export interface ClaimedMailOutboxJob {
   id: string;
   organizationId: string;
   kind: MailKind;
-  invitationId: string;
+  invitationId: string | null;
+  notificationId: string | null;
   attempts: number;
 }
 

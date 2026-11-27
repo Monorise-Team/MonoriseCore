@@ -3,6 +3,7 @@ import {
   CreateAppAccess,
   CreateEmployee,
   CreateInvitation,
+  CreateNotification,
   CreateOrganizationDomain,
   CreateRole,
   CreateRoleAssignment,
@@ -12,12 +13,14 @@ import {
   EVENTS_READ_SCOPE,
   ProductEventsQuery,
   EntitlementStatus,
+  getNotificationCategory,
   IDEMPOTENCY_REPLAYED_HEADER,
   InvitationStatus,
   isFreeEmailDomain,
   ListAuditLogQuery,
   MAX_DIRECTORY_FILTER_IDS,
   normalizeEmail,
+  NOTIFICATIONS_SEND_SCOPE,
   PageQuery,
   PERMISSIONS_READ_SCOPE,
   PERMISSIONS_REGISTER_SCOPE,
@@ -26,6 +29,7 @@ import {
   TransferOrganizationOwner,
   UnitStatus,
   UpdateEmployee,
+  UpdateNotificationPreference,
   UpdateOrganization,
   UpdateRole,
   UpdateUnit,
@@ -87,6 +91,7 @@ import { isEntitlementActive } from "./entitlements.js";
 import { readProductEventFeed } from "./event-feed.js";
 import {
   accountPrincipal,
+  clientPrincipal,
   computeRequestHash,
   executeWithIdempotency,
   extractIdempotencyKeyHeader,
@@ -103,6 +108,23 @@ import {
   type InvitationActor,
 } from "./invitations.js";
 import type { MailOutboxWorker } from "./mail-outbox.js";
+import {
+  acceptsHtml,
+  createNotification,
+  inspectUnsubscribeToken,
+  listNotificationPreferencesForAccount,
+  NotificationError,
+  redactUnsubscribeUrlTokens,
+  renderUnsubscribeConfirmHtml,
+  renderUnsubscribeDoneHtml,
+  renderUnsubscribeInvalidHtml,
+  resolveNotificationsUnsubscribeSecret,
+  UNSUBSCRIBE_HTML_HEADERS,
+  unsubscribeNotificationByToken,
+  updateNotificationPreferenceForAccount,
+  validateActionUrlOrigin,
+  type NotificationAuditMeta,
+} from "./notifications.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { bumpAuthzRevisions } from "./outbox.js";
 import { ManifestValidationError, registerPermissions } from "./permissions-registry.js";
@@ -128,6 +150,8 @@ export interface ServerOptions {
   logger?: boolean;
   /** Sekret HMAC-SHA256 do wyliczania rekordów DNS TXT domen (`CORE_DOMAIN_VERIFICATION_SECRET`). */
   domainVerificationSecret?: string | undefined;
+  /** Sekret HMAC-SHA256 do podpisywania tokenów wypisania z powiadomień (`CORE_NOTIFICATIONS_UNSUBSCRIBE_SECRET`). */
+  notificationsUnsubscribeSecret?: string | undefined;
   /** Tylko lokalnie: czy zezwolić na `trustLocally: true` w weryfikacji domeny (`CORE_DEV_TRUST_DOMAINS=1`). */
   devTrustDomains?: boolean | undefined;
   /** Nadpisanie funkcji odpytywania DNS TXT (np. w testach). */
@@ -162,6 +186,7 @@ const AssignmentIdParams = z.object({ assignmentId: z.uuid() });
 const AppAccessIdParams = z.object({ appAccessId: z.uuid() });
 const InvitationIdParams = z.object({ invitationId: z.uuid() });
 const DomainIdParams = z.object({ domainId: z.uuid() });
+const OrganizationIdParams = z.object({ organizationId: z.uuid() });
 const ListInvitationsFilter = z.object({ status: InvitationStatus.optional() });
 const PermissionSnapshotQuery = z.object({
   organizationId: z.uuid(),
@@ -608,6 +633,34 @@ async function assertUnitExists(tx: Tx, unitId: string, message: string): Promis
   if (!unit) throw new ApiFailure(404, "NOT_FOUND", message);
 }
 
+const FORM_BODY_LIMIT_BYTES = 16 * 1024;
+
+export interface LoggableRequest {
+  method?: string | undefined;
+  url?: string | undefined;
+  host?: string | undefined;
+  hostname?: string | undefined;
+  ip?: string | undefined;
+  remoteAddress?: string | undefined;
+  remotePort?: number | undefined;
+  headers?: Record<string, unknown> | undefined;
+  socket?: { remoteAddress?: string | undefined; remotePort?: number | undefined } | undefined;
+}
+
+/** Serializer żądań Pino w Core API: cenzuruje tokeny wypisania w `/core/v1/notifications/unsubscribe/<token>`. */
+export function requestLogSerializer(request: LoggableRequest) {
+  return {
+    method: request.method,
+    url: typeof request.url === "string" ? redactUnsubscribeUrlTokens(request.url) : request.url,
+    host:
+      request.host ??
+      request.hostname ??
+      (typeof request.headers?.host === "string" ? request.headers.host : undefined),
+    remoteAddress: request.remoteAddress ?? request.ip ?? request.socket?.remoteAddress,
+    remotePort: request.remotePort ?? request.socket?.remotePort,
+  };
+}
+
 /** Core API: format `{ data, meta, error }` (ADR-0044), firma zawsze z tokenu, dane przez RLS (ADR-0037). */
 export function buildServer({
   db,
@@ -615,6 +668,7 @@ export function buildServer({
   verifyMachineToken,
   logger = false,
   domainVerificationSecret = process.env.CORE_DOMAIN_VERIFICATION_SECRET,
+  notificationsUnsubscribeSecret,
   devTrustDomains = false,
   resolveTxt,
   mailOutboxWorker,
@@ -622,7 +676,11 @@ export function buildServer({
   onRoute,
 }: ServerOptions): FastifyInstance {
   const getNow = customNow ?? (() => new Date());
-  const app = Fastify({ logger, genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}` });
+  const app = Fastify({
+    logger: logger ? { serializers: { req: requestLogSerializer } } : false,
+    routerOptions: { maxParamLength: 1024 },
+    genReqId: () => `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`,
+  });
   const openApiDocument = buildOpenApiDocument();
   const domainOptions: DomainServiceOptions = {
     domainVerificationSecret: domainVerificationSecret?.trim() || undefined,
@@ -633,6 +691,39 @@ export function buildServer({
   if (onRoute) {
     app.addHook("onRoute", onRoute);
   }
+
+  // RFC 8058: klienci pocztowi wysyłają jednoklikowe wypisanie jako application/x-www-form-urlencoded
+  // albo multipart/form-data; oba parsery są ograniczone do 16 KiB i nie wymagają dodatkowych zależności.
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string", bodyLimit: FORM_BODY_LIMIT_BYTES },
+    (_request, body, done) => {
+      done(null, typeof body === "string" ? body : body.toString("utf8"));
+    },
+  );
+  app.addContentTypeParser(
+    "multipart/form-data",
+    { parseAs: "string", bodyLimit: FORM_BODY_LIMIT_BYTES },
+    (_request, _body, done) => {
+      done(null, undefined);
+    },
+  );
+
+  const getUnsubscribeSecret = (): string =>
+    notificationsUnsubscribeSecret?.trim() ||
+    resolveNotificationsUnsubscribeSecret({
+      env: process.env,
+      fallbackSecret: domainVerificationSecret,
+    });
+
+  const auditMetaFromRequest = (request: FastifyRequest): NotificationAuditMeta => {
+    const header = request.headers["user-agent"];
+    return {
+      ipAddress: request.ip || null,
+      userAgent: typeof header === "string" && header.length > 0 ? header : null,
+      requestId: request.id,
+    };
+  };
 
   const send = <T>(request: FastifyRequest, data: T): ApiResponse<T> => ({
     data,
@@ -648,6 +739,7 @@ export function buildServer({
 
   app.setErrorHandler((error, request, reply) => {
     const statusCode = (error as { statusCode?: number }).statusCode;
+    const errorCode = (error as { code?: string }).code;
     const failure =
       error instanceof ApiFailure
         ? error
@@ -657,13 +749,17 @@ export function buildServer({
             ? new ApiFailure(error.status, error.code, error.message, error.details)
             : error instanceof DomainError
               ? new ApiFailure(error.status, error.code, error.message, error.details)
-              : error instanceof PermissionError
-                ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
-                : statusCode === 404
-                  ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
-                  : statusCode === 400
-                    ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
-                    : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
+              : error instanceof NotificationError
+                ? new ApiFailure(error.status, error.code, error.message, error.details)
+                : error instanceof PermissionError
+                  ? new ApiFailure(403, "PERMISSION_DENIED", "Brak uprawnień do wykonania tej operacji")
+                  : statusCode === 404
+                    ? new ApiFailure(404, "NOT_FOUND", "Nie ma takiego zasobu")
+                    : statusCode === 415 || errorCode === "FST_ERR_CTP_INVALID_MEDIA_TYPE"
+                      ? new ApiFailure(422, "VALIDATION_FAILED", "Nieobsługiwany typ treści żądania")
+                      : statusCode === 400
+                        ? new ApiFailure(422, "VALIDATION_FAILED", "Nieprawidłowa treść żądania")
+                        : new ApiFailure(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
     if (failure.status >= 500) request.log.error({ err: error }, "błąd Core API");
     const body: ApiResponse<null> = {
       data: null,
@@ -2764,6 +2860,210 @@ export function buildServer({
       });
 
       return sendList(request, items, nextCursor);
+    },
+  });
+
+  app.route({
+    method: ROUTES.sendNotification.method,
+    url: toFastifyPath(ROUTES.sendNotification.path),
+    config: { idempotent: true },
+    handler: async (request, reply) => {
+      const machine = await machineCaller(request, NOTIFICATIONS_SEND_SCOPE);
+      const idempotencyKey = parseIdempotencyKeyHeader(extractIdempotencyKeyHeader(request));
+      const params = parseInput(OrganizationIdParams, request.params);
+
+      const product = await db.product.findUnique({
+        where: { registrationClientId: machine.clientId },
+        select: { id: true, key: true, name: true },
+      });
+      if (!product) {
+        throw new ApiFailure(403, "PERMISSION_DENIED", "Ten klient nie jest przypisany do żadnego produktu");
+      }
+
+      const runSend = async (tx: Tx, now: Date) => {
+        const body = parseInput(CreateNotification, request.body);
+        const categoryDef = getNotificationCategory(body.category);
+        if (!categoryDef) {
+          throw new ApiFailure(422, "VALIDATION_FAILED", "Nieznana kategoria powiadomień", [
+            { field: "category", message: "Nieznana kategoria powiadomień" },
+          ]);
+        }
+        if (categoryDef.channel !== "notifications" || categoryDef.product !== product.key) {
+          throw new ApiFailure(403, "PERMISSION_DENIED", "Ten produkt nie może wysyłać powiadomień w tej kategorii");
+        }
+
+        let canonicalActionUrl: string | null = null;
+        if (body.actionUrl !== undefined && body.actionUrl !== null) {
+          const oauthClient = await tx.authOAuthClient.findUnique({
+            where: { clientId: machine.clientId },
+            select: { uri: true },
+          });
+          canonicalActionUrl = validateActionUrlOrigin(body.actionUrl, oauthClient?.uri ?? null);
+        }
+
+        return createNotification(tx, {
+          organizationId: params.organizationId,
+          productId: product.id,
+          productKey: product.key,
+          category: categoryDef.key,
+          recipientAccountId: body.recipientAccountId,
+          title: body.title,
+          body: body.body,
+          actionUrl: canonicalActionUrl,
+          now: customNow ? now : undefined,
+        });
+      };
+
+      if (idempotencyKey === null) {
+        const created = await withOrganization(db, params.organizationId, (tx) => runSend(tx, getNow()));
+        if (created.queued) {
+          mailOutboxWorker?.wake();
+        }
+        return reply.status(ROUTES.sendNotification.successStatus).send(send(request, created.result));
+      }
+
+      const routeParams =
+        request.params && typeof request.params === "object" ? (request.params as Record<string, unknown>) : undefined;
+      let queued = false;
+      const outcome = await executeWithIdempotency({
+        db,
+        organizationId: params.organizationId,
+        principal: clientPrincipal(machine.clientId),
+        key: idempotencyKey,
+        method: ROUTES.sendNotification.method,
+        pathTemplate: ROUTES.sendNotification.path,
+        body: request.body,
+        params: routeParams,
+        getNow,
+        run: async (tx, now) => {
+          const created = await runSend(tx, now);
+          queued = created.queued;
+          return {
+            status: ROUTES.sendNotification.successStatus,
+            body: send(request, created.result),
+          };
+        },
+      });
+
+      if (outcome.replayed) {
+        void reply.header(IDEMPOTENCY_REPLAYED_HEADER, "true");
+      } else if (queued) {
+        mailOutboxWorker?.wake();
+      }
+      return reply.status(outcome.status).send(outcome.body);
+    },
+  });
+
+  app.route({
+    method: ROUTES.listMyNotificationPreferences.method,
+    url: toFastifyPath(ROUTES.listMyNotificationPreferences.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const now = getNow();
+      const items = await withOrganization(db, who.organizationId, (tx) =>
+        listNotificationPreferencesForAccount(tx, {
+          organizationId: who.organizationId,
+          accountId: who.accountId,
+          now,
+        }),
+      );
+      return send(request, items);
+    },
+  });
+
+  app.route({
+    method: ROUTES.updateMyNotificationPreference.method,
+    url: toFastifyPath(ROUTES.updateMyNotificationPreference.path),
+    handler: async (request) => {
+      const who = await caller(request);
+      const rawCategory = (request.params as { category?: unknown } | undefined)?.category;
+      if (typeof rawCategory !== "string" || !rawCategory) {
+        throw new ApiFailure(422, "VALIDATION_FAILED", "Nieznana kategoria powiadomień", [
+          { field: "category", message: "Nieznana kategoria powiadomień" },
+        ]);
+      }
+      const body = parseInput(UpdateNotificationPreference, request.body);
+      const now = getNow();
+      const updated = await withOrganization(db, who.organizationId, (tx) =>
+        updateNotificationPreferenceForAccount(tx, {
+          organizationId: who.organizationId,
+          accountId: who.accountId,
+          category: rawCategory,
+          enabled: body.enabled,
+          now,
+          auditMeta: auditMetaFromRequest(request),
+          source: "api",
+        }),
+      );
+      return send(request, updated);
+    },
+  });
+
+  app.route({
+    method: ROUTES.getUnsubscribeNotificationPage.method,
+    url: toFastifyPath(ROUTES.getUnsubscribeNotificationPage.path),
+    handler: async (request, reply) => {
+      const rawToken = (request.params as { token?: unknown } | undefined)?.token;
+      if (typeof rawToken !== "string" || !rawToken) {
+        return reply.status(404).headers(UNSUBSCRIBE_HTML_HEADERS).send(renderUnsubscribeInvalidHtml());
+      }
+      try {
+        const context = await inspectUnsubscribeToken(db, {
+          token: rawToken,
+          secret: getUnsubscribeSecret(),
+        });
+        const actionPath = `${ROUTES.getUnsubscribeNotificationPage.path.replace("{token}", encodeURIComponent(rawToken))}`;
+        return reply
+          .status(200)
+          .headers(UNSUBSCRIBE_HTML_HEADERS)
+          .send(
+            renderUnsubscribeConfirmHtml({
+              categoryName: context.categoryName,
+              organizationName: context.organizationName,
+              actionPath,
+            }),
+          );
+      } catch (error) {
+        if (error instanceof NotificationError && error.status === 404) {
+          return reply.status(404).headers(UNSUBSCRIBE_HTML_HEADERS).send(renderUnsubscribeInvalidHtml());
+        }
+        throw error;
+      }
+    },
+  });
+
+  app.route({
+    method: ROUTES.unsubscribeNotification.method,
+    url: toFastifyPath(ROUTES.unsubscribeNotification.path),
+    handler: async (request, reply) => {
+      const wantsHtml = acceptsHtml(request.headers.accept);
+      const rawToken = (request.params as { token?: unknown } | undefined)?.token;
+      if (typeof rawToken !== "string" || !rawToken) {
+        if (wantsHtml) {
+          return reply.status(404).headers(UNSUBSCRIBE_HTML_HEADERS).send(renderUnsubscribeInvalidHtml());
+        }
+        throw new ApiFailure(404, "NOT_FOUND", "Nieprawidłowy link wypisania z powiadomień");
+      }
+      try {
+        const result = await unsubscribeNotificationByToken(db, {
+          token: rawToken,
+          secret: getUnsubscribeSecret(),
+          now: getNow(),
+          auditMeta: auditMetaFromRequest(request),
+        });
+        if (wantsHtml) {
+          return reply
+            .status(200)
+            .headers(UNSUBSCRIBE_HTML_HEADERS)
+            .send(renderUnsubscribeDoneHtml({ categoryName: result.categoryName }));
+        }
+        return send(request, { category: result.category, enabled: result.enabled });
+      } catch (error) {
+        if (wantsHtml && error instanceof NotificationError && error.status === 404) {
+          return reply.status(404).headers(UNSUBSCRIBE_HTML_HEADERS).send(renderUnsubscribeInvalidHtml());
+        }
+        throw error;
+      }
     },
   });
 

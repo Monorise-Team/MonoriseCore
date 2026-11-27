@@ -487,9 +487,9 @@ export type InvitationMinOrderByAggregateInput = {
   updatedAt?: Prisma.SortOrder
 }
 
-export type InvitationScalarRelationFilter = {
-  is?: Prisma.InvitationWhereInput
-  isNot?: Prisma.InvitationWhereInput
+export type InvitationNullableScalarRelationFilter = {
+  is?: Prisma.InvitationWhereInput | null
+  isNot?: Prisma.InvitationWhereInput | null
 }
 
 export type InvitationCreateNestedManyWithoutOrganizationInput = {
@@ -586,10 +586,12 @@ export type InvitationCreateNestedOneWithoutMailOutboxInput = {
   connect?: Prisma.InvitationWhereUniqueInput
 }
 
-export type InvitationUpdateOneRequiredWithoutMailOutboxNestedInput = {
+export type InvitationUpdateOneWithoutMailOutboxNestedInput = {
   create?: Prisma.XOR<Prisma.InvitationCreateWithoutMailOutboxInput, Prisma.InvitationUncheckedCreateWithoutMailOutboxInput>
   connectOrCreate?: Prisma.InvitationCreateOrConnectWithoutMailOutboxInput
   upsert?: Prisma.InvitationUpsertWithoutMailOutboxInput
+  disconnect?: Prisma.InvitationWhereInput | boolean
+  delete?: Prisma.InvitationWhereInput | boolean
   connect?: Prisma.InvitationWhereUniqueInput
   update?: Prisma.XOR<Prisma.XOR<Prisma.InvitationUpdateToOneWithWhereWithoutMailOutboxInput, Prisma.InvitationUpdateWithoutMailOutboxInput>, Prisma.InvitationUncheckedUpdateWithoutMailOutboxInput>
 }

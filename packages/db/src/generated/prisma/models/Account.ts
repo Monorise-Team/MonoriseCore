@@ -271,6 +271,7 @@ export type AccountWhereInput = {
   invitations?: Prisma.InvitationListRelationFilter
   roleAssignments?: Prisma.RoleAssignmentListRelationFilter
   appAccesses?: Prisma.AppAccessListRelationFilter
+  notificationPreferences?: Prisma.NotificationPreferenceListRelationFilter
 }
 
 export type AccountOrderByWithRelationInput = {
@@ -292,6 +293,7 @@ export type AccountOrderByWithRelationInput = {
   invitations?: Prisma.InvitationOrderByRelationAggregateInput
   roleAssignments?: Prisma.RoleAssignmentOrderByRelationAggregateInput
   appAccesses?: Prisma.AppAccessOrderByRelationAggregateInput
+  notificationPreferences?: Prisma.NotificationPreferenceOrderByRelationAggregateInput
 }
 
 export type AccountWhereUniqueInput = Prisma.AtLeast<{
@@ -317,6 +319,7 @@ export type AccountWhereUniqueInput = Prisma.AtLeast<{
   invitations?: Prisma.InvitationListRelationFilter
   roleAssignments?: Prisma.RoleAssignmentListRelationFilter
   appAccesses?: Prisma.AppAccessListRelationFilter
+  notificationPreferences?: Prisma.NotificationPreferenceListRelationFilter
 }, "id" | "employeeId" | "normalizedEmail" | "organizationId_id">
 
 export type AccountOrderByWithAggregationInput = {
@@ -371,6 +374,7 @@ export type AccountCreateInput = {
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateInput = {
@@ -389,6 +393,7 @@ export type AccountUncheckedCreateInput = {
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUpdateInput = {
@@ -407,6 +412,7 @@ export type AccountUpdateInput = {
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateInput = {
@@ -425,6 +431,7 @@ export type AccountUncheckedUpdateInput = {
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateManyInput = {
@@ -717,6 +724,20 @@ export type AccountUpdateOneRequiredWithoutAppAccessesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.AccountUpdateToOneWithWhereWithoutAppAccessesInput, Prisma.AccountUpdateWithoutAppAccessesInput>, Prisma.AccountUncheckedUpdateWithoutAppAccessesInput>
 }
 
+export type AccountCreateNestedOneWithoutNotificationPreferencesInput = {
+  create?: Prisma.XOR<Prisma.AccountCreateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedCreateWithoutNotificationPreferencesInput>
+  connectOrCreate?: Prisma.AccountCreateOrConnectWithoutNotificationPreferencesInput
+  connect?: Prisma.AccountWhereUniqueInput
+}
+
+export type AccountUpdateOneRequiredWithoutNotificationPreferencesNestedInput = {
+  create?: Prisma.XOR<Prisma.AccountCreateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedCreateWithoutNotificationPreferencesInput>
+  connectOrCreate?: Prisma.AccountCreateOrConnectWithoutNotificationPreferencesInput
+  upsert?: Prisma.AccountUpsertWithoutNotificationPreferencesInput
+  connect?: Prisma.AccountWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.AccountUpdateToOneWithWhereWithoutNotificationPreferencesInput, Prisma.AccountUpdateWithoutNotificationPreferencesInput>, Prisma.AccountUncheckedUpdateWithoutNotificationPreferencesInput>
+}
+
 export type AccountCreateWithoutAuthUserInput = {
   email: string
   normalizedEmail: string
@@ -732,6 +753,7 @@ export type AccountCreateWithoutAuthUserInput = {
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutAuthUserInput = {
@@ -749,6 +771,7 @@ export type AccountUncheckedCreateWithoutAuthUserInput = {
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutAuthUserInput = {
@@ -782,6 +805,7 @@ export type AccountUpdateWithoutAuthUserInput = {
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutAuthUserInput = {
@@ -799,6 +823,7 @@ export type AccountUncheckedUpdateWithoutAuthUserInput = {
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutOwnedOrganizationInput = {
@@ -816,6 +841,7 @@ export type AccountCreateWithoutOwnedOrganizationInput = {
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutOwnedOrganizationInput = {
@@ -833,6 +859,7 @@ export type AccountUncheckedCreateWithoutOwnedOrganizationInput = {
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutOwnedOrganizationInput = {
@@ -855,6 +882,7 @@ export type AccountCreateWithoutOrganizationInput = {
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutOrganizationInput = {
@@ -872,6 +900,7 @@ export type AccountUncheckedCreateWithoutOrganizationInput = {
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutOrganizationInput = {
@@ -910,6 +939,7 @@ export type AccountUpdateWithoutOwnedOrganizationInput = {
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutOwnedOrganizationInput = {
@@ -927,6 +957,7 @@ export type AccountUncheckedUpdateWithoutOwnedOrganizationInput = {
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUpsertWithWhereUniqueWithoutOrganizationInput = {
@@ -977,6 +1008,7 @@ export type AccountCreateWithoutEmployeeInput = {
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutEmployeeInput = {
@@ -994,6 +1026,7 @@ export type AccountUncheckedCreateWithoutEmployeeInput = {
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutEmployeeInput = {
@@ -1027,6 +1060,7 @@ export type AccountUpdateWithoutEmployeeInput = {
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutEmployeeInput = {
@@ -1044,6 +1078,7 @@ export type AccountUncheckedUpdateWithoutEmployeeInput = {
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutInvitationsInput = {
@@ -1061,6 +1096,7 @@ export type AccountCreateWithoutInvitationsInput = {
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutInvitationsInput = {
@@ -1078,6 +1114,7 @@ export type AccountUncheckedCreateWithoutInvitationsInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutInvitationsInput = {
@@ -1111,6 +1148,7 @@ export type AccountUpdateWithoutInvitationsInput = {
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutInvitationsInput = {
@@ -1128,6 +1166,7 @@ export type AccountUncheckedUpdateWithoutInvitationsInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutRoleAssignmentsInput = {
@@ -1145,6 +1184,7 @@ export type AccountCreateWithoutRoleAssignmentsInput = {
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutRoleAssignmentsInput = {
@@ -1162,6 +1202,7 @@ export type AccountUncheckedCreateWithoutRoleAssignmentsInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutRoleAssignmentsInput = {
@@ -1195,6 +1236,7 @@ export type AccountUpdateWithoutRoleAssignmentsInput = {
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutRoleAssignmentsInput = {
@@ -1212,6 +1254,7 @@ export type AccountUncheckedUpdateWithoutRoleAssignmentsInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateWithoutAppAccessesInput = {
@@ -1229,6 +1272,7 @@ export type AccountCreateWithoutAppAccessesInput = {
   employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
   invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceCreateNestedManyWithoutAccountInput
 }
 
 export type AccountUncheckedCreateWithoutAppAccessesInput = {
@@ -1246,6 +1290,7 @@ export type AccountUncheckedCreateWithoutAppAccessesInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
   invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedCreateNestedManyWithoutAccountInput
 }
 
 export type AccountCreateOrConnectWithoutAppAccessesInput = {
@@ -1279,6 +1324,7 @@ export type AccountUpdateWithoutAppAccessesInput = {
   employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutAppAccessesInput = {
@@ -1296,6 +1342,95 @@ export type AccountUncheckedUpdateWithoutAppAccessesInput = {
   ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
+}
+
+export type AccountCreateWithoutNotificationPreferencesInput = {
+  email: string
+  normalizedEmail: string
+  status?: $Enums.AccountStatus
+  authzRevision?: number
+  lastLoginAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  deactivatedAt?: Date | string | null
+  authUser: Prisma.AuthUserCreateNestedOneWithoutAccountInput
+  organization: Prisma.OrganizationCreateNestedOneWithoutAccountsInput
+  ownedOrganization?: Prisma.OrganizationCreateNestedOneWithoutOwnerAccountInput
+  employee: Prisma.EmployeeCreateNestedOneWithoutAccountInput
+  invitations?: Prisma.InvitationCreateNestedManyWithoutAccountInput
+  roleAssignments?: Prisma.RoleAssignmentCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessCreateNestedManyWithoutAccountInput
+}
+
+export type AccountUncheckedCreateWithoutNotificationPreferencesInput = {
+  id: string
+  organizationId: string
+  employeeId: string
+  email: string
+  normalizedEmail: string
+  status?: $Enums.AccountStatus
+  authzRevision?: number
+  lastLoginAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  deactivatedAt?: Date | string | null
+  ownedOrganization?: Prisma.OrganizationUncheckedCreateNestedOneWithoutOwnerAccountInput
+  invitations?: Prisma.InvitationUncheckedCreateNestedManyWithoutAccountInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedCreateNestedManyWithoutAccountInput
+  appAccesses?: Prisma.AppAccessUncheckedCreateNestedManyWithoutAccountInput
+}
+
+export type AccountCreateOrConnectWithoutNotificationPreferencesInput = {
+  where: Prisma.AccountWhereUniqueInput
+  create: Prisma.XOR<Prisma.AccountCreateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedCreateWithoutNotificationPreferencesInput>
+}
+
+export type AccountUpsertWithoutNotificationPreferencesInput = {
+  update: Prisma.XOR<Prisma.AccountUpdateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedUpdateWithoutNotificationPreferencesInput>
+  create: Prisma.XOR<Prisma.AccountCreateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedCreateWithoutNotificationPreferencesInput>
+  where?: Prisma.AccountWhereInput
+}
+
+export type AccountUpdateToOneWithWhereWithoutNotificationPreferencesInput = {
+  where?: Prisma.AccountWhereInput
+  data: Prisma.XOR<Prisma.AccountUpdateWithoutNotificationPreferencesInput, Prisma.AccountUncheckedUpdateWithoutNotificationPreferencesInput>
+}
+
+export type AccountUpdateWithoutNotificationPreferencesInput = {
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAccountStatusFieldUpdateOperationsInput | $Enums.AccountStatus
+  authzRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastLoginAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  authUser?: Prisma.AuthUserUpdateOneRequiredWithoutAccountNestedInput
+  organization?: Prisma.OrganizationUpdateOneRequiredWithoutAccountsNestedInput
+  ownedOrganization?: Prisma.OrganizationUpdateOneWithoutOwnerAccountNestedInput
+  employee?: Prisma.EmployeeUpdateOneRequiredWithoutAccountNestedInput
+  invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+}
+
+export type AccountUncheckedUpdateWithoutNotificationPreferencesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  organizationId?: Prisma.StringFieldUpdateOperationsInput | string
+  employeeId?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  normalizedEmail?: Prisma.StringFieldUpdateOperationsInput | string
+  status?: Prisma.EnumAccountStatusFieldUpdateOperationsInput | $Enums.AccountStatus
+  authzRevision?: Prisma.IntFieldUpdateOperationsInput | number
+  lastLoginAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  deactivatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  ownedOrganization?: Prisma.OrganizationUncheckedUpdateOneWithoutOwnerAccountNestedInput
+  invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
+  roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
+  appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountCreateManyOrganizationInput = {
@@ -1326,6 +1461,7 @@ export type AccountUpdateWithoutOrganizationInput = {
   invitations?: Prisma.InvitationUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateWithoutOrganizationInput = {
@@ -1343,6 +1479,7 @@ export type AccountUncheckedUpdateWithoutOrganizationInput = {
   invitations?: Prisma.InvitationUncheckedUpdateManyWithoutAccountNestedInput
   roleAssignments?: Prisma.RoleAssignmentUncheckedUpdateManyWithoutAccountNestedInput
   appAccesses?: Prisma.AppAccessUncheckedUpdateManyWithoutAccountNestedInput
+  notificationPreferences?: Prisma.NotificationPreferenceUncheckedUpdateManyWithoutAccountNestedInput
 }
 
 export type AccountUncheckedUpdateManyWithoutOrganizationInput = {
@@ -1367,12 +1504,14 @@ export type AccountCountOutputType = {
   invitations: number
   roleAssignments: number
   appAccesses: number
+  notificationPreferences: number
 }
 
 export type AccountCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   invitations?: boolean | AccountCountOutputTypeCountInvitationsArgs
   roleAssignments?: boolean | AccountCountOutputTypeCountRoleAssignmentsArgs
   appAccesses?: boolean | AccountCountOutputTypeCountAppAccessesArgs
+  notificationPreferences?: boolean | AccountCountOutputTypeCountNotificationPreferencesArgs
 }
 
 /**
@@ -1406,6 +1545,13 @@ export type AccountCountOutputTypeCountAppAccessesArgs<ExtArgs extends runtime.T
   where?: Prisma.AppAccessWhereInput
 }
 
+/**
+ * AccountCountOutputType without action
+ */
+export type AccountCountOutputTypeCountNotificationPreferencesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.NotificationPreferenceWhereInput
+}
+
 
 export type AccountSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1426,6 +1572,7 @@ export type AccountSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   invitations?: boolean | Prisma.Account$invitationsArgs<ExtArgs>
   roleAssignments?: boolean | Prisma.Account$roleAssignmentsArgs<ExtArgs>
   appAccesses?: boolean | Prisma.Account$appAccessesArgs<ExtArgs>
+  notificationPreferences?: boolean | Prisma.Account$notificationPreferencesArgs<ExtArgs>
   _count?: boolean | Prisma.AccountCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["account"]>
 
@@ -1486,6 +1633,7 @@ export type AccountInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs
   invitations?: boolean | Prisma.Account$invitationsArgs<ExtArgs>
   roleAssignments?: boolean | Prisma.Account$roleAssignmentsArgs<ExtArgs>
   appAccesses?: boolean | Prisma.Account$appAccessesArgs<ExtArgs>
+  notificationPreferences?: boolean | Prisma.Account$notificationPreferencesArgs<ExtArgs>
   _count?: boolean | Prisma.AccountCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type AccountIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1509,6 +1657,7 @@ export type $AccountPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     invitations: Prisma.$InvitationPayload<ExtArgs>[]
     roleAssignments: Prisma.$RoleAssignmentPayload<ExtArgs>[]
     appAccesses: Prisma.$AppAccessPayload<ExtArgs>[]
+    notificationPreferences: Prisma.$NotificationPreferencePayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1923,6 +2072,7 @@ export interface Prisma__AccountClient<T, Null = never, ExtArgs extends runtime.
   invitations<T extends Prisma.Account$invitationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$invitationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$InvitationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   roleAssignments<T extends Prisma.Account$roleAssignmentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$roleAssignmentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RoleAssignmentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   appAccesses<T extends Prisma.Account$appAccessesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$appAccessesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AppAccessPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  notificationPreferences<T extends Prisma.Account$notificationPreferencesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Account$notificationPreferencesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$NotificationPreferencePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2452,6 +2602,30 @@ export type Account$appAccessesArgs<ExtArgs extends runtime.Types.Extensions.Int
   take?: number
   skip?: number
   distinct?: Prisma.AppAccessScalarFieldEnum | Prisma.AppAccessScalarFieldEnum[]
+}
+
+/**
+ * Account.notificationPreferences
+ */
+export type Account$notificationPreferencesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the NotificationPreference
+   */
+  select?: Prisma.NotificationPreferenceSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the NotificationPreference
+   */
+  omit?: Prisma.NotificationPreferenceOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.NotificationPreferenceInclude<ExtArgs> | null
+  where?: Prisma.NotificationPreferenceWhereInput
+  orderBy?: Prisma.NotificationPreferenceOrderByWithRelationInput | Prisma.NotificationPreferenceOrderByWithRelationInput[]
+  cursor?: Prisma.NotificationPreferenceWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.NotificationPreferenceScalarFieldEnum | Prisma.NotificationPreferenceScalarFieldEnum[]
 }
 
 /**

@@ -1,7 +1,9 @@
 import { createDb, isDevTrustDomainsEnabled, resolveDomainVerificationSecret } from "@core/db";
 import { startOutboxPublisher } from "./event-feed.js";
 import { parseIdempotencyCleanupIntervalMs, startIdempotencyCleanup } from "./idempotency.js";
+import { resolveNotificationsMailConfig } from "./mail.js";
 import { parseMailOutboxIntervalMs, startMailOutboxWorker, type MailOutboxWorker } from "./mail-outbox.js";
+import { resolveApiUrl, resolveNotificationsUnsubscribeSecret } from "./notifications.js";
 import { registerCorePermissions } from "./permissions-registry.js";
 import { registerCoreRoleTemplates } from "./role-templates-registry.js";
 import { buildServer } from "./server.js";
@@ -16,11 +18,25 @@ function required(name: string): string {
 const db = createDb(required("CORE_DATABASE_URL"));
 const authIssuer = required("CORE_AUTH_ISSUER");
 const authUrl = process.env.CORE_AUTH_URL?.trim() || authIssuer;
+const apiAudience = required("CORE_API_AUDIENCE");
+const apiUrl = resolveApiUrl(process.env.CORE_API_URL, {
+  NODE_ENV: process.env.NODE_ENV,
+  CORE_API_URL: process.env.CORE_API_URL,
+  CORE_API_AUDIENCE: apiAudience,
+});
 const tokenOptions = {
   keys: remoteKeys(required("CORE_AUTH_JWKS_URL")),
   issuer: authIssuer,
-  audience: required("CORE_API_AUDIENCE"),
+  audience: apiAudience,
 };
+
+const domainVerificationSecret = resolveDomainVerificationSecret({ env: process.env });
+const notificationsUnsubscribeSecret = resolveNotificationsUnsubscribeSecret({
+  env: process.env,
+  fallbackSecret: domainVerificationSecret,
+});
+// Walidacja konfiguracji kanału powiadomień przy starcie (na produkcji wymagane CORE_NOTIFICATIONS_SMTP_URL i CORE_NOTIFICATIONS_FROM)
+resolveNotificationsMailConfig(process.env);
 
 const mailOutboxIntervalMs = parseMailOutboxIntervalMs(process.env.CORE_MAIL_OUTBOX_INTERVAL_MS);
 const idempotencyCleanupIntervalMs = parseIdempotencyCleanupIntervalMs(
@@ -33,7 +49,8 @@ const app = buildServer({
   db,
   verifyToken: createTokenVerifier(tokenOptions),
   verifyMachineToken: createMachineTokenVerifier(tokenOptions),
-  domainVerificationSecret: resolveDomainVerificationSecret({ env: process.env }),
+  domainVerificationSecret,
+  notificationsUnsubscribeSecret,
   devTrustDomains: isDevTrustDomainsEnabled(process.env),
   mailOutboxWorker: { wake: () => mailOutboxWorker?.wake() },
   logger: true,
@@ -56,12 +73,14 @@ if (publishIntervalMs > 0) {
   app.addHook("onClose", async () => stopPublisher());
 }
 
-// Transakcyjna kolejka wysyłki poczty (MonoriseCore#60); 0 wyłącza (np. gdy wysyła inna instancja)
+// Transakcyjna kolejka wysyłki poczty (MonoriseCore#60, MonoriseCore#86); 0 wyłącza (np. gdy wysyła inna instancja)
 if (mailOutboxIntervalMs > 0) {
   mailOutboxWorker = startMailOutboxWorker({
     db,
     intervalMs: mailOutboxIntervalMs,
     authUrl,
+    apiUrl,
+    notificationsUnsubscribeSecret,
     onError: (error) => app.log.error({ err: error }, "wysyłka poczty z kolejki outbox nie powiodła się"),
   });
   app.addHook("onClose", async () => {
