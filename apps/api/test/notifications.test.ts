@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { grantEntitlement } from "../src/entitlements.js";
 import { clearSentMails, clearSentNotificationMails, type OutgoingMail } from "../src/mail.js";
 import { deliverPendingMail, MAIL_MAX_ATTEMPTS } from "../src/mail-outbox.js";
-import { createUnsubscribeToken } from "../src/notifications.js";
+import { createUnsubscribeToken, UNSUBSCRIBE_HTML_HEADERS } from "../src/notifications.js";
 import { registerCorePermissions } from "../src/permissions-registry.js";
 import { buildServer } from "../src/server.js";
 import { createMachineTokenVerifier, createTokenVerifier } from "../src/tokens.js";
@@ -838,6 +838,223 @@ describe("Moduł powiadomień Core (MonoriseCore#86, ADR-0048)", () => {
         expect(job.status).toBe("FAILED");
         expect(job.failedAt).not.toBeNull();
         expect(job.attempts).toBe(MAIL_MAX_ATTEMPTS);
+      }
+    }
+  });
+
+  it("obsługuje stronę HTML GET wypisania bez zmiany stanu, POST HTML i multipart/form-data, wyścig kliknięć, audyt tylko przy zmianie i odrzuca konta nieaktywne", async () => {
+    const memberBearer = await userToken(acmeMember);
+    const validToken = createUnsubscribeToken(
+      { organizationId: acme.id, accountId: acmeMember.accountId, category: "timotime.reminders" },
+      UNSUBSCRIBE_SECRET,
+    );
+    const deactivatedToken = createUnsubscribeToken(
+      { organizationId: acme.id, accountId: acmeDeactivated.accountId, category: "timotime.reminders" },
+      UNSUBSCRIBE_SECRET,
+    );
+
+    const auditsBefore = await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.count({ where: { action: "notification.preference_changed", actorAccountId: acmeMember.accountId } }),
+    );
+
+    // 1. GET zwraca polską stronę potwierdzenia HTML bez jakiejkolwiek zmiany w bazie
+    const getRes = await app.inject({
+      method: "GET",
+      url: `/core/v1/notifications/unsubscribe/${validToken}`,
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.headers["content-type"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Type"]);
+    expect(getRes.headers["content-security-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Security-Policy"]);
+    expect(getRes.headers["x-content-type-options"]).toBe(UNSUBSCRIBE_HTML_HEADERS["X-Content-Type-Options"]);
+    expect(getRes.headers["referrer-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Referrer-Policy"]);
+    expect(getRes.headers["cache-control"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Cache-Control"]);
+    expect(getRes.body).toContain("Przypomnienia TimoTime");
+    expect(getRes.body).toContain("Acme");
+    expect(getRes.body).toContain("Wyłącz powiadomienia");
+    expect(getRes.body).toContain('name="List-Unsubscribe" value="One-Click"');
+
+    const prefsAfterGet = await withOrganization(db, acme.id, (tx) =>
+      tx.notificationPreference.findMany({ where: { accountId: acmeMember.accountId } }),
+    );
+    expect(prefsAfterGet).toHaveLength(0);
+
+    // 2. Dwa równoległe pierwsze kliknięcia POST (Accept: text/html) -> oba 200 HTML, brak 500, dokładnie 1 wiersz i 1 wpis audytu
+    const [click1, click2] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${validToken}`,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "text/html,application/xhtml+xml",
+        },
+        payload: "List-Unsubscribe=One-Click",
+      }),
+      app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${validToken}`,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "text/html,application/xhtml+xml",
+        },
+        payload: "List-Unsubscribe=One-Click",
+      }),
+    ]);
+    expect(click1.statusCode).toBe(200);
+    expect(click2.statusCode).toBe(200);
+    expect(click1.headers["content-type"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Type"]);
+    expect(click1.body).toContain("Powiadomienia z kategorii Przypomnienia TimoTime są wyłączone.");
+
+    const [prefsAfterRace, auditsAfterRace] = await withOrganization(db, acme.id, (tx) =>
+      Promise.all([
+        tx.notificationPreference.findMany({ where: { accountId: acmeMember.accountId } }),
+        tx.auditLog.count({
+          where: { action: "notification.preference_changed", actorAccountId: acmeMember.accountId },
+        }),
+      ]),
+    );
+    expect(prefsAfterRace).toHaveLength(1);
+    expect(prefsAfterRace[0]?.enabled).toBe(false);
+    expect(auditsAfterRace).toBe(auditsBefore + 1);
+
+    // 3. Ponowny PUT z enabled=false nie dopisuje wpisu audytu; multipart/form-data działa; application/xml -> 422
+    const noopPut = await app.inject({
+      method: "PUT",
+      url: "/core/v1/me/notification-preferences/timotime.reminders",
+      headers: { authorization: `Bearer ${memberBearer}` },
+      payload: { enabled: false },
+    });
+    expect(noopPut.statusCode).toBe(200);
+
+    await app.inject({
+      method: "PUT",
+      url: "/core/v1/me/notification-preferences/timotime.reminders",
+      headers: { authorization: `Bearer ${memberBearer}` },
+      payload: { enabled: true },
+    });
+
+    const multipartRes = await app.inject({
+      method: "POST",
+      url: `/core/v1/notifications/unsubscribe/${validToken}`,
+      headers: { "content-type": "multipart/form-data; boundary=---core86" },
+      payload:
+        '-----core86\r\nContent-Disposition: form-data; name="List-Unsubscribe"\r\n\r\nOne-Click\r\n-----core86--\r\n',
+    });
+    expect(multipartRes.statusCode).toBe(200);
+    expect(multipartRes.json().data).toEqual({ category: "timotime.reminders", enabled: false });
+
+    const unsupportedRes = await app.inject({
+      method: "POST",
+      url: `/core/v1/notifications/unsubscribe/${validToken}`,
+      headers: { "content-type": "application/xml" },
+      payload: "<unsubscribe/>",
+    });
+    expect(unsupportedRes.statusCode).toBe(422);
+    expect(unsupportedRes.json().error.code).toBe("VALIDATION_FAILED");
+
+    const auditsAfterMultipart = await withOrganization(db, acme.id, (tx) =>
+      tx.auditLog.count({ where: { action: "notification.preference_changed", actorAccountId: acmeMember.accountId } }),
+    );
+    // +1 za race (true->false), +0 za noopPut, +1 za PUT true, +1 za multipart (true->false) = +3
+    expect(auditsAfterMultipart).toBe(auditsBefore + 3);
+
+    // 4. Token nieaktywnego konta (DEACTIVATED) i zmanipulowany token -> neutralne 404 na GET i POST
+    for (const badToken of [deactivatedToken, `${validToken}tampered`]) {
+      const get404 = await app.inject({
+        method: "GET",
+        url: `/core/v1/notifications/unsubscribe/${badToken}`,
+      });
+      expect(get404.statusCode).toBe(404);
+      expect(get404.headers["content-security-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Security-Policy"]);
+      expect(get404.body).toContain("Ten link jest nieaktualny.");
+
+      const post404Html = await app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${badToken}`,
+        headers: { accept: "text/html" },
+      });
+      expect(post404Html.statusCode).toBe(404);
+      expect(post404Html.body).toContain("Ten link jest nieaktualny.");
+
+      const post404Json = await app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${badToken}`,
+      });
+      expect(post404Json.statusCode).toBe(404);
+      expect(post404Json.json().error.code).toBe("NOT_FOUND");
+    }
+  });
+
+  it("odrzuca (403) zlecenia dla firm SUSPENDED i DELETED oraz pomija (SKIPPED/NO_ACCESS) ich zakolejkowane powiadomienia przy wysyłce", async () => {
+    const timoToken = await machineToken(timotimeClientId);
+
+    for (const blockedStatus of ["SUSPENDED", "DELETED"] as const) {
+      // Najpierw zlecenie w stanie ACTIVE (z niekanonicznym actionUrl z segmentem `..`), potem zmiana statusu firmy
+      const queuedRes = await app.inject({
+        method: "POST",
+        url: `/core/v1/organizations/${acme.id}/notifications`,
+        headers: { authorization: `Bearer ${timoToken}` },
+        payload: {
+          recipientAccountId: acmeMember.accountId,
+          category: "timotime.reminders",
+          title: `Test ${blockedStatus}`,
+          body: "Treść powiadomienia.",
+          actionUrl: `${timotimeOrigin}/app/../app/timesheets`,
+        },
+      });
+      expect(queuedRes.statusCode).toBe(202);
+      const queuedId = queuedRes.json().data.id as string;
+
+      const storedBefore = await withOrganization(db, acme.id, (tx) =>
+        tx.notification.findUniqueOrThrow({ where: { id: queuedId } }),
+      );
+      expect(storedBefore.actionUrl).toBe(`${timotimeOrigin}/app/timesheets`);
+
+      try {
+        await withOrganization(ownerDb, acme.id, (tx) =>
+          tx.organization.update({ where: { id: acme.id }, data: { status: blockedStatus } }),
+        );
+
+        // Nowe zlecenie dla zablokowanej firmy -> 403 PERMISSION_DENIED
+        const rejectedPost = await app.inject({
+          method: "POST",
+          url: `/core/v1/organizations/${acme.id}/notifications`,
+          headers: { authorization: `Bearer ${timoToken}` },
+          payload: {
+            recipientAccountId: acmeMember.accountId,
+            category: "timotime.reminders",
+            title: "Odrzucone",
+            body: "Firma zablokowana.",
+          },
+        });
+        expect(rejectedPost.statusCode).toBe(403);
+        expect(rejectedPost.json().error.code).toBe("PERMISSION_DENIED");
+
+        // Zakolejkowane wcześniej powiadomienie nie wychodzi -> SKIPPED/NO_ACCESS i CANCELLED
+        const delivered: OutgoingMail[] = [];
+        const summary = await deliverPendingMail(db, {
+          apiUrl: API_URL,
+          notificationsUnsubscribeSecret: UNSUBSCRIBE_SECRET,
+          notificationsMailer: async (mail) => {
+            delivered.push(mail);
+          },
+        });
+        expect(summary).toEqual({ claimed: 1, sent: 0, retried: 0, failed: 0, cancelled: 1, skipped: 0 });
+        expect(delivered).toHaveLength(0);
+
+        const [notifAfter, outboxAfter] = await withOrganization(db, acme.id, (tx) =>
+          Promise.all([
+            tx.notification.findUniqueOrThrow({ where: { id: queuedId } }),
+            tx.mailOutbox.findFirstOrThrow({ where: { notificationId: queuedId } }),
+          ]),
+        );
+        expect(notifAfter.status).toBe("SKIPPED");
+        expect(notifAfter.skipReason).toBe("NO_ACCESS");
+        expect(notifAfter.sentAt).toBeNull();
+        expect(outboxAfter.status).toBe("CANCELLED");
+      } finally {
+        await withOrganization(ownerDb, acme.id, (tx) =>
+          tx.organization.update({ where: { id: acme.id }, data: { status: "ACTIVE" } }),
+        );
       }
     }
   });

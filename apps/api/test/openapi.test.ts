@@ -335,6 +335,12 @@ describe("OpenAPI Core API", () => {
     expect(putPrefOp?.security).toEqual([{ bearerAuth: [] }]);
     expect(putPrefOp?.responses["422"]).toBeDefined();
 
+    const unsubGetOp = document.paths["/core/v1/notifications/unsubscribe/{token}"]?.get;
+    expect(unsubGetOp?.operationId).toBe("getUnsubscribeNotificationPage");
+    expect(unsubGetOp?.security).toBeUndefined();
+    expect(unsubGetOp?.responses["200"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+    expect(unsubGetOp?.responses["404"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+
     const unsubOp = document.paths["/core/v1/notifications/unsubscribe/{token}"]?.post;
     expect(unsubOp?.operationId).toBe("unsubscribeNotification");
     expect(unsubOp?.security).toBeUndefined();
@@ -342,6 +348,10 @@ describe("OpenAPI Core API", () => {
     expect(unsubOp?.responses["200"]?.content?.["application/json"]?.schema).toEqual({
       $ref: "#/components/schemas/UnsubscribeNotificationResponse",
     });
-    expect(unsubOp?.responses["404"]).toBeDefined();
+    expect(unsubOp?.responses["200"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
+    expect(unsubOp?.responses["404"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/ApiErrorResponse",
+    });
+    expect(unsubOp?.responses["404"]?.content?.["text/html"]?.schema).toEqual({ type: "string" });
   });
 });

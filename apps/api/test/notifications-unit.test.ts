@@ -19,16 +19,20 @@ import {
 } from "../src/mail.js";
 import { deliverMailJob, MAIL_MAX_ATTEMPTS, type ClaimedMailJob } from "../src/mail-outbox.js";
 import {
+  acceptsHtml,
   buildUnsubscribeUrl,
   createUnsubscribeToken,
   MIN_NOTIFICATIONS_UNSUBSCRIBE_SECRET_LENGTH,
   NotificationError,
+  redactUnsubscribeUrlTokens,
   resolveApiUrl,
   resolveNotificationsUnsubscribeSecret,
+  UNSUBSCRIBE_HTML_HEADERS,
+  updateNotificationPreferenceForAccount,
   validateActionUrlOrigin,
   verifyUnsubscribeToken,
 } from "../src/notifications.js";
-import { buildServer } from "../src/server.js";
+import { buildServer, requestLogSerializer } from "../src/server.js";
 
 const ORG_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a01";
 const OTHER_ORG_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a02";
@@ -38,6 +42,10 @@ const MEMBER_ACC_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a21";
 const MEMBER_EMP_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a22";
 const NO_ACCESS_ACC_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a31";
 const NO_ACCESS_EMP_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a32";
+const DEACTIVATED_ACC_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a33";
+const DEACTIVATED_EMP_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a34";
+const INVITED_ACC_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a35";
+const INVITED_EMP_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a36";
 const TIMOTIME_PROD_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a41";
 const KIVOTASKS_PROD_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a42";
 const NOTIF_ID = "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a51";
@@ -185,6 +193,74 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       }),
     ).toThrow(/CORE_NOTIFICATIONS_FROM/);
 
+    // Na produkcji odrzuca memory, błędne adresy SMTP i znaki CR/LF/NUL w CORE_NOTIFICATIONS_FROM
+    for (const badSmtp of [
+      "memory",
+      "MEMORY",
+      "not-a-url",
+      "http://notify.example:587",
+      "https://notify.example:587",
+      "smtp://",
+      "smtp://notify.example:587\r\n",
+      "smtp://notify.example:587/path with space",
+    ]) {
+      expect(
+        () =>
+          resolveNotificationsMailConfig({
+            NODE_ENV: "production",
+            CORE_NOTIFICATIONS_SMTP_URL: badSmtp,
+            CORE_NOTIFICATIONS_FROM: "Monorise <notifications@monorise.studio>",
+          }),
+        `Powinno odrzucić SMTP URL: ${JSON.stringify(badSmtp)}`,
+      ).toThrow(/CORE_NOTIFICATIONS_SMTP_URL/);
+    }
+
+    for (const badFrom of [
+      "Monorise <notifications@monorise.studio>\r\nBcc: evil@example.com",
+      "Monorise\n<notifications@monorise.studio>",
+      "Monorise\r<notifications@monorise.studio>",
+      "Monorise\0<notifications@monorise.studio>",
+    ]) {
+      expect(
+        () =>
+          resolveNotificationsMailConfig({
+            NODE_ENV: "production",
+            CORE_NOTIFICATIONS_SMTP_URL: "smtps://notify.example:465",
+            CORE_NOTIFICATIONS_FROM: badFrom,
+          }),
+        `Powinno odrzucić FROM: ${JSON.stringify(badFrom)}`,
+      ).toThrow(/CORE_NOTIFICATIONS_FROM/);
+    }
+
+    // Na produkcji CORE_API_URL (lub fallback CORE_API_AUDIENCE) musi być poprawnym adresem https://
+    for (const badApiUrl of [
+      "",
+      "   ",
+      "http://api.monorise.studio",
+      "not-a-url",
+      "https://user:pass@api.monorise.studio",
+      "https://api.monorise.studio?foo=bar",
+      "https://api.monorise.studio#frag",
+      "https://api.monorise.studio\r\n",
+      "https://api.monorise.studio/a b",
+    ]) {
+      expect(
+        () =>
+          resolveApiUrl(badApiUrl, {
+            NODE_ENV: "production",
+            CORE_API_URL: badApiUrl,
+            CORE_API_AUDIENCE: "",
+          }),
+        `Powinno odrzucić CORE_API_URL: ${JSON.stringify(badApiUrl)}`,
+      ).toThrow(/CORE_API_URL/);
+    }
+    expect(
+      resolveApiUrl("https://api.monorise.studio/", {
+        NODE_ENV: "production",
+        CORE_API_URL: "https://api.monorise.studio/",
+      }),
+    ).toBe("https://api.monorise.studio");
+
     expect(
       resolveNotificationsMailConfig({
         NODE_ENV: "production",
@@ -284,16 +360,19 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
     expect(withoutAction.html).toContain(unsubscribeUrl);
   });
 
-  it("waliduje origin actionUrl względem uri klienta OAuth produktu", () => {
-    expect(() =>
+  it("waliduje origin actionUrl względem uri klienta OAuth produktu, odrzuca znaki niebezpieczne i zwraca kanoniczny URL.href", () => {
+    expect(
       validateActionUrlOrigin(
         "http://timo-time.localhost:3300/app/entries?week=48#top",
         "http://timo-time.localhost:3300/app",
       ),
-    ).not.toThrow();
-    expect(() =>
-      validateActionUrlOrigin("https://kivotasks.monorise.studio/issues/KT-1", "https://kivotasks.monorise.studio/"),
-    ).not.toThrow();
+    ).toBe("http://timo-time.localhost:3300/app/entries?week=48#top");
+    expect(
+      validateActionUrlOrigin(
+        "https://KIVOTASKS.MONORISE.STUDIO:443/issues/../issues/KT-1",
+        "https://kivotasks.monorise.studio/",
+      ),
+    ).toBe("https://kivotasks.monorise.studio/issues/KT-1");
 
     for (const [actionUrl, clientUri] of [
       ["https://evil.example/phish", "https://kivotasks.monorise.studio/"],
@@ -301,6 +380,10 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       ["http://kivotasks.monorise.studio/issues/KT-1", "https://kivotasks.monorise.studio/"],
       ["http://timo-time.localhost:3301/app", "http://timo-time.localhost:3300/app"],
       ["https://user:pass@kivotasks.monorise.studio/issues/KT-1", "https://kivotasks.monorise.studio/"],
+      ["https://kivotasks.monorise.studio\\@evil.example/x", "https://kivotasks.monorise.studio/"],
+      ["https://kivotasks.monorise.studio/issues/KT 1", "https://kivotasks.monorise.studio/"],
+      [" https://kivotasks.monorise.studio/issues/KT-1", "https://kivotasks.monorise.studio/"],
+      ["https://kivotasks.monorise.studio/issues/KT-1\u0000", "https://kivotasks.monorise.studio/"],
       ["javascript:alert(1)", "https://kivotasks.monorise.studio/"],
       ["https://kivotasks.monorise.studio/issues/KT-1", null],
     ] as const) {
@@ -315,6 +398,85 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
     }
   });
 
+  it("cenzuruje token wypisania w requestLogSerializer i poprawnie negocjuje nagłówek Accept dla HTML/JSON", () => {
+    const serialized = requestLogSerializer({
+      method: "GET",
+      url: "/core/v1/notifications/unsubscribe/eyJvcmciOiIxIn0.secret_hmac_sig?utm=1",
+      host: "api.monorise.studio",
+      remoteAddress: "203.0.113.10",
+      remotePort: 54321,
+    });
+    expect(serialized).toEqual({
+      method: "GET",
+      url: "/core/v1/notifications/unsubscribe/[redacted]?utm=1",
+      host: "api.monorise.studio",
+      remoteAddress: "203.0.113.10",
+      remotePort: 54321,
+    });
+    expect(JSON.stringify(serialized)).not.toContain("eyJvcmciOiIxIn0");
+    expect(JSON.stringify(serialized)).not.toContain("secret_hmac_sig");
+
+    expect(requestLogSerializer({ method: "GET", url: "/core/v1/me/notification-preferences" }).url).toBe(
+      "/core/v1/me/notification-preferences",
+    );
+    expect(redactUnsubscribeUrlTokens("POST /core/v1/notifications/unsubscribe/abc.def failed")).toBe(
+      "POST /core/v1/notifications/unsubscribe/[redacted] failed",
+    );
+
+    expect(acceptsHtml(undefined)).toBe(false);
+    expect(acceptsHtml("*/*")).toBe(false);
+    expect(acceptsHtml("application/json")).toBe(false);
+    expect(acceptsHtml("text/html;q=0")).toBe(false);
+    expect(acceptsHtml("application/json, text/html;q=0.5")).toBe(false);
+    expect(acceptsHtml("text/html")).toBe(true);
+    expect(acceptsHtml("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")).toBe(true);
+  });
+
+  it("updateNotificationPreferenceForAccount jest odporny na wyścig P2002 i zapisuje audyt tylko przy zmianie z input.now", async () => {
+    const now = new Date("2026-11-27T12:34:56.000Z");
+    const auditLogs: Record<string, unknown>[] = [];
+    const savedRow = { id: "0193a5b2-7c3d-7e4f-8a1b-2c3d4e5f6a99", enabled: false };
+    let findCalls = 0;
+
+    // 1. Symulacja wyścigu: pierwszy findUnique zwraca null, upsert dostaje P2002, drugi findUnique widzi już enabled=false -> 0 audytów, brak 500
+    const racedTx = {
+      $executeRaw: async () => 1,
+      notificationPreference: {
+        findUnique: async () => {
+          findCalls += 1;
+          return findCalls === 1 ? null : savedRow;
+        },
+        upsert: async () => {
+          throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+        },
+        update: async () => {
+          throw new Error("Nie powinno aktualizować, gdy wartość już jest równa docelowej");
+        },
+      },
+      auditLog: {
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          auditLogs.push(data);
+          return data;
+        },
+      },
+    };
+
+    const result = await updateNotificationPreferenceForAccount(
+      racedTx as unknown as Parameters<typeof updateNotificationPreferenceForAccount>[0],
+      {
+        organizationId: ORG_ID,
+        accountId: MEMBER_ACC_ID,
+        category: "timotime.reminders",
+        enabled: false,
+        now,
+        auditMeta: { ipAddress: null, userAgent: null, requestId: "req_race" },
+        source: "unsubscribe_link",
+      },
+    );
+    expect(result.enabled).toBe(false);
+    expect(auditLogs).toHaveLength(0);
+  });
+
   it("deliverMailJob obsługuje NOTIFICATION: wysyłkę, pominięcie po wyłączeniu preferencji, ponowienie, FAILED po 8. próbie i fencing", async () => {
     const now = new Date("2026-11-27T10:00:00.000Z");
 
@@ -323,6 +485,7 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       jobAttemptsInDb?: number;
       prefEnabled?: boolean;
       hasAppAccess?: boolean;
+      orgStatus?: "ACTIVE" | "SUSPENDED" | "DELETED";
     }) => {
       const state = {
         notificationStatus: "QUEUED" as string,
@@ -376,7 +539,7 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
                 body: "Brakuje wpisu za piątek.",
                 actionUrl: "http://timo-time.localhost:3300/app",
                 status: state.notificationStatus,
-                organization: { name: "Acme" },
+                organization: { name: "Acme", status: opts.orgStatus ?? "ACTIVE" },
               }),
               updateMany: async ({
                 data,
@@ -527,6 +690,26 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
     });
     expect(staleOutcome).toEqual({ status: "SKIPPED" });
     expect(staleFixture.state.notificationStatus).toBe("QUEUED");
+
+    // 7. Firma SUSPENDED albo DELETED w chwili wysyłki -> SKIPPED/NO_ACCESS i CANCELLED bez wysyłki
+    for (const blockedStatus of ["SUSPENDED", "DELETED"] as const) {
+      let sentBlocked = 0;
+      const blockedFixture = buildJobFixture({ orgStatus: blockedStatus });
+      const blockedOutcome = await deliverMailJob(blockedFixture.fakeDb, blockedFixture.job, {
+        notificationsUnsubscribeSecret: TEST_UNSUBSCRIBE_SECRET,
+        notificationsMailer: async () => {
+          sentBlocked += 1;
+        },
+        now,
+      });
+      expect(blockedOutcome).toEqual({ status: "CANCELLED" });
+      expect(sentBlocked).toBe(0);
+      expect(blockedFixture.state).toMatchObject({
+        notificationStatus: "SKIPPED",
+        notificationSkipReason: "NO_ACCESS",
+        outboxStatus: "CANCELLED",
+      });
+    }
   });
 
   it("obsługuje wszystkie 4 ścieżki HTTP powiadomień (zlecenie, idempotencja, preferencje, wypisanie RFC 8058) z izolacją i audytem", async () => {
@@ -534,7 +717,11 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
     const notifications: Record<string, unknown>[] = [];
     const mailOutboxRows: Record<string, unknown>[] = [];
     const auditLogs: Record<string, unknown>[] = [];
-    const preferences = new Map<string, { id: string; enabled: boolean }>();
+    const preferences = new Map<string, { id: string; enabled: boolean; updatedAt?: Date }>();
+    const orgState: { status: "ACTIVE" | "SUSPENDED" | "DELETED"; name: string } = {
+      status: "ACTIVE",
+      name: 'Acme <"Beta"> & Co',
+    };
     const idempotencyStore = new Map<
       string,
       { requestHash: string; responseStatus: number; responseBody: unknown; expiresAt: Date }
@@ -579,7 +766,31 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
           email: "marek@acme.test",
           status: "ACTIVE" as const,
           employee: { status: "ACTIVE" as const },
-          organization: { ownerAccountId: OWNER_ACC_ID },
+          organization: { ownerAccountId: OWNER_ACC_ID, name: orgState.name },
+        },
+      ],
+      [
+        DEACTIVATED_ACC_ID,
+        {
+          id: DEACTIVATED_ACC_ID,
+          organizationId: ORG_ID,
+          employeeId: DEACTIVATED_EMP_ID,
+          email: "ewa@acme.test",
+          status: "DEACTIVATED" as const,
+          employee: { status: "ACTIVE" as const },
+          organization: { ownerAccountId: OWNER_ACC_ID, name: orgState.name },
+        },
+      ],
+      [
+        INVITED_ACC_ID,
+        {
+          id: INVITED_ACC_ID,
+          organizationId: ORG_ID,
+          employeeId: INVITED_EMP_ID,
+          email: "ola@acme.test",
+          status: "INVITED" as const,
+          employee: { status: "ACTIVE" as const },
+          organization: { ownerAccountId: OWNER_ACC_ID, name: orgState.name },
         },
       ],
     ]);
@@ -615,7 +826,7 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
           },
           organization: {
             findUnique: async ({ where }: { where: { id: string } }) =>
-              where.id === ORG_ID && currentOrgId === ORG_ID ? { id: ORG_ID } : null,
+              where.id === ORG_ID && currentOrgId === ORG_ID ? { id: ORG_ID, status: orgState.status } : null,
           },
           authOAuthClient: {
             findUnique: async ({ where }: { where: { clientId: string } }) => {
@@ -641,7 +852,7 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
             findUnique: async ({ where }: { where: { id: string } }) => {
               const acc = accounts.get(where.id);
               if (!acc || acc.organizationId !== currentOrgId) return null;
-              return { ...acc, authzRevision: 0 };
+              return { ...acc, organization: { ...acc.organization, name: orgState.name }, authzRevision: 0 };
             },
           },
           appAccess: {
@@ -688,15 +899,15 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
                   channel: string;
                 };
               };
-              create: { id: string; enabled: boolean };
-              update: { enabled: boolean };
+              create: { id: string; enabled: boolean; updatedAt?: Date };
+              update: { enabled: boolean; updatedAt?: Date };
             }) => {
               const k = where.organizationId_accountId_category_channel;
               const mapKey = prefKey(k.organizationId, k.accountId, k.category, k.channel);
               const existing = preferences.get(mapKey);
               const saved = existing
-                ? { id: existing.id, enabled: update.enabled }
-                : { id: create.id, enabled: create.enabled };
+                ? { id: existing.id, enabled: update.enabled, updatedAt: update.updatedAt }
+                : { id: create.id, enabled: create.enabled, updatedAt: create.updatedAt };
               preferences.set(mapKey, saved);
               return saved;
             },
@@ -883,13 +1094,13 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       expect(mailOutboxRows).toHaveLength(0);
       expect(wakeCount).toBe(0);
 
-      // 6. Poprawne zlecenie z Idempotency-Key -> 202 QUEUED, 1 mail_outbox, 1 wake; powtórka bez drugiego wpisu i bez wake; inna treść -> 409
+      // 6. Poprawne zlecenie z Idempotency-Key -> 202 QUEUED, kanoniczny actionUrl, 1 mail_outbox, 1 wake; powtórka bez drugiego wpisu i bez wake; inna treść -> 409
       const validPayload = {
         recipientAccountId: MEMBER_ACC_ID,
         category: "timotime.reminders",
         title: "Uzupełnij czas pracy",
         body: "Brakuje wpisu za piątek.",
-        actionUrl: "http://timo-time.localhost:3300/app/entries",
+        actionUrl: "http://TIMO-TIME.LOCALHOST:3300/app/../app/entries",
       };
       const queued = await app.inject({
         method: "POST",
@@ -902,6 +1113,7 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       });
       expect(queued.statusCode).toBe(202);
       expect(queued.json().data).toMatchObject({ id: expect.any(String), status: "QUEUED", skipReason: null });
+      expect(notifications.at(-1)?.actionUrl).toBe("http://timo-time.localhost:3300/app/entries");
       expect(mailOutboxRows).toHaveLength(1);
       expect(wakeCount).toBe(1);
 
@@ -975,8 +1187,20 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
         action: "notification.preference_changed",
         actorType: "ACCOUNT",
         actorAccountId: MEMBER_ACC_ID,
+        createdAt: now,
         metadata: expect.objectContaining({ category: "timotime.reminders", enabled: false, source: "api" }),
       });
+      expect(preferences.get(prefKey(ORG_ID, MEMBER_ACC_ID, "timotime.reminders", "EMAIL"))?.updatedAt).toEqual(now);
+
+      // Ponowne wywołanie PUT z tą samą wartością nie dopisuje drugiego wpisu audytu
+      const disableNoop = await app.inject({
+        method: "PUT",
+        url: "/core/v1/me/notification-preferences/timotime.reminders",
+        headers: { authorization: `Bearer ${MEMBER_ACC_ID}` },
+        payload: { enabled: false },
+      });
+      expect(disableNoop.statusCode).toBe(200);
+      expect(auditLogs).toHaveLength(1);
 
       // Po wyłączeniu kategorii kolejne zlecenie -> 202 SKIPPED/PREFERENCE_OFF
       const skippedPref = await app.inject({
@@ -989,49 +1213,165 @@ describe("Moduł powiadomień — testy jednostkowe bez bazy (MonoriseCore#86)",
       expect(skippedPref.json().data).toMatchObject({ status: "SKIPPED", skipReason: "PREFERENCE_OFF" });
       expect(mailOutboxRows).toHaveLength(1);
 
-      // Włączamy ponownie i wypisujemy się jednoklikowo (RFC 8058 form-urlencoded bez tokenu)
+      // Włączamy ponownie i sprawdzamy stronę potwierdzenia GET (bez zmiany stanu) oraz POST HTML / RFC 8058
       await app.inject({
         method: "PUT",
         url: "/core/v1/me/notification-preferences/timotime.reminders",
         headers: { authorization: `Bearer ${MEMBER_ACC_ID}` },
         payload: { enabled: true },
       });
+      const auditCountBeforeGet = auditLogs.length;
 
       const unsubToken = createUnsubscribeToken(
         { organizationId: ORG_ID, accountId: MEMBER_ACC_ID, category: "timotime.reminders" },
         TEST_UNSUBSCRIBE_SECRET,
       );
-      const unsubOk = await app.inject({
+
+      // GET pokazuje polską stronę potwierdzenia z escaped nazwą firmy i formularzem POST, bez zmiany stanu
+      const unsubGet = await app.inject({
+        method: "GET",
+        url: `/core/v1/notifications/unsubscribe/${unsubToken}`,
+      });
+      expect(unsubGet.statusCode).toBe(200);
+      expect(unsubGet.headers["content-type"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Type"]);
+      expect(unsubGet.headers["content-security-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Security-Policy"]);
+      expect(unsubGet.headers["x-content-type-options"]).toBe(UNSUBSCRIBE_HTML_HEADERS["X-Content-Type-Options"]);
+      expect(unsubGet.headers["referrer-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Referrer-Policy"]);
+      expect(unsubGet.headers["cache-control"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Cache-Control"]);
+      expect(unsubGet.body).toContain("Wyłącz powiadomienia");
+      expect(unsubGet.body).toContain("Przypomnienia TimoTime");
+      expect(unsubGet.body).toContain("Acme &lt;&quot;Beta&quot;&gt; &amp; Co");
+      expect(unsubGet.body).not.toContain('<"Beta">');
+      expect(unsubGet.body).toContain('<form method="post"');
+      expect(unsubGet.body).toContain('name="List-Unsubscribe" value="One-Click"');
+      expect(preferences.get(prefKey(ORG_ID, MEMBER_ACC_ID, "timotime.reminders", "EMAIL"))?.enabled).toBe(true);
+      expect(auditLogs).toHaveLength(auditCountBeforeGet);
+
+      // POST z Accept: text/html (formularz ze strony potwierdzenia) -> 200 HTML z restrykcyjnymi nagłówkami
+      const unsubHtmlPost = await app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${unsubToken}`,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+        payload: "List-Unsubscribe=One-Click",
+      });
+      expect(unsubHtmlPost.statusCode).toBe(200);
+      expect(unsubHtmlPost.headers["content-type"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Type"]);
+      expect(unsubHtmlPost.headers["content-security-policy"]).toBe(
+        UNSUBSCRIBE_HTML_HEADERS["Content-Security-Policy"],
+      );
+      expect(unsubHtmlPost.headers["x-content-type-options"]).toBe(UNSUBSCRIBE_HTML_HEADERS["X-Content-Type-Options"]);
+      expect(unsubHtmlPost.headers["referrer-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Referrer-Policy"]);
+      expect(unsubHtmlPost.headers["cache-control"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Cache-Control"]);
+      expect(unsubHtmlPost.body).toContain("Powiadomienia z kategorii Przypomnienia TimoTime są wyłączone.");
+      expect(auditLogs).toHaveLength(auditCountBeforeGet + 1);
+      expect(auditLogs.at(-1)).toMatchObject({
+        action: "notification.preference_changed",
+        actorAccountId: MEMBER_ACC_ID,
+        createdAt: now,
+        metadata: expect.objectContaining({ enabled: false, source: "unsubscribe_link" }),
+      });
+
+      // Powtórny POST na już wyłączoną kategorię zwraca 200 bez kolejnego wpisu audytu
+      const unsubRepeat = await app.inject({
         method: "POST",
         url: `/core/v1/notifications/unsubscribe/${unsubToken}`,
         headers: { "content-type": "application/x-www-form-urlencoded" },
         payload: "List-Unsubscribe=One-Click",
       });
-      expect(unsubOk.statusCode).toBe(200);
-      expect(unsubOk.json().data).toEqual({ category: "timotime.reminders", enabled: false });
-      expect(auditLogs.at(-1)).toMatchObject({
-        action: "notification.preference_changed",
-        actorAccountId: MEMBER_ACC_ID,
-        metadata: expect.objectContaining({ enabled: false, source: "unsubscribe_link" }),
-      });
+      expect(unsubRepeat.statusCode).toBe(200);
+      expect(unsubRepeat.json().data).toEqual({ category: "timotime.reminders", enabled: false });
+      expect(auditLogs).toHaveLength(auditCountBeforeGet + 1);
 
-      // Zmanipulowany token i token konta z innej firmy -> 404
-      const unsubTampered = await app.inject({
+      // Włączamy ponownie i testujemy POST z multipart/form-data (RFC 8058) oraz nieobsługiwany Content-Type -> 422
+      await app.inject({
+        method: "PUT",
+        url: "/core/v1/me/notification-preferences/timotime.reminders",
+        headers: { authorization: `Bearer ${MEMBER_ACC_ID}` },
+        payload: { enabled: true },
+      });
+      const unsubMultipart = await app.inject({
         method: "POST",
-        url: `/core/v1/notifications/unsubscribe/${unsubToken}tampered`,
+        url: `/core/v1/notifications/unsubscribe/${unsubToken}`,
+        headers: { "content-type": "multipart/form-data; boundary=---monorise" },
+        payload:
+          '-----monorise\r\nContent-Disposition: form-data; name="List-Unsubscribe"\r\n\r\nOne-Click\r\n-----monorise--\r\n',
       });
-      expect(unsubTampered.statusCode).toBe(404);
-      expect(unsubTampered.json().error.code).toBe("NOT_FOUND");
+      expect(unsubMultipart.statusCode).toBe(200);
+      expect(unsubMultipart.json().data).toEqual({ category: "timotime.reminders", enabled: false });
 
+      const unsupportedMedia = await app.inject({
+        method: "POST",
+        url: `/core/v1/notifications/unsubscribe/${unsubToken}`,
+        headers: { "content-type": "application/xml" },
+        payload: "<unsubscribe/>",
+      });
+      expect(unsupportedMedia.statusCode).toBe(422);
+      expect(unsupportedMedia.json().error.code).toBe("VALIDATION_FAILED");
+
+      // Zmanipulowany token, obca firma oraz konta nieaktywne (DEACTIVATED, INVITED) -> neutralne 404 na GET i POST
       const wrongCompanyToken = createUnsubscribeToken(
         { organizationId: OTHER_ORG_ID, accountId: MEMBER_ACC_ID, category: "timotime.reminders" },
         TEST_UNSUBSCRIBE_SECRET,
       );
-      const unsubWrongCompany = await app.inject({
-        method: "POST",
-        url: `/core/v1/notifications/unsubscribe/${wrongCompanyToken}`,
-      });
-      expect(unsubWrongCompany.statusCode).toBe(404);
+      const deactivatedToken = createUnsubscribeToken(
+        { organizationId: ORG_ID, accountId: DEACTIVATED_ACC_ID, category: "timotime.reminders" },
+        TEST_UNSUBSCRIBE_SECRET,
+      );
+      const invitedToken = createUnsubscribeToken(
+        { organizationId: ORG_ID, accountId: INVITED_ACC_ID, category: "timotime.reminders" },
+        TEST_UNSUBSCRIBE_SECRET,
+      );
+
+      for (const badToken of [`${unsubToken}tampered`, wrongCompanyToken, deactivatedToken, invitedToken]) {
+        const getBad = await app.inject({
+          method: "GET",
+          url: `/core/v1/notifications/unsubscribe/${badToken}`,
+        });
+        expect(getBad.statusCode).toBe(404);
+        expect(getBad.headers["content-security-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Security-Policy"]);
+        expect(getBad.headers["x-content-type-options"]).toBe(UNSUBSCRIBE_HTML_HEADERS["X-Content-Type-Options"]);
+        expect(getBad.headers["referrer-policy"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Referrer-Policy"]);
+        expect(getBad.headers["cache-control"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Cache-Control"]);
+        expect(getBad.body).toContain("Ten link jest nieaktualny.");
+
+        const postBadHtml = await app.inject({
+          method: "POST",
+          url: `/core/v1/notifications/unsubscribe/${badToken}`,
+          headers: { accept: "text/html" },
+        });
+        expect(postBadHtml.statusCode).toBe(404);
+        expect(postBadHtml.headers["content-type"]).toBe(UNSUBSCRIBE_HTML_HEADERS["Content-Type"]);
+        expect(postBadHtml.body).toContain("Ten link jest nieaktualny.");
+
+        const postBadJson = await app.inject({
+          method: "POST",
+          url: `/core/v1/notifications/unsubscribe/${badToken}`,
+        });
+        expect(postBadJson.statusCode).toBe(404);
+        expect(postBadJson.json().error.code).toBe("NOT_FOUND");
+      }
+
+      // Firmy w statusie SUSPENDED i DELETED dostają 403 PERMISSION_DENIED przy POST /notifications
+      for (const blockedStatus of ["SUSPENDED", "DELETED"] as const) {
+        orgState.status = blockedStatus;
+        const blockedRes = await app.inject({
+          method: "POST",
+          url: `/core/v1/organizations/${ORG_ID}/notifications`,
+          headers: { authorization: `Bearer timotime-web:${NOTIFICATIONS_SEND_SCOPE}` },
+          payload: {
+            recipientAccountId: MEMBER_ACC_ID,
+            category: "timotime.reminders",
+            title: "Zablokowana firma",
+            body: "Treść",
+          },
+        });
+        expect(blockedRes.statusCode).toBe(403);
+        expect(blockedRes.json().error.code).toBe("PERMISSION_DENIED");
+      }
+      orgState.status = "ACTIVE";
     } finally {
       await app.close();
     }
