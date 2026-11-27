@@ -1748,7 +1748,7 @@
         ],
         "operationId": "getMe",
         "summary": "Pobierz dane zalogowanego konta, pracownika i firmy",
-        "description": "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
+        "description": "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika (z `workSchedule` oraz wyliczonym `effectiveWorkSchedule`) oraz skrócone dane firmy (`timeZone`, `defaultWorkSchedule`).",
         "security": [
           {
             "bearerAuth": []
@@ -2116,7 +2116,7 @@
         ],
         "operationId": "updateOrganization",
         "summary": "Zmień dane firmy",
-        "description": "Aktualizuje edytowalne dane firmy (nazwę i/lub strefę czasową IANA, np. `Europe/Warsaw`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "description": "Aktualizuje edytowalne dane firmy (nazwę, strefę czasową IANA, np. `Europe/Warsaw`, i/lub domyślny harmonogram pracy `defaultWorkSchedule`: minuty w dni tygodnia ISO `\"1\"`..`\"7\"`, wartości całkowite `0–1440`, albo `null`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
         "security": [
           {
             "bearerAuth": []
@@ -3002,7 +3002,7 @@
         ],
         "operationId": "listProductDirectoryEmployees",
         "summary": "Lista podstawowych danych pracowników dla serwera produktu",
-        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne i harmonogram pracy (`workSchedule`, bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne, surowy harmonogram pracy (`workSchedule`) oraz efektywny harmonogram (`effectiveWorkSchedule`, uwzględniający domyślny harmonogram firmy; bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
         "security": [
           {
             "productOAuth": [
@@ -3140,8 +3140,8 @@
           "Directory"
         ],
         "operationId": "getProductDirectoryOrganization",
-        "summary": "Podstawowe dane firmy (w tym strefa czasowa) dla serwera produktu",
-        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
+        "summary": "Podstawowe dane firmy (strefa czasowa i domyślny harmonogram) dla serwera produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, `defaultWorkSchedule`, bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
         "security": [
           {
             "productOAuth": [
@@ -3242,7 +3242,7 @@
         ],
         "operationId": "listProductDirectoryUnitMembers",
         "summary": "Lista członkostw pracowników w jednostkach dla serwera produktu",
-        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca członkostwa w jednostkach wraz z harmonogramem pracy pracownika (`workSchedule`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca członkostwa w jednostkach wraz z surowym harmonogramem pracy (`workSchedule`) oraz efektywnym harmonogramem (`effectiveWorkSchedule`, uwzględniającym domyślny harmonogram firmy). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
         "security": [
           {
             "productOAuth": [
@@ -6011,6 +6011,16 @@
                 "type": "null"
               }
             ]
+          },
+          "effectiveWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6019,7 +6029,8 @@
           "firstName",
           "lastName",
           "status",
-          "workSchedule"
+          "workSchedule",
+          "effectiveWorkSchedule"
         ],
         "additionalProperties": false
       },
@@ -6065,13 +6076,24 @@
           },
           "timeZone": {
             "$ref": "#/components/schemas/TimeZone"
+          },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "id",
           "name",
           "status",
-          "timeZone"
+          "timeZone",
+          "defaultWorkSchedule"
         ],
         "additionalProperties": false
       },
@@ -6132,6 +6154,16 @@
                 "type": "null"
               }
             ]
+          },
+          "effectiveWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6139,7 +6171,8 @@
           "employeeId",
           "accountId",
           "role",
-          "workSchedule"
+          "workSchedule",
+          "effectiveWorkSchedule"
         ],
         "additionalProperties": false
       },
@@ -6743,7 +6776,90 @@
             "additionalProperties": false
           },
           "employee": {
-            "$ref": "#/components/schemas/Employee"
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "accountId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "accountStatus": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AccountStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "firstName": {
+                "type": "string"
+              },
+              "lastName": {
+                "type": "string"
+              },
+              "workEmail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "jobTitle": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "$ref": "#/components/schemas/EmployeeStatus"
+              },
+              "effectiveWorkSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "accountId",
+              "accountStatus",
+              "firstName",
+              "lastName",
+              "workEmail",
+              "jobTitle",
+              "workSchedule",
+              "status",
+              "effectiveWorkSchedule"
+            ],
+            "additionalProperties": false
           },
           "organization": {
             "type": "object",
@@ -6761,13 +6877,24 @@
               },
               "timeZone": {
                 "$ref": "#/components/schemas/TimeZone"
+              },
+              "defaultWorkSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "id",
               "name",
               "status",
-              "timeZone"
+              "timeZone",
+              "defaultWorkSchedule"
             ],
             "additionalProperties": false
           }
@@ -7024,6 +7151,16 @@
           "timeZone": {
             "$ref": "#/components/schemas/TimeZone"
           },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "domains": {
             "type": "array",
             "items": {
@@ -7039,6 +7176,7 @@
           "name",
           "status",
           "timeZone",
+          "defaultWorkSchedule",
           "domains",
           "createdAt"
         ],
@@ -8243,6 +8381,16 @@
           },
           "timeZone": {
             "$ref": "#/components/schemas/TimeZone"
+          },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false

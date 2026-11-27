@@ -398,7 +398,9 @@ export const ROUTES = {
     operationId: "getMe",
     tag: "People",
     summary: "Pobierz dane zalogowanego konta, pracownika i firmy",
-    description: "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
+    description:
+      "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika (z `workSchedule` oraz wyliczonym " +
+      "`effectiveWorkSchedule`) oraz skrócone dane firmy (`timeZone`, `defaultWorkSchedule`).",
     auth: "bearer",
     successStatus: 200,
     envelope: true,
@@ -441,7 +443,8 @@ export const ROUTES = {
     tag: "Organization",
     summary: "Zmień dane firmy",
     description:
-      "Aktualizuje edytowalne dane firmy (nazwę i/lub strefę czasową IANA, np. `Europe/Warsaw`). " +
+      "Aktualizuje edytowalne dane firmy (nazwę, strefę czasową IANA, np. `Europe/Warsaw`, i/lub domyślny harmonogram " +
+      'pracy `defaultWorkSchedule`: minuty w dni tygodnia ISO `"1"`..`"7"`, wartości całkowite `0–1440`, albo `null`). ' +
       "Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
     auth: "bearer",
     successStatus: 200,
@@ -1473,7 +1476,8 @@ export const ROUTES = {
     summary: "Lista członkostw pracowników w jednostkach dla serwera produktu",
     description:
       "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
-      "`core:directory.read`). Zwraca członkostwa w jednostkach wraz z harmonogramem pracy pracownika (`workSchedule`). " +
+      "`core:directory.read`). Zwraca członkostwa w jednostkach wraz z surowym harmonogramem pracy (`workSchedule`) " +
+      "oraz efektywnym harmonogramem (`effectiveWorkSchedule`, uwzględniającym domyślny harmonogram firmy). " +
       "Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do " +
       "wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
     auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
@@ -1518,8 +1522,9 @@ export const ROUTES = {
     summary: "Lista podstawowych danych pracowników dla serwera produktu",
     description:
       "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
-      "`core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne i harmonogram pracy (`workSchedule`, " +
-      "bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+      "`core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne, surowy harmonogram pracy (`workSchedule`) " +
+      "oraz efektywny harmonogram (`effectiveWorkSchedule`, uwzględniający domyślny harmonogram firmy; bez służbowego " +
+      "e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
     auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
     successStatus: 200,
     envelope: true,
@@ -1559,11 +1564,11 @@ export const ROUTES = {
     path: `${API_PREFIX}/products/{productKey}/directory/organization`,
     operationId: "getProductDirectoryOrganization",
     tag: "Directory",
-    summary: "Podstawowe dane firmy (w tym strefa czasowa) dla serwera produktu",
+    summary: "Podstawowe dane firmy (strefa czasowa i domyślny harmonogram) dla serwera produktu",
     description:
       "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem " +
-      "`core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, bez danych " +
-      "domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
+      "`core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, `defaultWorkSchedule`, " +
+      "bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
     auth: { scheme: "productOAuth", scopes: [DIRECTORY_READ_SCOPE] },
     successStatus: 200,
     envelope: true,

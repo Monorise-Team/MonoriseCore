@@ -4,6 +4,8 @@ import {
   domainVerificationHost,
   isFreeEmailDomain,
   MAX_ORGANIZATION_DOMAINS,
+  WorkSchedule,
+  workScheduleEquals,
   type ApiErrorBody,
   type CreateOrganizationDomain,
   type DomainStatus,
@@ -20,6 +22,7 @@ import {
   expectedDomainTokenHashes,
   hashToken,
   matchesAnyDomainTokenHash,
+  Prisma,
   releaseCompetingDomainClaims,
   uuidv7,
   withOrganization,
@@ -74,8 +77,14 @@ export interface SerializableOrganizationRow {
   name: string;
   status: OrganizationStatus;
   timeZone: string;
+  defaultWorkSchedule?: unknown;
   createdAt: Date;
   domains: readonly SerializableOrganizationDomainRow[];
+}
+
+export function serializeWorkSchedule(raw: unknown): WorkSchedule | null {
+  if (raw === null || raw === undefined) return null;
+  return WorkSchedule.parse(raw);
 }
 
 export interface PreparedDomainVerification {
@@ -193,6 +202,7 @@ export function serializeOrganization(
     name: org.name,
     status: org.status,
     timeZone: org.timeZone,
+    defaultWorkSchedule: serializeWorkSchedule(org.defaultWorkSchedule),
     createdAt: org.createdAt.toISOString(),
     domains: org.domains.map((domain) =>
       serializeOrganizationDomain(domain, {
@@ -234,7 +244,7 @@ export async function getOrganizationForCaller(
   });
 }
 
-/** Zmienia edytowalne dane firmy (`name`, `timeZone`). Zapisuje audyt `organization.updated` tylko przy realnej zmianie. */
+/** Zmienia edytowalne dane firmy (`name`, `timeZone`, `defaultWorkSchedule`). Zapisuje audyt `organization.updated` tylko przy realnej zmianie. */
 export async function updateOrganization(
   tx: Tx,
   request: FastifyRequest,
@@ -252,12 +262,17 @@ export async function updateOrganization(
 
   const nextName = input.name ?? organization.name;
   const nextTimeZone = input.timeZone ?? organization.timeZone;
+  const currentDefaultWorkSchedule = serializeWorkSchedule(organization.defaultWorkSchedule);
+  const nextDefaultWorkSchedule =
+    input.defaultWorkSchedule !== undefined ? input.defaultWorkSchedule : currentDefaultWorkSchedule;
   const nameChanged = nextName !== organization.name;
   const timeZoneChanged = nextTimeZone !== organization.timeZone;
+  const defaultWorkScheduleChanged = !workScheduleEquals(currentDefaultWorkSchedule, nextDefaultWorkSchedule);
 
-  const changedFields: ("name" | "timeZone")[] = [];
+  const changedFields: ("name" | "timeZone" | "defaultWorkSchedule")[] = [];
   if (nameChanged) changedFields.push("name");
   if (timeZoneChanged) changedFields.push("timeZone");
+  if (defaultWorkScheduleChanged) changedFields.push("defaultWorkSchedule");
 
   if (changedFields.length === 0) {
     return serializeOrganization(organization, {
@@ -271,6 +286,9 @@ export async function updateOrganization(
     data: {
       ...(nameChanged ? { name: nextName } : {}),
       ...(timeZoneChanged ? { timeZone: nextTimeZone } : {}),
+      ...(defaultWorkScheduleChanged
+        ? { defaultWorkSchedule: nextDefaultWorkSchedule === null ? Prisma.DbNull : nextDefaultWorkSchedule }
+        : {}),
     },
     include: { domains: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
   });
@@ -283,6 +301,12 @@ export async function updateOrganization(
       fields: changedFields,
       ...(nameChanged ? { previousName: organization.name, name: updated.name } : {}),
       ...(timeZoneChanged ? { previousTimeZone: organization.timeZone, timeZone: updated.timeZone } : {}),
+      ...(defaultWorkScheduleChanged
+        ? {
+            previousDefaultWorkSchedule: currentDefaultWorkSchedule,
+            defaultWorkSchedule: nextDefaultWorkSchedule,
+          }
+        : {}),
     },
   });
 
